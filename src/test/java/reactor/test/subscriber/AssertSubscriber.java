@@ -209,7 +209,6 @@ public class AssertSubscriber<T>
 	 * Create a new {@link AssertSubscriber} that requests an unbounded number of elements.
 	 * <p>Be sure at least a publisher has subscribed to it via {@link Publisher#subscribe(Subscriber)}
 	 * before use assert methods.
-	 * @see #subscribe(Publisher)
 	 * @param <T> the observed value type
 	 * @return a fresh AssertSubscriber instance
 	 */
@@ -223,40 +222,11 @@ public class AssertSubscriber<T>
 	 * <p>Be sure at least a publisher has subscribed to it via {@link Publisher#subscribe(Subscriber)}
 	 * before use assert methods.
 	 * @param n Number of elements to request (can be 0 if you want no initial demand).
-	 * @see #subscribe(Publisher, long)
      * @param <T> the observed value type
      * @return a fresh AssertSubscriber instance
 	 */
 	public static <T> AssertSubscriber<T> create(long n) {
 		return new AssertSubscriber<>(n);
-	}
-
-	/**
-	 * Create a new {@link AssertSubscriber} that requests an unbounded number of elements,
-	 * and make the specified {@code publisher} subscribe to it.
-	 * @param publisher The publisher to subscribe with
-     * @param <T> the observed value type
-     * @return a fresh AssertSubscriber instance
-	 */
-	public static <T> AssertSubscriber<T> subscribe(Publisher<T> publisher) {
-		AssertSubscriber<T> subscriber = new AssertSubscriber<>();
-		publisher.subscribe(subscriber);
-		return subscriber;
-	}
-
-	/**
-	 * Create a new {@link AssertSubscriber} that requests initially {@code n} elements,
-	 * and make the specified {@code publisher} subscribe to it. You can then manage the
-	 * demand with {@link Subscription#request(long)}.
-	 * @param publisher The publisher to subscribe with
-	 * @param n Number of elements to request (can be 0 if you want no initial demand).
-     * @param <T> the observed value type
-     * @return a fresh AssertSubscriber instance
-	 */
-	public static <T> AssertSubscriber<T> subscribe(Publisher<T> publisher, long n) {
-		AssertSubscriber<T> subscriber = new AssertSubscriber<>(n);
-		publisher.subscribe(subscriber);
-		return subscriber;
 	}
 
 //	 ==============================================================================================================
