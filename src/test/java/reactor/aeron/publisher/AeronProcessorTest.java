@@ -24,7 +24,7 @@ import reactor.aeron.Context;
 import reactor.aeron.utils.AeronTestUtils;
 import reactor.aeron.utils.ThreadSnapshot;
 import reactor.core.publisher.Flux;
-import reactor.test.TestSubscriber;
+import reactor.test.subscriber.AssertSubscriber;
 import reactor.ipc.buffer.Buffer;
 import reactor.ipc.netty.util.SocketUtils;
 import uk.co.real_logic.aeron.Aeron;
@@ -57,7 +57,7 @@ public class AeronProcessorTest {
 		if (processor != null) {
 			processor.shutdown();
 
-			TestSubscriber.await(TIMEOUT, "Processor didn't terminate within timeout interval",
+			AssertSubscriber.await(TIMEOUT, "Processor didn't terminate within timeout interval",
 					() -> processor.isTerminated());
 		}
 
@@ -86,13 +86,13 @@ public class AeronProcessorTest {
 					Buffer.wrap("Live"))
 			    .subscribe(processor);
 
-			TestSubscriber<String> subscriber = TestSubscriber.create(0);
+			AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
 			Buffer.bufferToString(processor).subscribe(subscriber);
 			subscriber.request(1);
 
 			subscriber.awaitAndAssertNextValues("Live").assertComplete();
 
-			TestSubscriber.await(TIMEOUT, "Processor didn't terminate within timeout interval",
+			AssertSubscriber.await(TIMEOUT, "Processor didn't terminate within timeout interval",
 					processor::isTerminated);
 		} finally {
 			aeron.close();
@@ -115,7 +115,7 @@ public class AeronProcessorTest {
 				Buffer.wrap("Live"))
 				.subscribe(processor);
 
-		TestSubscriber<String>subscriber = TestSubscriber.create(0);
+		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
 		Buffer.bufferToString(processor).subscribe(subscriber);
 		subscriber.request(1);
 
@@ -130,7 +130,7 @@ public class AeronProcessorTest {
 				Buffer.wrap("Live"))
 				.subscribe(processor);
 
-		TestSubscriber<String>subscriber = TestSubscriber.create(0);
+		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
 		Buffer.bufferToString(processor).subscribe(subscriber);
 		subscriber.request(1);
 

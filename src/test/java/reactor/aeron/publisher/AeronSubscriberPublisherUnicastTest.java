@@ -22,7 +22,7 @@ import reactor.aeron.Context;
 import reactor.aeron.subscriber.AeronSubscriber;
 import reactor.aeron.utils.AeronTestUtils;
 import reactor.core.publisher.Flux;
-import reactor.test.TestSubscriber;
+import reactor.test.subscriber.AssertSubscriber;
 import reactor.ipc.util.FlowSerializerUtils;
 import reactor.ipc.buffer.Buffer;
 
@@ -51,7 +51,7 @@ public class AeronSubscriberPublisherUnicastTest extends CommonSubscriberPublish
 
 		AeronFlux publisher1 = new AeronFlux(createContext("publisher1"));
 
-		TestSubscriber<String> client1 = TestSubscriber.create(0);
+		AssertSubscriber<String> client1 = AssertSubscriber.create(0);
 		Buffer.bufferToString(publisher1).subscribe(client1);
 
 
@@ -65,7 +65,7 @@ public class AeronSubscriberPublisherUnicastTest extends CommonSubscriberPublish
 		AeronFlux publisher2 = new AeronFlux(createContext("publisher2")
 				.receiverChannel(AeronTestUtils.availableLocalhostChannel()));
 
-		TestSubscriber<String> client2 = TestSubscriber.create(0);
+		AssertSubscriber<String> client2 = AssertSubscriber.create(0);
 		Buffer.bufferToString(publisher2).subscribe(client2);
 
 
@@ -91,7 +91,7 @@ public class AeronSubscriberPublisherUnicastTest extends CommonSubscriberPublish
 		Flux.fromIterable(createBuffers(6)).subscribe(aeronSubscriber);
 
 		AeronFlux publisher = new AeronFlux(createContext("publisher").autoCancel(false));
-		TestSubscriber<String> client = TestSubscriber.create(0);
+		AssertSubscriber<String> client = AssertSubscriber.create(0);
 
 		Buffer.bufferToString(publisher).subscribe(client);
 
@@ -100,7 +100,7 @@ public class AeronSubscriberPublisherUnicastTest extends CommonSubscriberPublish
 
 		client.cancel();
 
-		TestSubscriber.await(TIMEOUT, "publisher wasn't terminated", publisher::isTerminated);
+		AssertSubscriber.await(TIMEOUT, "publisher wasn't terminated", publisher::isTerminated);
 	}
 
 	private static class HangingOnCompleteSubscriber implements Subscriber<String> {
@@ -146,7 +146,7 @@ public class AeronSubscriberPublisherUnicastTest extends CommonSubscriberPublish
 
 		AeronFlux publisher2 = new AeronFlux(createContext("publisher2"));
 
-		TestSubscriber<String> client2 = TestSubscriber.create(0);
+		AssertSubscriber<String> client2 = AssertSubscriber.create(0);
 		Buffer.bufferToString(publisher2).subscribe(client2);
 
 		client2.request(3);
@@ -163,7 +163,7 @@ public class AeronSubscriberPublisherUnicastTest extends CommonSubscriberPublish
 		Flux.fromIterable(createBuffers(3)).subscribe(aeronSubscriber);
 
 		AeronFlux publisher = new AeronFlux(createContext("publisher").autoCancel(false));
-		TestSubscriber<String> client = TestSubscriber.create(0);
+		AssertSubscriber<String> client = AssertSubscriber.create(0);
 
 		Buffer.bufferToString(publisher).subscribe(client);
 
@@ -172,7 +172,7 @@ public class AeronSubscriberPublisherUnicastTest extends CommonSubscriberPublish
 		client.awaitAndAssertNextValues("1", "2", "3");
 		client.assertComplete();
 
-		TestSubscriber.await(TIMEOUT, () -> "Publisher hasn't been terminated", publisher::isTerminated);
+		AssertSubscriber.await(TIMEOUT, () -> "Publisher hasn't been terminated", publisher::isTerminated);
 
 		client.request(1);
 	}
@@ -184,7 +184,7 @@ public class AeronSubscriberPublisherUnicastTest extends CommonSubscriberPublish
 		Flux.<Buffer>error(new RuntimeException("Oops!")).subscribe(aeronSubscriber);
 
 		AeronFlux publisher = new AeronFlux(createContext("publisher").autoCancel(false));
-		TestSubscriber<String> client = TestSubscriber.create(0);
+		AssertSubscriber<String> client = AssertSubscriber.create(0);
 
 		Buffer.bufferToString(publisher).subscribe(client);
 
@@ -192,7 +192,7 @@ public class AeronSubscriberPublisherUnicastTest extends CommonSubscriberPublish
 
 		client.await(TIMEOUT).assertError();
 
-		TestSubscriber.await(TIMEOUT, () -> "Publisher hasn't been terminated", publisher::isTerminated);
+		AssertSubscriber.await(TIMEOUT, () -> "Publisher hasn't been terminated", publisher::isTerminated);
 
 		client.request(1);
 	}

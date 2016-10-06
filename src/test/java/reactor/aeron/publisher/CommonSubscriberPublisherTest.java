@@ -36,7 +36,7 @@ import reactor.aeron.utils.AeronTestUtils;
 import reactor.aeron.utils.SignalPublicationFailedException;
 import reactor.aeron.utils.ThreadSnapshot;
 import reactor.core.publisher.Flux;
-import reactor.test.TestSubscriber;
+import reactor.test.subscriber.AssertSubscriber;
 import reactor.ipc.buffer.Buffer;
 
 import static org.junit.Assert.*;
@@ -84,7 +84,7 @@ public abstract class CommonSubscriberPublisherTest {
 
 		AeronFlux publisher = new AeronFlux(createContext("publisher"));
 
-		TestSubscriber<String> clientSubscriber = TestSubscriber.create();
+		AssertSubscriber<String> clientSubscriber = AssertSubscriber.create();
 		Buffer.bufferToString(publisher).subscribe(clientSubscriber);
 
 
@@ -96,7 +96,7 @@ public abstract class CommonSubscriberPublisherTest {
 		AeronSubscriber subscriber = AeronSubscriber.create(createContext("subscriber"));
 		AeronFlux publisher = new AeronFlux(createContext("publisher"));
 
-		TestSubscriber<String> clientSubscriber = TestSubscriber.create();
+		AssertSubscriber<String> clientSubscriber = AssertSubscriber.create();
 		Buffer.bufferToString(publisher).subscribe(clientSubscriber);
 
 
@@ -170,7 +170,7 @@ public abstract class CommonSubscriberPublisherTest {
 		Buffer.stringToBuffer(valuePublisher).subscribe(aeronSubscriber);
 
 		AeronFlux publisher = new AeronFlux(createContext("publisher").autoCancel(true));
-		TestSubscriber<String> client = TestSubscriber.create(0);
+		AssertSubscriber<String> client = AssertSubscriber.create(0);
 		Buffer.bufferToString(publisher).subscribe(client);
 
 		client.request(1);
@@ -189,7 +189,7 @@ public abstract class CommonSubscriberPublisherTest {
 		Buffer.stringToBuffer(valuePublisher).subscribe(aeronSubscriber);
 
 		AeronFlux publisher = new AeronFlux(createContext("publisher").autoCancel(false));
-		TestSubscriber<String> client = TestSubscriber.create(0);
+		AssertSubscriber<String> client = AssertSubscriber.create(0);
 		Buffer.bufferToString(publisher).subscribe(client);
 
 		client.request(1);

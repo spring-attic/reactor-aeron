@@ -25,7 +25,7 @@ import reactor.aeron.utils.AeronInfra;
 import reactor.aeron.utils.AeronTestUtils;
 import reactor.aeron.utils.TestAeronInfra;
 import reactor.aeron.utils.ThreadSnapshot;
-import reactor.test.TestSubscriber;
+import reactor.test.subscriber.AssertSubscriber;
 import reactor.ipc.buffer.Buffer;
 
 import static org.junit.Assert.assertTrue;
@@ -73,7 +73,7 @@ public class AeronFluxTest {
 	public void testShutdown() {
 		AeronFlux publisher = new AeronFlux(context);
 
-		TestSubscriber<String> subscriber = TestSubscriber.create(0);
+		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
 		Buffer.bufferToString(publisher).subscribe(subscriber);
 
 		publisher.shutdown();
@@ -88,10 +88,10 @@ public class AeronFluxTest {
 
 		AeronFlux publisher = new AeronFlux(context);
 
-		TestSubscriber<String> subscriber = TestSubscriber.create(0);
+		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
 		Buffer.bufferToString(publisher).subscribe(subscriber);
 
-		TestSubscriber.await(Duration.ofSeconds(2), "publisher didn't terminate due to heartbeat loss", publisher::isTerminated);
+		AssertSubscriber.await(Duration.ofSeconds(2), "publisher didn't terminate due to heartbeat loss", publisher::isTerminated);
 	}
 
 }

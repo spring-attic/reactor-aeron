@@ -15,7 +15,7 @@
  */
 package reactor.aeron.utils;
 
-import reactor.test.TestSubscriber;
+import reactor.test.subscriber.AssertSubscriber;
 import reactor.ipc.netty.util.SocketUtils;
 import uk.co.real_logic.aeron.driver.Configuration;
 import uk.co.real_logic.aeron.driver.MediaDriver;
@@ -45,7 +45,7 @@ public class AeronTestUtils {
 	}
 
 	public static void awaitMediaDriverIsTerminated(Duration timeout) throws InterruptedException {
-		TestSubscriber.await(timeout, "Aeron hasn't been shutdown properly",
+		AssertSubscriber.await(timeout, "Aeron hasn't been shutdown properly",
 				() -> EmbeddedMediaDriverManager.getInstance().isTerminated());
 	}
 

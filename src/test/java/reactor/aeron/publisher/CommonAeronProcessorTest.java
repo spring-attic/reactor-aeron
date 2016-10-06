@@ -32,7 +32,7 @@ import reactor.aeron.utils.ThreadSnapshot;
 import reactor.core.publisher.EmitterProcessor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxProcessor;
-import reactor.test.TestSubscriber;
+import reactor.test.subscriber.AssertSubscriber;
 import reactor.ipc.buffer.Buffer;
 
 import static org.hamcrest.Matchers.is;
@@ -75,7 +75,7 @@ public abstract class CommonAeronProcessorTest {
 	@Test
 	public void testNextSignalIsReceived() throws InterruptedException {
 		AeronProcessor processor = AeronProcessor.create(createContext());
-		TestSubscriber<String> subscriber = TestSubscriber.create(0);
+		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
 		Buffer.bufferToString(processor).subscribe(subscriber);
 		subscriber.request(4);
 
@@ -102,7 +102,7 @@ public abstract class CommonAeronProcessorTest {
 				Buffer.wrap("Three"))
 				.subscribe(processor);
 
-		TestSubscriber<String> subscriber = TestSubscriber.create(0);
+		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
 		Buffer.bufferToString(processor).subscribe(subscriber);
 
 		subscriber.request(1);
@@ -136,10 +136,10 @@ public abstract class CommonAeronProcessorTest {
 		FluxProcessor<Buffer, Buffer> emitter = EmitterProcessor.create();
 		processor.subscribe(emitter);
 
-		TestSubscriber<String> subscriber1 = TestSubscriber.create();
+		AssertSubscriber<String> subscriber1 = AssertSubscriber.create();
 		Buffer.bufferToString(emitter).subscribe(subscriber1);
 
-		TestSubscriber<String> subscriber2 = TestSubscriber.create();
+		AssertSubscriber<String> subscriber2 = AssertSubscriber.create();
 		Buffer.bufferToString(emitter).subscribe(subscriber2);
 
 		subscriber1.awaitAndAssertNextValues("Live", "Hard", "Die", "Harder").assertComplete();
@@ -157,7 +157,7 @@ public abstract class CommonAeronProcessorTest {
 				Flux.error(new RuntimeException("Something went wrong")))
 				.subscribe(processor);
 
-		TestSubscriber<String> subscriber = TestSubscriber.create();
+		AssertSubscriber<String> subscriber = AssertSubscriber.create();
 		Buffer.bufferToString(processor).subscribe(subscriber);
 
 		subscriber.await(TIMEOUT).assertErrorWith(t -> assertThat(t.getMessage(), is("Something went wrong")));
@@ -167,7 +167,7 @@ public abstract class CommonAeronProcessorTest {
 	public void testExceptionWithNullMessageIsHandled() throws InterruptedException {
 		AeronProcessor processor = AeronProcessor.create(createContext());
 
-		TestSubscriber<String> subscriber = TestSubscriber.create();
+		AssertSubscriber<String> subscriber = AssertSubscriber.create();
 		Buffer.bufferToString(processor).subscribe(subscriber);
 
 		Flux<Buffer> sourceStream = Flux.error(new RuntimeException());
@@ -201,7 +201,7 @@ public abstract class CommonAeronProcessorTest {
 		};
 		dataPublisher.subscribe(processor);
 
-		TestSubscriber<String> client = TestSubscriber.create();
+		AssertSubscriber<String> client = AssertSubscriber.create();
 
 		Buffer.bufferToString(processor).subscribe(client);
 
@@ -221,11 +221,11 @@ public abstract class CommonAeronProcessorTest {
 				Buffer.wrap("Live"))
 				.subscribe(processor);
 
-		TestSubscriber<String> subscriber = TestSubscriber.create(0);
+		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
 		Buffer.bufferToString(processor).subscribe(subscriber);
 
 		AeronFlux remotePublisher = new AeronFlux(createContext());
-		TestSubscriber<String> remoteSubscriber = TestSubscriber.create(0);
+		AssertSubscriber<String> remoteSubscriber = AssertSubscriber.create(0);
 		Buffer.bufferToString(remotePublisher).subscribe(remoteSubscriber);
 
 		subscriber.request(1);
@@ -241,11 +241,11 @@ public abstract class CommonAeronProcessorTest {
 
 		Flux.<Buffer>error(new Exception("Oops!")).subscribe(processor);
 
-		TestSubscriber<String> subscriber = TestSubscriber.create(0);
+		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
 		Buffer.bufferToString(processor).subscribe(subscriber);
 
 		AeronFlux remotePublisher = new AeronFlux(createContext());
-		TestSubscriber<String> remoteSubscriber = TestSubscriber.create(0);
+		AssertSubscriber<String> remoteSubscriber = AssertSubscriber.create(0);
 		Buffer.bufferToString(remotePublisher).subscribe(remoteSubscriber);
 
 		subscriber.request(1);

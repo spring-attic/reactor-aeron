@@ -35,7 +35,7 @@ import org.testng.annotations.Test;
 import reactor.aeron.Context;
 import reactor.aeron.utils.AeronTestUtils;
 import reactor.aeron.utils.EmbeddedMediaDriverManager;
-import reactor.test.TestSubscriber;
+import reactor.test.subscriber.AssertSubscriber;
 import reactor.ipc.buffer.Buffer;
 
 /**
@@ -80,10 +80,10 @@ public abstract class AeronProcessorCommonVerificationTest extends IdentityProce
 
 				for (AeronProcessor processor: processors) {
 					processor.shutdown();
-					TestSubscriber.await(Duration.ofSeconds(10), "processor didn't terminate", processor::isTerminated);
+					AssertSubscriber.await(Duration.ofSeconds(10), "processor didn't terminate", processor::isTerminated);
 				}
 
-				TestSubscriber.await(Duration.ofSeconds(5), "Embedded Media driver wasn't shutdown properly",
+				AssertSubscriber.await(Duration.ofSeconds(5), "Embedded Media driver wasn't shutdown properly",
 						() -> driverManager.getCounter() == 0);
 			}
 		}
