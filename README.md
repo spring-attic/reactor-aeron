@@ -1,15 +1,7 @@
-# reactor-ipc
-
 [![Join the chat at https://gitter.im/reactor/reactor](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/reactor/reactor?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-Backpressure-ready components to encode, decode, send (unicast, multicast or request/response) and serve connections :
-- [reactor-aeron](#reactor-aeron) : Efficient Unicast/Multicast reactive-streams
-transport for Aeron
-- reactor-netty   : Client/Server interactions for UDP/TCP/HTTP
-- reactor-codec : Reactive-Streams decoders/encoders (Codec) including compression,
-serialization and such.
 
-## reactor-aeron
+# reactor-aeron
 
 An implementation of Reactive Streams over Aeron supporting both unicast and multicast modes of data sending.
 
