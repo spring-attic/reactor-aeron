@@ -23,7 +23,6 @@ import reactor.aeron.subscriber.AeronSubscriber;
 import reactor.aeron.utils.AeronTestUtils;
 import reactor.core.publisher.Flux;
 import reactor.test.subscriber.AssertSubscriber;
-import reactor.ipc.util.FlowSerializerUtils;
 import reactor.ipc.buffer.Buffer;
 
 import java.util.concurrent.CountDownLatch;
