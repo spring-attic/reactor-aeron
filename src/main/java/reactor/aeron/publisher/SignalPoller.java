@@ -25,13 +25,13 @@ import reactor.core.Trackable;
 import reactor.core.publisher.Operators;
 import reactor.core.Exceptions;
 import reactor.util.Logger;
-import reactor.ipc.buffer.Buffer;
 import uk.co.real_logic.aeron.ControlledFragmentAssembler;
 import uk.co.real_logic.aeron.logbuffer.ControlledFragmentHandler;
 import uk.co.real_logic.aeron.logbuffer.Header;
 import uk.co.real_logic.agrona.DirectBuffer;
 import uk.co.real_logic.agrona.concurrent.IdleStrategy;
 
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Iterator;
 
@@ -61,7 +61,7 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 
 	private uk.co.real_logic.aeron.Subscription signalSub;
 
-	protected final Subscriber<? super Buffer> subscriber;
+	protected final Subscriber<? super ByteBuffer> subscriber;
 
 	private final ControlledFragmentHandler fragmentAssembler = new ControlledFragmentAssembler(new ControlledFragmentHandler() {
 		@Override
@@ -75,7 +75,7 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 					if (demand > 0) {
 						demand--;
 						isLastSignalAborted = false;
-						subscriber.onNext(Buffer.wrap(bytes));
+						subscriber.onNext(ByteBuffer.wrap(bytes));
 					} else {
 						isLastSignalAborted = true;
 						return Action.ABORT;
@@ -105,7 +105,7 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 
 	public SignalPoller(Context context,
 						ServiceMessageSender serviceMessageSender,
-						Subscriber<? super Buffer> subscriber,
+						Subscriber<? super ByteBuffer> subscriber,
 						AeronInfra aeronInfra,
 						Runnable shutdownTask) {
 

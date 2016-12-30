@@ -15,6 +15,7 @@
  */
 package reactor.aeron.subscriber;
 
+import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -24,6 +25,7 @@ import org.junit.Test;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
+import reactor.aeron.utils.AeronTestUtils;
 import reactor.aeron.utils.AeronUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxProcessor;
@@ -31,7 +33,6 @@ import reactor.core.publisher.TopicProcessor;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import reactor.core.publisher.Operators;
-import reactor.ipc.buffer.Buffer;
 import reactor.core.Exceptions;
 import uk.co.real_logic.agrona.concurrent.BackoffIdleStrategy;
 
@@ -45,7 +46,7 @@ public class SubscriberThreadingPOCTest {
 
 	class SignalPollerForPOC implements Runnable {
 
-		private final FluxProcessor<Buffer, Buffer> sessionProcessor;
+		private final FluxProcessor<ByteBuffer, ByteBuffer> sessionProcessor;
 
 		private final ConcurrentLinkedQueue<ServiceRequest> requests = new ConcurrentLinkedQueue<>();
 
@@ -70,7 +71,7 @@ public class SubscriberThreadingPOCTest {
 
 		}
 
-		final class SenderSubscriber implements Subscriber<Buffer> {
+		final class SenderSubscriber implements Subscriber<ByteBuffer> {
 
 			private Subscription subscription;
 
@@ -86,12 +87,12 @@ public class SubscriberThreadingPOCTest {
 			}
 
 			@Override
-			public void onNext(Buffer buffer) {
+			public void onNext(ByteBuffer buffer) {
 				if (buffer == null) {
 					throw Exceptions.argumentIsNullException();
 				}
 
-				log(this.getClass().getSimpleName() + ".onNext: " + buffer.asString());
+				log(this.getClass().getSimpleName() + ".onNext: " + AeronTestUtils.byteBufferToString(buffer));
 			}
 
 			@Override
@@ -105,7 +106,7 @@ public class SubscriberThreadingPOCTest {
 			}
 		}
 
-		SignalPollerForPOC(FluxProcessor<Buffer, Buffer> sessionProcessor) {
+		SignalPollerForPOC(FluxProcessor<ByteBuffer, ByteBuffer> sessionProcessor) {
 			this.sessionProcessor = sessionProcessor;
 		}
 
@@ -155,7 +156,7 @@ public class SubscriberThreadingPOCTest {
 		}
 	}
 
-	class SyncPublisher implements Publisher<Buffer> {
+	class SyncPublisher implements Publisher<ByteBuffer> {
 
 		private volatile long totalSignals;
 
@@ -164,7 +165,7 @@ public class SubscriberThreadingPOCTest {
 		}
 
 		@Override
-		public void subscribe(Subscriber<? super Buffer> subscriber) {
+		public void subscribe(Subscriber<? super ByteBuffer> subscriber) {
 			subscriber.onSubscribe(new Subscription() {
 				@Override
 				public void request(long n) {
@@ -174,7 +175,7 @@ public class SubscriberThreadingPOCTest {
 							subscriber.onComplete();
 							break;
 						}
-						subscriber.onNext(Buffer.wrap("" + i));
+						subscriber.onNext(AeronTestUtils.stringToByteBuffer("" + i));
 					}
 				}
 
@@ -192,8 +193,8 @@ public class SubscriberThreadingPOCTest {
 
 	@Test
 	public void test() throws InterruptedException {
-		Publisher<Buffer> dataPublisher = new SyncPublisher(32);
-		TopicProcessor<Buffer> processor = TopicProcessor.create("ringbuffer-sender", 8);
+		Publisher<ByteBuffer> dataPublisher = new SyncPublisher(32);
+		TopicProcessor<ByteBuffer> processor = TopicProcessor.create("ringbuffer-sender", 8);
 		dataPublisher.subscribe(processor);
 
 		SignalPollerForPOC signalPoller = new SignalPollerForPOC(processor);
@@ -212,8 +213,8 @@ public class SubscriberThreadingPOCTest {
 
 	@Test
 	public void testCompletedPublisher() throws InterruptedException {
-		Publisher<Buffer> dataPublisher = new SyncPublisher(4);
-		TopicProcessor<Buffer> processor = TopicProcessor.create("ringbuffer-sender", 8);
+		Publisher<ByteBuffer> dataPublisher = new SyncPublisher(4);
+		TopicProcessor<ByteBuffer> processor = TopicProcessor.create("ringbuffer-sender", 8);
 		dataPublisher.subscribe(processor);
 
 		SignalPollerForPOC signalPoller = new SignalPollerForPOC(processor);
@@ -232,10 +233,10 @@ public class SubscriberThreadingPOCTest {
 
 	@Test
 	public void testSubscribeOn() throws InterruptedException {
-		Publisher<Buffer> dataPublisher = new SyncPublisher(32);
+		Publisher<ByteBuffer> dataPublisher = new SyncPublisher(32);
 
 		Scheduler group = Schedulers.parallel();
-		TopicProcessor<Buffer> processor = TopicProcessor.create("ringbuffer-sender", 8);
+		TopicProcessor<ByteBuffer> processor = TopicProcessor.create("ringbuffer-sender", 8);
 		Flux.from(dataPublisher).subscribeOn(group).subscribe(processor);
 
 		SignalPollerForPOC signalPoller = new SignalPollerForPOC(processor);

@@ -15,16 +15,16 @@
  */
 package reactor.aeron.publisher;
 
+import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import reactor.aeron.Context;
 import reactor.aeron.subscriber.AeronSubscriber;
-import reactor.util.Loggers;
 import reactor.core.publisher.FluxProcessor;
+import reactor.util.Loggers;
 import reactor.util.Logger;
-import reactor.ipc.buffer.Buffer;
 
 /**
  * A processor which publishes into and subscribes to data from Aeron.<br>
@@ -43,7 +43,7 @@ import reactor.ipc.buffer.Buffer;
  * @author Anatoly Kadyshev
  * @since 2.5
  */
-public final class AeronProcessor extends FluxProcessor<Buffer, Buffer> {
+public final class AeronProcessor extends FluxProcessor<ByteBuffer, ByteBuffer> {
 
 	private static final Logger logger = Loggers.getLogger(AeronProcessor.class);
 
@@ -106,7 +106,7 @@ public final class AeronProcessor extends FluxProcessor<Buffer, Buffer> {
 	}
 
 	@Override
-	public void subscribe(Subscriber<? super Buffer> subscriber) {
+	public void subscribe(Subscriber<? super ByteBuffer> subscriber) {
 		publisher.subscribe(subscriber);
 	}
 
@@ -116,7 +116,7 @@ public final class AeronProcessor extends FluxProcessor<Buffer, Buffer> {
 	 * @param buffer buffer to be published
 	 */
 	@Override
-	public void onNext(Buffer buffer) {
+	public void onNext(ByteBuffer buffer) {
 		subscriber.onNext(buffer);
 	}
 

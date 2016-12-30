@@ -15,6 +15,7 @@
  */
 package reactor.aeron.publisher;
 
+import java.nio.ByteBuffer;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -34,7 +35,6 @@ import reactor.core.scheduler.Schedulers;
 import reactor.core.scheduler.TimedScheduler;
 import reactor.core.Exceptions;
 import reactor.util.Logger;
-import reactor.ipc.buffer.Buffer;
 import uk.co.real_logic.aeron.Publication;
 
 /**
@@ -79,7 +79,7 @@ import uk.co.real_logic.aeron.Publication;
  * @author Anatoly Kadyshev
  * @since 2.5
  */
-public final class AeronFlux extends Flux<Buffer> implements Producer {
+public final class AeronFlux extends Flux<ByteBuffer> implements Producer {
 
 	private static final Logger logger = Loggers.getLogger(AeronFlux.class);
 
@@ -112,7 +112,7 @@ public final class AeronFlux extends Flux<Buffer> implements Producer {
 	 *
 	 * @return a new Flux receiving signals from Aeron
 	 */
-	public static Flux<Buffer> listenOn(Context context) {
+	public static Flux<ByteBuffer> listenOn(Context context) {
 		return new AeronFlux(context);
 	}
 
@@ -152,7 +152,7 @@ public final class AeronFlux extends Flux<Buffer> implements Producer {
 	}
 
 	@Override
-	public void subscribe(Subscriber<? super Buffer> subscriber) {
+	public void subscribe(Subscriber<? super ByteBuffer> subscriber) {
 		if (subscriber == null) {
 			throw Exceptions.argumentIsNullException();
 		}
@@ -172,7 +172,7 @@ public final class AeronFlux extends Flux<Buffer> implements Producer {
 		}
 	}
 
-	private SignalPoller createSignalsPoller(final Subscriber<? super Buffer> subscriber) {
+	private SignalPoller createSignalsPoller(final Subscriber<? super ByteBuffer> subscriber) {
 		return new SignalPoller(context, serviceMessageSender, subscriber, aeronInfra, () -> {
             heartbeatSender.shutdown();
 

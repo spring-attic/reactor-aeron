@@ -16,6 +16,7 @@
 package reactor.aeron.publisher;
 
 import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -36,13 +37,12 @@ import reactor.aeron.Context;
 import reactor.aeron.utils.AeronTestUtils;
 import reactor.aeron.utils.EmbeddedMediaDriverManager;
 import reactor.test.subscriber.AssertSubscriber;
-import reactor.ipc.buffer.Buffer;
 
 /**
  * @author Anatoly Kadyshev
  */
 @Test
-public abstract class AeronProcessorCommonVerificationTest extends IdentityProcessorVerification<Buffer> {
+public abstract class AeronProcessorCommonVerificationTest extends IdentityProcessorVerification<ByteBuffer> {
 
 	private final List<AeronProcessor> processors = new ArrayList<>();
 
@@ -65,7 +65,7 @@ public abstract class AeronProcessorCommonVerificationTest extends IdentityProce
 	@AfterClass
 	public void doTeardown() throws InterruptedException {
 		driverManager.shutdown();
-		AeronTestUtils.awaitMediaDriverIsTerminated(Duration.ofSeconds(10));
+		AeronTestUtils.awaitMediaDriverIsTerminated();
 	}
 
 	@AfterMethod
@@ -92,7 +92,7 @@ public abstract class AeronProcessorCommonVerificationTest extends IdentityProce
 	}
 
 	@Override
-	public Processor<Buffer, Buffer> createIdentityProcessor(int bufferSize) {
+	public Processor<ByteBuffer, ByteBuffer> createIdentityProcessor(int bufferSize) {
 		for (Iterator<AeronProcessor> it = processors.iterator(); it.hasNext(); ) {
 			AeronProcessor processor = it.next();
 			if (processor.isTerminated()) {
@@ -110,7 +110,7 @@ public abstract class AeronProcessorCommonVerificationTest extends IdentityProce
 	abstract protected Context createContext(int streamId);
 
 	@Override
-	public Publisher<Buffer> createFailedPublisher() {
+	public Publisher<ByteBuffer> createFailedPublisher() {
 		return s -> {
 			s.onSubscribe(new Subscription() {
 				@Override
@@ -131,8 +131,8 @@ public abstract class AeronProcessorCommonVerificationTest extends IdentityProce
 	}
 
 	@Override
-	public Buffer createElement(int element) {
-		return Buffer.wrap("" + element);
+	public ByteBuffer createElement(int element) {
+		return AeronTestUtils.stringToByteBuffer("" + element);
 	}
 
 	// Disabled due to Exception comparison by equals

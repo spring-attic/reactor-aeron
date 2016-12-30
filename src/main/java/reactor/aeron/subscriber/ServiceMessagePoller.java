@@ -17,6 +17,7 @@ package reactor.aeron.subscriber;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 
 import reactor.aeron.Context;
 import reactor.aeron.utils.AeronInfra;
@@ -49,9 +50,15 @@ class ServiceMessagePoller implements Runnable, Receiver {
 
 	private final AeronInfra aeronInfra;
 
-	private volatile boolean running;
+	private final AtomicReference<State> state = new AtomicReference<>(State.NOT_STARTED);
 
-	private volatile boolean terminated = false;
+	enum State {
+		NOT_STARTED,
+		STARTED,
+		RUNNING,
+		TERMINATING,
+		TERMINATED
+	}
 
 	private class PollerFragmentHandler implements FragmentHandler {
 
@@ -59,10 +66,6 @@ class ServiceMessagePoller implements Runnable, Receiver {
 
 		@Override
 		public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
-			if (!running) {
-				return;
-			}
-
 			byte type = buffer.getByte(offset);
 			if (type == ServiceMessageType.Request.getCode()) {
 				handleRequest(buffer, offset);
@@ -124,38 +127,41 @@ class ServiceMessagePoller implements Runnable, Receiver {
 	}
 
 	void start() {
-		executor.execute(this);
+		if (state.compareAndSet(State.NOT_STARTED, State.STARTED)) {
+			executor.execute(this);
+		}
 	}
 
 	public void run() {
-		this.running = true;
-		logger.debug("Service message poller started");
+		if (state.compareAndSet(State.STARTED, State.RUNNING)) {
+			logger.debug("Service message poller started");
 
-		IdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
+			IdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
 
-		FragmentAssembler fragmentAssembler = new FragmentAssembler(new PollerFragmentHandler());
+			FragmentAssembler fragmentAssembler = new FragmentAssembler(new PollerFragmentHandler());
 
-		final int fragmentLimit = context.serviceMessagePollerFragmentLimit();
+			final int fragmentLimit = context.serviceMessagePollerFragmentLimit();
 
-		while (running) {
-			int nFragmentsReceived = 0;
-			try {
-				nFragmentsReceived = serviceRequestSub.poll(fragmentAssembler, fragmentLimit);
-			} catch (Exception e) {
-				context.errorConsumer().accept(e);
+			while (state.get() == State.RUNNING) {
+				int nFragmentsReceived = 0;
+				try {
+					nFragmentsReceived = serviceRequestSub.poll(fragmentAssembler, fragmentLimit);
+				} catch (Exception e) {
+					context.errorConsumer().accept(e);
+				}
+				idleStrategy.idle(nFragmentsReceived);
 			}
-			idleStrategy.idle(nFragmentsReceived);
+
+			aeronInfra.close(serviceRequestSub);
 		}
 
-		aeronInfra.close(serviceRequestSub);
-
-		logger.debug("Service message poller shutdown");
-		terminated = true;
+		logger.debug("Service message poller terminated");
+		state.set(State.TERMINATED);
 	}
 
 	void shutdown() {
-		this.running = false;
-
+		state.compareAndSet(State.STARTED, State.TERMINATED);
+		state.compareAndSet(State.RUNNING, State.TERMINATING);
 		executor.shutdown();
 	}
 
@@ -165,6 +171,6 @@ class ServiceMessagePoller implements Runnable, Receiver {
 	}
 
 	public boolean isTerminated() {
-		return terminated;
+		return state.get() == State.TERMINATED;
 	}
 }

@@ -15,11 +15,13 @@
  */
 package reactor.aeron.publisher;
 
+import org.junit.Ignore;
 import reactor.aeron.Context;
 
 /**
  * @author Anatoly Kadyshev
  */
+@Ignore
 public class AeronProcessorMulticastTest extends CommonAeronProcessorTest {
 
 	@Override

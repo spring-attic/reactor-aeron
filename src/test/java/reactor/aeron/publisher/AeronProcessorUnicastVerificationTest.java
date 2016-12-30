@@ -15,12 +15,14 @@
  */
 package reactor.aeron.publisher;
 
+import org.junit.Ignore;
 import reactor.aeron.Context;
 import reactor.aeron.utils.AeronTestUtils;
 
 /**
  * @author Anatoly Kadyshev
  */
+@Ignore
 public class AeronProcessorUnicastVerificationTest extends AeronProcessorCommonVerificationTest {
 
 	private final String SENDER_CHANNEL = AeronTestUtils.availableLocalhostChannel();

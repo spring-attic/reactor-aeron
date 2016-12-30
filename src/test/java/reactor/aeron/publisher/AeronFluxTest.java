@@ -15,8 +15,6 @@
  */
 package reactor.aeron.publisher;
 
-import java.time.Duration;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -26,16 +24,13 @@ import reactor.aeron.utils.AeronTestUtils;
 import reactor.aeron.utils.TestAeronInfra;
 import reactor.aeron.utils.ThreadSnapshot;
 import reactor.test.subscriber.AssertSubscriber;
-import reactor.ipc.buffer.Buffer;
 
-import static org.junit.Assert.assertTrue;
+import java.time.Duration;
 
 /**
  * @author Anatoly Kadyshev
  */
 public class AeronFluxTest {
-
-	private static final Duration TIMEOUT = Duration.ofSeconds(5);
 
 	private ThreadSnapshot threadSnapshot;
 
@@ -64,9 +59,9 @@ public class AeronFluxTest {
 
 	@After
 	public void doTearDown() throws InterruptedException {
-		AeronTestUtils.awaitMediaDriverIsTerminated(TIMEOUT);
+		AeronTestUtils.awaitMediaDriverIsTerminated();
 
-		assertTrue(threadSnapshot.takeAndCompare(new String[] { "global-"}, TIMEOUT.toMillis()));
+		AeronTestUtils.assertThreadsTerminated(threadSnapshot);
 	}
 
 	@Test
@@ -74,7 +69,7 @@ public class AeronFluxTest {
 		AeronFlux publisher = new AeronFlux(context);
 
 		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
-		Buffer.bufferToString(publisher).subscribe(subscriber);
+		AeronTestUtils.bufferToString(publisher).subscribe(subscriber);
 
 		publisher.shutdown();
 	}
@@ -89,7 +84,7 @@ public class AeronFluxTest {
 		AeronFlux publisher = new AeronFlux(context);
 
 		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
-		Buffer.bufferToString(publisher).subscribe(subscriber);
+		AeronTestUtils.bufferToString(publisher).subscribe(subscriber);
 
 		AssertSubscriber.await(Duration.ofSeconds(2), "publisher didn't terminate due to heartbeat loss", publisher::isTerminated);
 	}

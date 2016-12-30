@@ -15,6 +15,7 @@
  */
 package reactor.aeron.subscriber;
 
+import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.reactivestreams.Subscriber;
@@ -29,7 +30,6 @@ import reactor.core.publisher.TopicProcessor;
 import reactor.core.scheduler.Schedulers;
 import reactor.core.scheduler.TimedScheduler;
 import reactor.core.Trackable;
-import reactor.ipc.buffer.Buffer;
 import reactor.util.Logger;
 
 /**
@@ -69,7 +69,7 @@ import reactor.util.Logger;
  *
  * <p>When the Aeron buffer for published messages becomes completely full
  * the subscriber starts to throttle and as a result method
- * {@link #onNext(Buffer)} blocks until messages are consumed or
+ * {@link #onNext(ByteBuffer)} blocks until messages are consumed or
  * {@link Context#publicationRetryMillis} timeout elapses.
  * If a message cannot be published into Aeron within
  * {@link Context#publicationRetryMillis} the corresponding exception is provided into {@link Context#errorConsumer}.
@@ -98,7 +98,7 @@ import reactor.util.Logger;
  * @since 2.5
  */
 public final class AeronSubscriber
-		implements Subscriber<Buffer>, Trackable, Receiver, Loopback {
+		implements Subscriber<ByteBuffer>, Trackable, Receiver, Loopback {
 
 	private static final Logger logger = Loggers.getLogger(AeronSubscriber.class);
 
@@ -114,7 +114,7 @@ public final class AeronSubscriber
 
 	private final ServiceMessagePoller serviceMessagePoller;
 
-	private final TopicProcessor<Buffer> processor;
+	private final TopicProcessor<ByteBuffer> processor;
 
 	public static AeronSubscriber create(Context context) {
 		return new AeronSubscriber(context, false);
@@ -180,7 +180,7 @@ public final class AeronSubscriber
 	}
 
 	@Override
-	public void onNext(Buffer buffer) {
+	public void onNext(ByteBuffer buffer) {
 		processor.onNext(buffer);
 	}
 
@@ -199,7 +199,7 @@ public final class AeronSubscriber
 		return new ServiceMessagePoller(context, aeronInfra, serviceMessageHandler);
 	}
 
-	private TopicProcessor<Buffer> createTopicProcessor(Context context, boolean multiPublishers) {
+	private TopicProcessor<ByteBuffer> createTopicProcessor(Context context, boolean multiPublishers) {
 		String name = AeronUtils.makeThreadName(context.name(), "subscriber", "signal-sender");
 		return multiPublishers ?
 				TopicProcessor.share(name, context.ringBufferSize(), context.autoCancel()) :
