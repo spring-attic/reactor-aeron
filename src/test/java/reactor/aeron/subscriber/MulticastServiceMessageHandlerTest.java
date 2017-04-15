@@ -15,6 +15,7 @@
  */
 package reactor.aeron.subscriber;
 
+import java.nio.ByteBuffer;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -28,7 +29,6 @@ import reactor.aeron.Context;
 import reactor.aeron.utils.Stepper;
 import reactor.aeron.utils.TestAeronInfra;
 import reactor.core.publisher.TopicProcessor;
-import reactor.ipc.buffer.Buffer;
 
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertThat;
@@ -52,7 +52,7 @@ public class MulticastServiceMessageHandlerTest {
 
 	@Test
 	public void test() throws InterruptedException {
-		Publisher<Buffer> publisher = s -> s.onSubscribe(new Subscription() {
+		Publisher<ByteBuffer> publisher = s -> s.onSubscribe(new Subscription() {
 			@Override
 			public void request(long n) {
 				System.out.println("Requested: " + n);
@@ -62,7 +62,7 @@ public class MulticastServiceMessageHandlerTest {
 			public void cancel() {
 			}
 		});
-		TopicProcessor<Buffer> processor = TopicProcessor.create();
+		TopicProcessor<ByteBuffer> processor = TopicProcessor.create();
 		publisher.subscribe(processor);
 
 		MulticastServiceMessageHandler requestHandler = new MulticastServiceMessageHandler(

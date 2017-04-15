@@ -19,13 +19,14 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import reactor.aeron.Context;
+import reactor.aeron.utils.AeronTestUtils;
 import reactor.aeron.utils.SignalType;
 import reactor.aeron.utils.TestAeronInfra;
 import reactor.aeron.utils.TestSignalSender;
 import reactor.core.publisher.EmitterProcessor;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxProcessor;
-import reactor.ipc.buffer.Buffer;
+
+import java.nio.ByteBuffer;
 
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertThat;
@@ -37,7 +38,7 @@ public class UnicastServiceMessageHandlerTest {
 
 	private UnicastServiceMessageHandler handler;
 
-	private FluxProcessor<Buffer, Buffer> processor;
+	private FluxProcessor<ByteBuffer, ByteBuffer> processor;
 
 	private TestSignalSender signalSender;
 
@@ -66,7 +67,7 @@ public class UnicastServiceMessageHandlerTest {
 
 	@Test
 	public void testItWorks() throws InterruptedException {
-		Flux.just(1, 2, 3, 4, 5).map(i -> Buffer.wrap("" + i)).subscribe(processor);
+        AeronTestUtils.newByteBufferFlux("1", "2", "3", "4", "5").subscribe(processor);
 
 		String sessionId1 = "udp://192.168.1.1:12000" + "/1";
 		handler.handleMore(sessionId1, 1);
@@ -75,7 +76,7 @@ public class UnicastServiceMessageHandlerTest {
 
 		TestSignalSender.PublicationData data = signalSender.getPublicationDataBySessionId(sessionId1);
 		assertThat(data.lastSignalType, is(SignalType.Next));
-		assertThat(data.lastSignal.asString(), is("1"));
+		assertThat(AeronTestUtils.byteBufferToString(data.lastSignal), is("1"));
 
 		String sessionId2 = "udp://192.168.1.1:12000" + "/11";
 		handler.handleMore(sessionId2, 3);

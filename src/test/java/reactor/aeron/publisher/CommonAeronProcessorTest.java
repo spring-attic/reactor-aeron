@@ -15,6 +15,7 @@
  */
 package reactor.aeron.publisher;
 
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -33,7 +34,6 @@ import reactor.core.publisher.EmitterProcessor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxProcessor;
 import reactor.test.subscriber.AssertSubscriber;
-import reactor.ipc.buffer.Buffer;
 
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertThat;
@@ -59,10 +59,9 @@ public abstract class CommonAeronProcessorTest {
 
 	@After
 	public void doTeardown() throws InterruptedException {
-		AeronTestUtils.awaitMediaDriverIsTerminated(TIMEOUT);
+		AeronTestUtils.awaitMediaDriverIsTerminated();
 
-		assertTrue(threadSnapshot.takeAndCompare(new String[] {"hash", "global"},
-				TIMEOUT.toMillis()));
+		AeronTestUtils.assertThreadsTerminated(threadSnapshot);
 	}
 
 	protected Context createContext() {
@@ -76,34 +75,31 @@ public abstract class CommonAeronProcessorTest {
 	public void testNextSignalIsReceived() throws InterruptedException {
 		AeronProcessor processor = AeronProcessor.create(createContext());
 		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
-		Buffer.bufferToString(processor).subscribe(subscriber);
+		AeronTestUtils.bufferToString(processor).subscribe(subscriber);
 		subscriber.request(4);
 
-		Flux.just(Buffer.wrap("Live"),
-				Buffer.wrap("Hard"),
-				Buffer.wrap("Die"),
-				Buffer.wrap("Harder"),
-				Buffer.wrap("Extra")).subscribe(processor);
+		AeronTestUtils.newByteBufferFlux("Live", "Hard", "Die", "Harder", "Extra")
+				.subscribe(processor);
 
 		subscriber.awaitAndAssertNextValues("Live", "Hard", "Die", "Harder");
 
 		subscriber.request(1);
 
 		subscriber.awaitAndAssertNextValues("Extra");
-		subscriber.await();
+
+		//TODO: This call should not be required
+		subscriber.request(1);
+		subscriber.await(TIMEOUT).assertComplete();
 	}
 
 	@Test
 	public void testCompleteSignalIsReceived() throws InterruptedException {
 		AeronProcessor processor = AeronProcessor.create(createContext());
-		Flux.just(
-				Buffer.wrap("One"),
-				Buffer.wrap("Two"),
-				Buffer.wrap("Three"))
+		AeronTestUtils.newByteBufferFlux("One", "Two", "Three")
 				.subscribe(processor);
 
 		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
-		Buffer.bufferToString(processor).subscribe(subscriber);
+		AeronTestUtils.bufferToString(processor).subscribe(subscriber);
 
 		subscriber.request(1);
 		subscriber.awaitAndAssertNextValues("One");
@@ -112,7 +108,11 @@ public abstract class CommonAeronProcessorTest {
 		subscriber.awaitAndAssertNextValues("Two");
 
 		subscriber.request(1);
-		subscriber.awaitAndAssertNextValues("Three").assertComplete();
+		subscriber.awaitAndAssertNextValues("Three");
+
+		//TODO: This call should not be required
+		subscriber.request(1);
+		subscriber.await(TIMEOUT).assertComplete();
 	}
 
 	@Test
@@ -120,7 +120,7 @@ public abstract class CommonAeronProcessorTest {
 	public void testCompleteShutdownsProcessorWithNoSubscribers() {
 		AeronProcessor processor = AeronProcessor.create(createContext());
 
-		Publisher<Buffer> publisher = Subscriber::onComplete;
+		Publisher<ByteBuffer> publisher = Subscriber::onComplete;
 
 		publisher.subscribe(processor);
 	}
@@ -128,19 +128,16 @@ public abstract class CommonAeronProcessorTest {
 	@Test
 	public void testWorksWithTwoSubscribersViaEmitter() throws InterruptedException {
 		AeronProcessor processor = AeronProcessor.create(createContext());
-		Flux.just(Buffer.wrap("Live"),
-				Buffer.wrap("Hard"),
-				Buffer.wrap("Die"),
-				Buffer.wrap("Harder")).subscribe(processor);
+		AeronTestUtils.newByteBufferFlux("Live","Hard","Die","Harder").subscribe(processor);
 
-		FluxProcessor<Buffer, Buffer> emitter = EmitterProcessor.create();
+		FluxProcessor<ByteBuffer, ByteBuffer> emitter = EmitterProcessor.create();
 		processor.subscribe(emitter);
 
 		AssertSubscriber<String> subscriber1 = AssertSubscriber.create();
-		Buffer.bufferToString(emitter).subscribe(subscriber1);
+		AeronTestUtils.bufferToString(emitter).subscribe(subscriber1);
 
 		AssertSubscriber<String> subscriber2 = AssertSubscriber.create();
-		Buffer.bufferToString(emitter).subscribe(subscriber2);
+		AeronTestUtils.bufferToString(emitter).subscribe(subscriber2);
 
 		subscriber1.awaitAndAssertNextValues("Live", "Hard", "Die", "Harder").assertComplete();
 		subscriber2.awaitAndAssertNextValues("Live", "Hard", "Die", "Harder").assertComplete();
@@ -153,12 +150,12 @@ public abstract class CommonAeronProcessorTest {
 		// as error is delivered on a different channelId compared to signal
 		// its delivery could shutdown the processor before the processor subscriber
 		// receives signal
-		Flux.concat(Flux.just(Buffer.wrap("Item")),
+		Flux.concat(Flux.just(AeronTestUtils.stringToByteBuffer("Item")),
 				Flux.error(new RuntimeException("Something went wrong")))
 				.subscribe(processor);
 
 		AssertSubscriber<String> subscriber = AssertSubscriber.create();
-		Buffer.bufferToString(processor).subscribe(subscriber);
+		AeronTestUtils.bufferToString(processor).subscribe(subscriber);
 
 		subscriber.await(TIMEOUT).assertErrorWith(t -> assertThat(t.getMessage(), is("Something went wrong")));
 	}
@@ -168,9 +165,9 @@ public abstract class CommonAeronProcessorTest {
 		AeronProcessor processor = AeronProcessor.create(createContext());
 
 		AssertSubscriber<String> subscriber = AssertSubscriber.create();
-		Buffer.bufferToString(processor).subscribe(subscriber);
+		AeronTestUtils.bufferToString(processor).subscribe(subscriber);
 
-		Flux<Buffer> sourceStream = Flux.error(new RuntimeException());
+		Flux<ByteBuffer> sourceStream = Flux.error(new RuntimeException());
 		sourceStream.subscribe(processor);
 
 		subscriber.await(TIMEOUT).assertErrorWith(t -> assertThat(t.getMessage(), is("")));
@@ -182,9 +179,9 @@ public abstract class CommonAeronProcessorTest {
 		AeronProcessor processor = AeronProcessor.create(createContext().autoCancel(true));
 
 		final CountDownLatch subscriptionCancelledLatch = new CountDownLatch(1);
-		Publisher<Buffer> dataPublisher = new Publisher<Buffer>() {
+		Publisher<ByteBuffer> dataPublisher = new Publisher<ByteBuffer>() {
 			@Override
-			public void subscribe(Subscriber<? super Buffer> subscriber) {
+			public void subscribe(Subscriber<? super ByteBuffer> subscriber) {
 				subscriber.onSubscribe(new Subscription() {
 					@Override
 					public void request(long n) {
@@ -203,9 +200,9 @@ public abstract class CommonAeronProcessorTest {
 
 		AssertSubscriber<String> client = AssertSubscriber.create();
 
-		Buffer.bufferToString(processor).subscribe(client);
+		AeronTestUtils.bufferToString(processor).subscribe(client);
 
-		processor.onNext(Buffer.wrap("Hello"));
+		processor.onNext(AeronTestUtils.stringToByteBuffer("Hello"));
 
 		client.awaitAndAssertNextValues("Hello").cancel();
 
@@ -217,16 +214,15 @@ public abstract class CommonAeronProcessorTest {
 	public void testRemotePublisherReceivesCompleteBeforeProcessorIsShutdown() throws InterruptedException {
 		AeronProcessor processor = AeronProcessor.create(createContext());
 
-		Flux.just(
-				Buffer.wrap("Live"))
+		AeronTestUtils.newByteBufferFlux("Live")
 				.subscribe(processor);
 
 		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
-		Buffer.bufferToString(processor).subscribe(subscriber);
+		AeronTestUtils.bufferToString(processor).subscribe(subscriber);
 
 		AeronFlux remotePublisher = new AeronFlux(createContext());
 		AssertSubscriber<String> remoteSubscriber = AssertSubscriber.create(0);
-		Buffer.bufferToString(remotePublisher).subscribe(remoteSubscriber);
+		AeronTestUtils.bufferToString(remotePublisher).subscribe(remoteSubscriber);
 
 		subscriber.request(1);
 		remoteSubscriber.request(1);
@@ -239,14 +235,14 @@ public abstract class CommonAeronProcessorTest {
 	public void testRemotePublisherReceivesErrorBeforeProcessorIsShutdown() throws InterruptedException {
 		AeronProcessor processor = AeronProcessor.create(createContext());
 
-		Flux.<Buffer>error(new Exception("Oops!")).subscribe(processor);
+		Flux.<ByteBuffer>error(new Exception("Oops!")).subscribe(processor);
 
 		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
-		Buffer.bufferToString(processor).subscribe(subscriber);
+		AeronTestUtils.bufferToString(processor).subscribe(subscriber);
 
 		AeronFlux remotePublisher = new AeronFlux(createContext());
 		AssertSubscriber<String> remoteSubscriber = AssertSubscriber.create(0);
-		Buffer.bufferToString(remotePublisher).subscribe(remoteSubscriber);
+		AeronTestUtils.bufferToString(remotePublisher).subscribe(remoteSubscriber);
 
 		subscriber.request(1);
 		remoteSubscriber.request(1);

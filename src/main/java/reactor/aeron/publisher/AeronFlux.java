@@ -15,27 +15,24 @@
  */
 package reactor.aeron.publisher;
 
-import java.util.Objects;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
-
 import org.reactivestreams.Subscriber;
 import reactor.aeron.Context;
 import reactor.aeron.utils.AeronInfra;
 import reactor.aeron.utils.AeronUtils;
+import reactor.aeron.utils.LifecycleFSM;
 import reactor.aeron.utils.ServiceMessagePublicationFailedException;
 import reactor.aeron.utils.ServiceMessageType;
+import reactor.core.Exceptions;
 import reactor.core.Producer;
-import reactor.util.Loggers;
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
 import reactor.core.scheduler.TimedScheduler;
-import reactor.core.Exceptions;
 import reactor.util.Logger;
-import reactor.ipc.buffer.Buffer;
+import reactor.util.Loggers;
 import uk.co.real_logic.aeron.Publication;
+
+import java.nio.ByteBuffer;
+import java.util.Objects;
 
 /**
  * The publisher part of Reactive Streams over Aeron transport implementation
@@ -79,7 +76,7 @@ import uk.co.real_logic.aeron.Publication;
  * @author Anatoly Kadyshev
  * @since 2.5
  */
-public final class AeronFlux extends Flux<Buffer> implements Producer {
+public final class AeronFlux extends Flux<ByteBuffer> implements Producer {
 
 	private static final Logger logger = Loggers.getLogger(AeronFlux.class);
 
@@ -87,23 +84,17 @@ public final class AeronFlux extends Flux<Buffer> implements Producer {
 
 	private final Context context;
 
-	private final ExecutorService executor;
-
 	private final Publication serviceRequestPub;
-
-	private final AtomicBoolean alive = new AtomicBoolean(true);
-
-	private volatile boolean terminated = false;
 
 	private final HeartbeatSender heartbeatSender;
 
 	private final ServiceMessageSender serviceMessageSender;
 
-	private final AtomicBoolean subscribed = new AtomicBoolean(false);
-
 	private volatile SignalPoller signalPoller;
 
 	private final String sessionId;
+
+    private final LifecycleFSM lifecycle = new LifecycleFSM();
 
 	/**
 	 * Creates a {@link Flux} for receiving signals from Aeron
@@ -112,7 +103,7 @@ public final class AeronFlux extends Flux<Buffer> implements Producer {
 	 *
 	 * @return a new Flux receiving signals from Aeron
 	 */
-	public static Flux<Buffer> listenOn(Context context) {
+	public static Flux<ByteBuffer> listenOn(Context context) {
 		return new AeronFlux(context);
 	}
 
@@ -122,21 +113,11 @@ public final class AeronFlux extends Flux<Buffer> implements Producer {
 
 		this.context = context;
 		this.aeronInfra = context.aeronInfra();
-		this.executor =
-				Executors.newCachedThreadPool(r -> new Thread(r, AeronUtils.makeThreadName(
-						context.name(),
-						"publisher",
-						"signal-poller")));
 		this.serviceRequestPub = createServiceRequestPub(context, this.aeronInfra);
 		this.sessionId = getSessionId(context);
 		this.serviceMessageSender = new ServiceMessageSender(this, serviceRequestPub, sessionId);
 		this.heartbeatSender = new HeartbeatSender(context,
-				new ServiceMessageSender(this, serviceRequestPub, sessionId), new Consumer<Throwable>() {
-			@Override
-			public void accept(Throwable throwable) {
-				shutdown();
-			}
-		});
+				new ServiceMessageSender(this, serviceRequestPub, sessionId), throwable -> shutdown());
 
 		logger.info("publisher initialized, sessionId: {}", sessionId);
 	}
@@ -152,37 +133,27 @@ public final class AeronFlux extends Flux<Buffer> implements Producer {
 	}
 
 	@Override
-	public void subscribe(Subscriber<? super Buffer> subscriber) {
+	public void subscribe(Subscriber<? super ByteBuffer> subscriber) {
 		if (subscriber == null) {
 			throw Exceptions.argumentIsNullException();
 		}
 
-		if (!subscribed.compareAndSet(false, true)) {
+		if (!lifecycle.setStarted()) {
 			throw new IllegalStateException("Only single subscriber is supported");
 		}
 
 		signalPoller = createSignalsPoller(subscriber);
 		try {
-			executor.execute(signalPoller);
-			heartbeatSender.start();
+            signalPoller.start();
+            heartbeatSender.start();
 		} catch (Throwable t) {
 			signalPoller = null;
-			subscribed.set(false);
 			subscriber.onError(new RuntimeException("Failed to schedule poller for signals", t));
 		}
 	}
 
-	private SignalPoller createSignalsPoller(final Subscriber<? super Buffer> subscriber) {
-		return new SignalPoller(context, serviceMessageSender, subscriber, aeronInfra, () -> {
-            heartbeatSender.shutdown();
-
-            terminateSession();
-
-            signalPoller = null;
-            subscribed.set(false);
-
-            shutdown();
-        });
+	private SignalPoller createSignalsPoller(final Subscriber<? super ByteBuffer> subscriber) {
+		return new SignalPoller(context, serviceMessageSender, subscriber, aeronInfra, this::shutdown);
 	}
 
 	private void terminateSession() {
@@ -195,31 +166,27 @@ public final class AeronFlux extends Flux<Buffer> implements Producer {
 	}
 
 	public void shutdown() {
-		if (alive.compareAndSet(true, false)) {
-			// Doing a shutdown via timer to avoid shutting down Aeron in its thread
-			final TimedScheduler globalTimer = Schedulers.timer();
-			globalTimer.schedule(() -> {
-					if (signalPoller != null) {
-						signalPoller.shutdown();
-					}
-					executor.shutdown();
+		if (lifecycle.terminate()) {
+            if (signalPoller != null) {
+                terminateSession();
+                heartbeatSender.shutdown();
+                signalPoller.shutdown();
+            }
+            final TimedScheduler globalTimer = Schedulers.timer();
+            globalTimer.schedule(new Runnable() {
+                public void run() {
+                    if (!signalPoller.isTerminated()) {
+                        globalTimer.schedule(this);
+                        return;
+                    }
 
-					globalTimer.schedule(new Runnable() {
-						@Override
-						public void run() {
-							if (!executor.isTerminated()) {
-								globalTimer.schedule(this);
-								return;
-							}
+                    aeronInfra.close(serviceRequestPub);
+                    aeronInfra.shutdown();
 
-							aeronInfra.close(serviceRequestPub);
-							aeronInfra.shutdown();
-
-							logger.info("publisher shutdown, sessionId: {}", sessionId);
-							terminated = true;
-						}
-					});
-			});
+                    lifecycle.setTerminated();
+                    logger.info("publisher shutdown, sessionId: {}", sessionId);
+                }
+            });
 		}
 	}
 
@@ -228,12 +195,8 @@ public final class AeronFlux extends Flux<Buffer> implements Producer {
 		return signalPoller;
 	}
 
-	public boolean alive() {
-		return alive.get();
-	}
-
 	public boolean isTerminated() {
-		return terminated;
+		return lifecycle.isTerminated();
 	}
 
 }

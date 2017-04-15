@@ -17,6 +17,7 @@ package reactor.aeron.publisher;
 
 import org.reactivestreams.Subscriber;
 import reactor.aeron.Context;
+import reactor.aeron.utils.LifecycleFSM;
 import reactor.aeron.utils.*;
 import reactor.core.MultiProducer;
 import reactor.core.Producer;
@@ -25,15 +26,17 @@ import reactor.core.Trackable;
 import reactor.core.publisher.Operators;
 import reactor.core.Exceptions;
 import reactor.util.Logger;
-import reactor.ipc.buffer.Buffer;
 import uk.co.real_logic.aeron.ControlledFragmentAssembler;
 import uk.co.real_logic.aeron.logbuffer.ControlledFragmentHandler;
 import uk.co.real_logic.aeron.logbuffer.Header;
 import uk.co.real_logic.agrona.DirectBuffer;
 import uk.co.real_logic.agrona.concurrent.IdleStrategy;
 
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Signals receiver functionality which polls for signals sent by senders
@@ -51,7 +54,7 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 
 	private final Context context;
 
-	private volatile boolean running;
+	private final LifecycleFSM lifecycle = new LifecycleFSM();
 
 	private final ServiceMessageSender serviceMessageSender;
 
@@ -61,7 +64,11 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 
 	private uk.co.real_logic.aeron.Subscription signalSub;
 
-	protected final Subscriber<? super Buffer> subscriber;
+	protected final Subscriber<? super ByteBuffer> subscriber;
+
+	private final ExecutorService executor;
+
+	private long demand = 0;
 
 	private final ControlledFragmentHandler fragmentAssembler = new ControlledFragmentAssembler(new ControlledFragmentHandler() {
 		@Override
@@ -75,13 +82,13 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 					if (demand > 0) {
 						demand--;
 						isLastSignalAborted = false;
-						subscriber.onNext(Buffer.wrap(bytes));
+						subscriber.onNext(ByteBuffer.wrap(bytes));
 					} else {
 						isLastSignalAborted = true;
 						return Action.ABORT;
 					}
 				} else if (signalTypeCode == SignalType.Complete.getCode()) {
-					running = false;
+					lifecycle.terminate();
 					subscriber.onComplete();
 				} else if (signalTypeCode == SignalType.Error.getCode()) {
 					error = exceptionSerializer.deserialize(bytes);
@@ -96,7 +103,7 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 			}
 
 			if (error != null) {
-				running = false;
+				lifecycle.terminate();
 				subscriber.onError(error);
 			}
 			return Action.COMMIT;
@@ -105,7 +112,7 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 
 	public SignalPoller(Context context,
 						ServiceMessageSender serviceMessageSender,
-						Subscriber<? super Buffer> subscriber,
+						Subscriber<? super ByteBuffer> subscriber,
 						AeronInfra aeronInfra,
 						Runnable shutdownTask) {
 
@@ -116,13 +123,15 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 		this.shutdownTask = shutdownTask;
 		this.demandTracker = new DemandTracker();
 		this.exceptionSerializer = context.exceptionSerializer();
+		this.executor =
+				Executors.newCachedThreadPool(r -> new Thread(r, AeronUtils.makeThreadName(
+						context.name(),
+						"publisher",
+						"signal-poller")));
 	}
-
-	long demand = 0;
 
 	@Override
 	public void run() {
-		running = true;
 		logger.debug("Signal poller started, sessionId: {}", serviceMessageSender.getSessionId());
 
 		this.signalSub = aeronInfra.addSubscription(context.receiverChannel(), context.streamId());
@@ -131,7 +140,7 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 
 		final IdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
 		try {
-			while (running) {
+			while (lifecycle.isStarted()) {
 				if (demand == 0) {
 					demand = demandTracker.getAndReset();
 				}
@@ -150,13 +159,14 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 			shutdownTask.run();
 		}
 
+		lifecycle.setTerminated();
 		logger.debug("Signal poller shutdown, sessionId: {}", serviceMessageSender.getSessionId());
 	}
 
 	private void setSubscriberSubscription() {
 		//TODO: Possible timing issue due to ServiceMessagePoller termination
 		try {
-			if(running) {
+			if(lifecycle.isStarted()) {
 				subscriber.onSubscribe(this);
 			}
 		} catch (Throwable t) {
@@ -166,7 +176,7 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 	}
 
 	public void shutdown() {
-		running = false;
+		cancel();
 	}
 
 	@Override
@@ -179,22 +189,22 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 
 	@Override
 	public long downstreamCount() {
-		return running ? 2 : 0;
+		return lifecycle.isStarted() ? 2 : 0;
 	}
 
 	@Override
 	public boolean isCancelled() {
-		return !running;
+		return !lifecycle.isStarted();
 	}
 
 	@Override
 	public boolean isStarted() {
-		return running;
+		return lifecycle.isStarted();
 	}
 
 	@Override
 	public boolean isTerminated() {
-		return !running;
+		return lifecycle.isTerminated();
 	}
 
 	@Override
@@ -209,7 +219,7 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 
 	@Override
 	public void request(long n) {
-		if (running && Operators.checkRequest(n, subscriber)) {
+		if (lifecycle.isStarted() && Operators.checkRequest(n, subscriber)) {
 			try {
 				serviceMessageSender.sendRequest(n);
 				demandTracker.request(n);
@@ -221,6 +231,14 @@ class SignalPoller implements org.reactivestreams.Subscription, Runnable, Produc
 
 	@Override
 	public void cancel() {
-		running = false;
+		lifecycle.terminate();
+		executor.shutdown();
 	}
+
+	public void start() {
+		if (lifecycle.setStarted()) {
+			executor.execute(this);
+		}
+	}
+
 }

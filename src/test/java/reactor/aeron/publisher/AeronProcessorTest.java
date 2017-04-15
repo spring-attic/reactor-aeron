@@ -19,14 +19,14 @@ import java.time.Duration;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import reactor.aeron.Context;
 import reactor.aeron.utils.AeronTestUtils;
+import reactor.aeron.utils.SocketUtils;
 import reactor.aeron.utils.ThreadSnapshot;
 import reactor.core.publisher.Flux;
 import reactor.test.subscriber.AssertSubscriber;
-import reactor.ipc.buffer.Buffer;
-import reactor.ipc.netty.util.SocketUtils;
 import uk.co.real_logic.aeron.Aeron;
 import uk.co.real_logic.aeron.driver.MediaDriver;
 
@@ -35,6 +35,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * @author Anatoly Kadyshev
  */
+@Ignore
 public class AeronProcessorTest {
 
 	protected final Duration TIMEOUT = Duration.ofSeconds(5);
@@ -61,10 +62,9 @@ public class AeronProcessorTest {
 					() -> processor.isTerminated());
 		}
 
-		AeronTestUtils.awaitMediaDriverIsTerminated(TIMEOUT);
+		AeronTestUtils.awaitMediaDriverIsTerminated();
 
-		assertTrue(threadSnapshot.takeAndCompare(new String[] {"hash", "global"},
-				TIMEOUT.toMillis()));
+		AeronTestUtils.assertThreadsTerminated(threadSnapshot);
 	}
 
 	@Test
@@ -83,11 +83,11 @@ public class AeronProcessorTest {
 					.aeron(aeron));
 
 			Flux.just(
-					Buffer.wrap("Live"))
+					AeronTestUtils.stringToByteBuffer("Live"))
 			    .subscribe(processor);
 
 			AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
-			Buffer.bufferToString(processor).subscribe(subscriber);
+			AeronTestUtils.bufferToString(processor).subscribe(subscriber);
 			subscriber.request(1);
 
 			subscriber.awaitAndAssertNextValues("Live").assertComplete();
@@ -112,11 +112,11 @@ public class AeronProcessorTest {
 		processor = AeronProcessor.create(createAeronContext());
 
 		Flux.just(
-				Buffer.wrap("Live"))
+				AeronTestUtils.stringToByteBuffer("Live"))
 				.subscribe(processor);
 
 		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
-		Buffer.bufferToString(processor).subscribe(subscriber);
+		AeronTestUtils.bufferToString(processor).subscribe(subscriber);
 		subscriber.request(1);
 
 		subscriber.awaitAndAssertNextValues("Live").assertComplete();
@@ -127,11 +127,11 @@ public class AeronProcessorTest {
 		processor = AeronProcessor.share(createAeronContext());
 
 		Flux.just(
-				Buffer.wrap("Live"))
+				AeronTestUtils.stringToByteBuffer("Live"))
 				.subscribe(processor);
 
 		AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
-		Buffer.bufferToString(processor).subscribe(subscriber);
+		AeronTestUtils.bufferToString(processor).subscribe(subscriber);
 		subscriber.request(1);
 
 		subscriber.awaitAndAssertNextValues("Live").assertComplete();

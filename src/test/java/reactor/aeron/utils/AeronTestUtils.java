@@ -15,21 +15,28 @@
  */
 package reactor.aeron.utils;
 
+import groovy.json.internal.Charsets;
+import org.reactivestreams.Publisher;
+import reactor.core.publisher.Flux;
 import reactor.test.subscriber.AssertSubscriber;
-import reactor.ipc.netty.util.SocketUtils;
 import uk.co.real_logic.aeron.driver.Configuration;
 import uk.co.real_logic.aeron.driver.MediaDriver;
 import uk.co.real_logic.aeron.driver.ThreadingMode;
 
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
+
+import static org.junit.Assert.assertTrue;
 
 /**
  * @author Anatoly Kadyshev
  */
 public class AeronTestUtils {
 
-	public static void setAeronEnvProps() {
+    public static final Duration TIMEOUT = Duration.ofSeconds(5);
+
+    public static void setAeronEnvProps() {
 		String bufferLength = String.valueOf(128 * 1024);
 		System.setProperty(MediaDriver.DIRS_DELETE_ON_START_PROP_NAME, "true");
 
@@ -44,8 +51,8 @@ public class AeronTestUtils {
 		driverManager.setDeleteAeronDirsOnExit(true);
 	}
 
-	public static void awaitMediaDriverIsTerminated(Duration timeout) throws InterruptedException {
-		AssertSubscriber.await(timeout, "Aeron hasn't been shutdown properly",
+	public static void awaitMediaDriverIsTerminated() throws InterruptedException {
+		AssertSubscriber.await(TIMEOUT, "Aeron hasn't been shutdown properly",
 				() -> EmbeddedMediaDriverManager.getInstance().isTerminated());
 	}
 
@@ -53,4 +60,23 @@ public class AeronTestUtils {
 		return "udp://localhost:" + SocketUtils.findAvailableUdpPort();
 	}
 
+    public static Publisher<String> bufferToString(Publisher<ByteBuffer> publisher) {
+        return Flux.from(publisher).map(AeronTestUtils::byteBufferToString);
+	}
+
+    public static ByteBuffer stringToByteBuffer(String str) {
+        return ByteBuffer.wrap(str.getBytes(Charsets.UTF_8));
+	}
+
+	public static String byteBufferToString(ByteBuffer buffer) {
+        return new String(buffer.array(), buffer.position(), buffer.limit());
+    }
+
+	public static void assertThreadsTerminated(ThreadSnapshot threadSnapshot) throws InterruptedException {
+		assertTrue(threadSnapshot.takeAndCompare(new String[] {"timer-"}, TIMEOUT.toMillis()));
+	}
+
+	public static Flux<ByteBuffer> newByteBufferFlux(String... items) {
+		return Flux.just(items).map(AeronTestUtils::stringToByteBuffer);
+	}
 }

@@ -15,22 +15,22 @@
  */
 package reactor.aeron.subscriber;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import reactor.aeron.Context;
 import reactor.aeron.utils.AeronInfra;
 import reactor.aeron.utils.AeronUtils;
+import reactor.aeron.utils.LifecycleFSM;
 import reactor.core.Loopback;
-import reactor.util.Loggers;
 import reactor.core.Receiver;
+import reactor.core.Trackable;
 import reactor.core.publisher.TopicProcessor;
 import reactor.core.scheduler.Schedulers;
 import reactor.core.scheduler.TimedScheduler;
-import reactor.core.Trackable;
-import reactor.ipc.buffer.Buffer;
 import reactor.util.Logger;
+import reactor.util.Loggers;
+
+import java.nio.ByteBuffer;
 
 /**
  * The subscriber part of Reactive Streams over Aeron transport implementation
@@ -69,7 +69,7 @@ import reactor.util.Logger;
  *
  * <p>When the Aeron buffer for published messages becomes completely full
  * the subscriber starts to throttle and as a result method
- * {@link #onNext(Buffer)} blocks until messages are consumed or
+ * {@link #onNext(ByteBuffer)} blocks until messages are consumed or
  * {@link Context#publicationRetryMillis} timeout elapses.
  * If a message cannot be published into Aeron within
  * {@link Context#publicationRetryMillis} the corresponding exception is provided into {@link Context#errorConsumer}.
@@ -98,13 +98,11 @@ import reactor.util.Logger;
  * @since 2.5
  */
 public final class AeronSubscriber
-		implements Subscriber<Buffer>, Trackable, Receiver, Loopback {
+		implements Subscriber<ByteBuffer>, Trackable, Receiver, Loopback {
 
 	private static final Logger logger = Loggers.getLogger(AeronSubscriber.class);
 
-	private final AtomicBoolean alive = new AtomicBoolean(true);
-
-	private volatile boolean terminated = false;
+	private final LifecycleFSM lifecycle = new LifecycleFSM();
 
 	private final Runnable onTerminateTask;
 
@@ -114,7 +112,7 @@ public final class AeronSubscriber
 
 	private final ServiceMessagePoller serviceMessagePoller;
 
-	private final TopicProcessor<Buffer> processor;
+	private final TopicProcessor<ByteBuffer> processor;
 
 	public static AeronSubscriber create(Context context) {
 		return new AeronSubscriber(context, false);
@@ -134,12 +132,7 @@ public final class AeronSubscriber
 		this.onTerminateTask = onTerminateTask;
 
 		if (shutdownTask == null) {
-			shutdownTask = new Runnable() {
-				@Override
-				public void run() {
-					shutdown();
-				}
-			};
+			shutdownTask = this::shutdown;
 		}
 
 		this.aeronInfra = context.aeronInfra();
@@ -154,10 +147,6 @@ public final class AeronSubscriber
 		}
 		this.serviceMessagePoller = createServiceMessagePoller(context, aeronInfra, serviceMessageHandler);
 
-		//TODO: Do not start from constructor
-		serviceMessageHandler.start();
-		serviceMessagePoller.start();
-
 		logger.info("subscriber initialized in {} mode, service request channel/streamId: {}",
 				isMulticast ? "multicast" : "unicast",
 				context.senderChannel() + "/" + context.serviceRequestStreamId());
@@ -167,20 +156,21 @@ public final class AeronSubscriber
 		this(context,
 				multiPublishers,
 				null,
-				new Runnable() {
-					@Override
-					public void run() {
-					}
-				});
+				() -> {});
 	}
 
 	@Override
 	public void onSubscribe(Subscription s) {
+		lifecycle.setStarted();
+
+		serviceMessageHandler.start();
+		serviceMessagePoller.start();
+
 		processor.onSubscribe(s);
 	}
 
 	@Override
-	public void onNext(Buffer buffer) {
+	public void onNext(ByteBuffer buffer) {
 		processor.onNext(buffer);
 	}
 
@@ -199,7 +189,7 @@ public final class AeronSubscriber
 		return new ServiceMessagePoller(context, aeronInfra, serviceMessageHandler);
 	}
 
-	private TopicProcessor<Buffer> createTopicProcessor(Context context, boolean multiPublishers) {
+	private TopicProcessor<ByteBuffer> createTopicProcessor(Context context, boolean multiPublishers) {
 		String name = AeronUtils.makeThreadName(context.name(), "subscriber", "signal-sender");
 		return multiPublishers ?
 				TopicProcessor.share(name, context.ringBufferSize(), context.autoCancel()) :
@@ -207,7 +197,7 @@ public final class AeronSubscriber
 	}
 
 	public void shutdown() {
-		if (alive.compareAndSet(true, false)) {
+		if (lifecycle.terminate()) {
 			// Doing a shutdown via globalTimer to avoid shutting down Aeron in its thread
 			final TimedScheduler globalTimer = Schedulers.timer();
 			globalTimer.schedule(() -> {
@@ -228,7 +218,7 @@ public final class AeronSubscriber
 							aeronInfra.shutdown();
 
 							logger.info("subscriber shutdown");
-							terminated = true;
+							lifecycle.setTerminated();
 
 							onTerminateTask.run();
 						}
@@ -239,13 +229,14 @@ public final class AeronSubscriber
 
 	@Override
 	public boolean isTerminated() {
-		return terminated;
+		return lifecycle.isTerminated();
 	}
 
 	@Override
 	public boolean isStarted() {
-		return alive.get();
+		return lifecycle.isStarted();
 	}
+
 	@Override
 	public Object connectedInput() {
 		return serviceMessageHandler;

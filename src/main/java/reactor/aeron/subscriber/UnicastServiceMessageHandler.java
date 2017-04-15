@@ -15,6 +15,7 @@
  */
 package reactor.aeron.subscriber;
 
+import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -30,7 +31,6 @@ import reactor.core.MultiProducer;
 import reactor.util.Loggers;
 import reactor.core.publisher.FluxProcessor;
 import reactor.util.Logger;
-import reactor.ipc.buffer.Buffer;
 import uk.co.real_logic.agrona.concurrent.BackoffIdleStrategy;
 
 
@@ -48,7 +48,7 @@ class UnicastServiceMessageHandler implements ServiceMessageHandler, MultiProduc
 	 */
 	private static final long SUBSCRIPTION_TIMEOUT_NS = TimeUnit.MILLISECONDS.toNanos(100);
 
-	private final Processor<Buffer, Buffer> processor;
+	private final Processor<ByteBuffer, ByteBuffer> processor;
 
 	private final AeronInfra aeronInfra;
 
@@ -63,7 +63,7 @@ class UnicastServiceMessageHandler implements ServiceMessageHandler, MultiProduc
 
 	private final HeartbeatWatchdog heartbeatWatchdog;
 
-	private class InnerSubscriber implements Subscriber<Buffer> {
+	private class InnerSubscriber implements Subscriber<ByteBuffer> {
 
 		private final SignalSender signalSender;
 
@@ -85,7 +85,7 @@ class UnicastServiceMessageHandler implements ServiceMessageHandler, MultiProduc
 		}
 
 		@Override
-		public void onNext(Buffer buffer) {
+		public void onNext(ByteBuffer buffer) {
 			signalSender.publishSignal(session.getSessionId(), session.getPublication(), buffer, SignalType.Next, true);
 		}
 
@@ -93,7 +93,7 @@ class UnicastServiceMessageHandler implements ServiceMessageHandler, MultiProduc
 		public void onError(Throwable t) {
 			session.setTerminal();
 
-			Buffer buffer = Buffer.wrap(context.exceptionSerializer().serialize(t));
+			ByteBuffer buffer = ByteBuffer.wrap(context.exceptionSerializer().serialize(t));
 			signalSender.publishSignal(session.getSessionId(), session.getPublication(), buffer,
 					SignalType.Error, true);
 		}
@@ -102,14 +102,14 @@ class UnicastServiceMessageHandler implements ServiceMessageHandler, MultiProduc
 		public void onComplete() {
 			session.setTerminal();
 
-			Buffer buffer = new Buffer(0, true);
+			ByteBuffer buffer = ByteBuffer.allocate(0);
 			signalSender.publishSignal(session.getSessionId(), session.getPublication(), buffer,
 					SignalType.Complete, true);
 		}
 
 	}
 
-	public UnicastServiceMessageHandler(FluxProcessor<Buffer, Buffer> processor,
+	public UnicastServiceMessageHandler(FluxProcessor<ByteBuffer, ByteBuffer> processor,
 										AeronInfra aeronInfra,
 										Context context,
 										Runnable onTerminalEventTask) {
@@ -176,7 +176,7 @@ class UnicastServiceMessageHandler implements ServiceMessageHandler, MultiProduc
 
 	private void sendCompleteIntoNonTerminalSessions() {
 		SignalSender signalSender = new BasicSignalSender(aeronInfra, context.errorConsumer());
-		Buffer buffer = new Buffer(0, true);
+		ByteBuffer buffer = ByteBuffer.allocate(0);
 		for (UnicastSession session: sessionTracker.getSessions()) {
 			if (!session.isTerminal()) {
 				session.setTerminal();

@@ -15,13 +15,13 @@
  */
 package reactor.aeron.subscriber;
 
+import java.nio.ByteBuffer;
 import java.util.function.Consumer;
 
 import reactor.aeron.utils.AeronInfra;
 import reactor.aeron.utils.AeronUtils;
 import reactor.aeron.utils.SignalPublicationFailedException;
 import reactor.aeron.utils.SignalType;
-import reactor.ipc.buffer.Buffer;
 import uk.co.real_logic.aeron.Publication;
 import uk.co.real_logic.aeron.logbuffer.BufferClaim;
 import uk.co.real_logic.agrona.MutableDirectBuffer;
@@ -57,7 +57,7 @@ public final class BasicSignalSender implements SignalSender {
 	 * @return true if successfully published signal and false otherwise
 	 */
 	@Override
-	public long publishSignal(String sessionId, Publication publication, Buffer buffer, SignalType signalType,
+	public long publishSignal(String sessionId, Publication publication, ByteBuffer buffer, SignalType signalType,
 							  boolean retryPublication) {
 		long result;
 		Throwable cause = null;
@@ -86,14 +86,14 @@ public final class BasicSignalSender implements SignalSender {
 	 *
 	 * @return true if signal was published and false otherwise
 	 */
-	private long doPublishSignal(Publication publication, Buffer buffer, SignalType signalType, boolean retryPublication) {
+	private long doPublishSignal(Publication publication, ByteBuffer buffer, SignalType signalType, boolean retryPublication) {
 		long result = aeronInfra.claim(publication, bufferClaim, buffer.limit() + 1, idleStrategy, retryPublication);
 		if (result >= 0) {
 			try {
 				MutableDirectBuffer mutableBuffer = bufferClaim.buffer();
 				int offset = bufferClaim.offset();
 				mutableBuffer.putByte(offset, signalType.getCode());
-				mutableBuffer.putBytes(offset + 1, buffer.byteBuffer().array(), buffer.position(), buffer.limit());
+				mutableBuffer.putBytes(offset + 1, buffer, buffer.position(), buffer.limit());
 			} finally {
 				bufferClaim.commit();
 			}

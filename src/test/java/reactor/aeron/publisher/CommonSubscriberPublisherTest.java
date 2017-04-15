@@ -16,13 +16,6 @@
 
 package reactor.aeron.publisher;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-
 import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Before;
@@ -37,7 +30,12 @@ import reactor.aeron.utils.SignalPublicationFailedException;
 import reactor.aeron.utils.ThreadSnapshot;
 import reactor.core.publisher.Flux;
 import reactor.test.subscriber.AssertSubscriber;
-import reactor.ipc.buffer.Buffer;
+
+import java.nio.ByteBuffer;
+import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.*;
 
@@ -61,31 +59,22 @@ public abstract class CommonSubscriberPublisherTest {
 
 	@After
 	public void doTearDown() throws InterruptedException {
-		assertTrue(threadSnapshot.takeAndCompare(new String[]{"hash", "global"},
-				TIMEOUT.toMillis()));
+		AeronTestUtils.assertThreadsTerminated(threadSnapshot);
 	}
 
 	protected abstract Context createContext(String name);
-
-	protected List<Buffer> createBuffers(int n) {
-		List<Buffer> items = new ArrayList<>(n);
-		for (int i = 1; i <= n; i++) {
-			items.add(Buffer.wrap("" + i));
-		}
-		return items;
-	}
 
 	@Test
 	public void testNextSignalIsReceivedByPublisher() throws InterruptedException {
 		AeronSubscriber subscriber = AeronSubscriber.create(createContext("subscriber"));
 
-		Flux.just(Buffer.wrap("One"), Buffer.wrap("Two"), Buffer.wrap("Three"))
+        AeronTestUtils.newByteBufferFlux("One", "Two", "Three")
 		    .subscribe(subscriber);
 
 		AeronFlux publisher = new AeronFlux(createContext("publisher"));
 
 		AssertSubscriber<String> clientSubscriber = AssertSubscriber.create();
-		Buffer.bufferToString(publisher).subscribe(clientSubscriber);
+		AeronTestUtils.bufferToString(publisher).subscribe(clientSubscriber);
 
 
 		clientSubscriber.awaitAndAssertNextValues("One", "Two", "Three").assertComplete();
@@ -97,10 +86,10 @@ public abstract class CommonSubscriberPublisherTest {
 		AeronFlux publisher = new AeronFlux(createContext("publisher"));
 
 		AssertSubscriber<String> clientSubscriber = AssertSubscriber.create();
-		Buffer.bufferToString(publisher).subscribe(clientSubscriber);
+		AeronTestUtils.bufferToString(publisher).subscribe(clientSubscriber);
 
 
-		Flux.<Buffer>error(new RuntimeException("Something went wrong")).subscribe(subscriber);
+		Flux.<ByteBuffer>error(new RuntimeException("Something went wrong")).subscribe(subscriber);
 
 		clientSubscriber.await().assertError();
 	}
@@ -115,7 +104,7 @@ public abstract class CommonSubscriberPublisherTest {
 		}));
 
 		final byte[] bytes = new byte[2048];
-		Flux.range(1, 100).map(i -> Buffer.wrap(bytes)).subscribe(subscriber);
+		Flux.range(1, 100).map(i -> ByteBuffer.wrap(bytes)).subscribe(subscriber);
 
 		AeronFlux publisher = new AeronFlux(createContext("publisher").autoCancel(false));
 
@@ -134,19 +123,19 @@ public abstract class CommonSubscriberPublisherTest {
 		assertThat(error.get(), Matchers.instanceOf(SignalPublicationFailedException.class));
 	}
 
-	static class TestPublisher implements Publisher<String> {
+	static class TestPublisher implements Publisher<ByteBuffer> {
 
-		private Subscriber<? super String> subscriber;
+		private Subscriber<? super ByteBuffer> subscriber;
 
 		private final CountDownLatch cancelledLatch = new CountDownLatch(1);
 
 		@Override
-		public void subscribe(Subscriber<? super String> s) {
+		public void subscribe(Subscriber<? super ByteBuffer> s) {
 			subscriber = s;
 			s.onSubscribe(new Subscription() {
 				@Override
 				public void request(long n) {
-					subscriber.onNext("" + n);
+					subscriber.onNext(AeronTestUtils.stringToByteBuffer(String.valueOf(n)));
 				}
 
 				@Override
@@ -167,11 +156,11 @@ public abstract class CommonSubscriberPublisherTest {
 		TestPublisher valuePublisher = new TestPublisher();
 
 		AeronSubscriber aeronSubscriber = AeronSubscriber.create(createContext("subscriber").autoCancel(true));
-		Buffer.stringToBuffer(valuePublisher).subscribe(aeronSubscriber);
+		valuePublisher.subscribe(aeronSubscriber);
 
 		AeronFlux publisher = new AeronFlux(createContext("publisher").autoCancel(true));
 		AssertSubscriber<String> client = AssertSubscriber.create(0);
-		Buffer.bufferToString(publisher).subscribe(client);
+		AeronTestUtils.bufferToString(publisher).subscribe(client);
 
 		client.request(1);
 		client.awaitAndAssertNextValueCount(1);
@@ -186,11 +175,11 @@ public abstract class CommonSubscriberPublisherTest {
 		TestPublisher valuePublisher = new TestPublisher();
 
 		AeronSubscriber aeronSubscriber = AeronSubscriber.create(createContext("subscriber").autoCancel(false));
-		Buffer.stringToBuffer(valuePublisher).subscribe(aeronSubscriber);
+		valuePublisher.subscribe(aeronSubscriber);
 
 		AeronFlux publisher = new AeronFlux(createContext("publisher").autoCancel(false));
 		AssertSubscriber<String> client = AssertSubscriber.create(0);
-		Buffer.bufferToString(publisher).subscribe(client);
+		AeronTestUtils.bufferToString(publisher).subscribe(client);
 
 		client.request(1);
 		client.awaitAndAssertNextValueCount(1);

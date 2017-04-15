@@ -16,9 +16,9 @@
 package reactor.aeron.utils;
 
 import reactor.aeron.subscriber.SignalSender;
-import reactor.ipc.buffer.Buffer;
 import uk.co.real_logic.aeron.Publication;
 
+import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -34,7 +34,7 @@ public class TestSignalSender implements SignalSender {
 		/**
 		 * Last signal published
 		 */
-		public volatile Buffer lastSignal;
+		public volatile ByteBuffer lastSignal;
 
 		/**
 		 * Type of the last signal published
@@ -52,8 +52,8 @@ public class TestSignalSender implements SignalSender {
 	}
 
     @Override
-    public long publishSignal(String sessionId, Publication publication, Buffer buffer, SignalType signalType,
-							  boolean retryPublication) {
+    public long publishSignal(String sessionId, Publication publication, ByteBuffer buffer, SignalType signalType,
+                              boolean retryPublication) {
         PublicationData data = dataBySessionId.get(sessionId);
         if (data == null) {
             data = new PublicationData();

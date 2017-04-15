@@ -19,6 +19,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import reactor.aeron.Context;
+import reactor.aeron.utils.LifecycleFSM;
 import reactor.aeron.utils.AeronInfra;
 import reactor.aeron.utils.AeronUtils;
 import reactor.aeron.utils.ServiceMessageType;
@@ -49,9 +50,7 @@ class ServiceMessagePoller implements Runnable, Receiver {
 
 	private final AeronInfra aeronInfra;
 
-	private volatile boolean running;
-
-	private volatile boolean terminated = false;
+	private final LifecycleFSM lifecycle = new LifecycleFSM();
 
 	private class PollerFragmentHandler implements FragmentHandler {
 
@@ -59,10 +58,6 @@ class ServiceMessagePoller implements Runnable, Receiver {
 
 		@Override
 		public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
-			if (!running) {
-				return;
-			}
-
 			byte type = buffer.getByte(offset);
 			if (type == ServiceMessageType.Request.getCode()) {
 				handleRequest(buffer, offset);
@@ -124,20 +119,18 @@ class ServiceMessagePoller implements Runnable, Receiver {
 	}
 
 	void start() {
-		executor.execute(this);
+		if (lifecycle.setStarted()) {
+			executor.execute(this);
+		}
 	}
 
 	public void run() {
-		this.running = true;
 		logger.debug("Service message poller started");
-
 		IdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
-
 		FragmentAssembler fragmentAssembler = new FragmentAssembler(new PollerFragmentHandler());
-
 		final int fragmentLimit = context.serviceMessagePollerFragmentLimit();
 
-		while (running) {
+		while (lifecycle.isStarted()) {
 			int nFragmentsReceived = 0;
 			try {
 				nFragmentsReceived = serviceRequestSub.poll(fragmentAssembler, fragmentLimit);
@@ -149,13 +142,12 @@ class ServiceMessagePoller implements Runnable, Receiver {
 
 		aeronInfra.close(serviceRequestSub);
 
-		logger.debug("Service message poller shutdown");
-		terminated = true;
+		lifecycle.setTerminated();
+		logger.debug("Service message poller terminated");
 	}
 
 	void shutdown() {
-		this.running = false;
-
+		lifecycle.terminate();
 		executor.shutdown();
 	}
 
@@ -165,6 +157,6 @@ class ServiceMessagePoller implements Runnable, Receiver {
 	}
 
 	public boolean isTerminated() {
-		return terminated;
+		return lifecycle.isTerminated();
 	}
 }

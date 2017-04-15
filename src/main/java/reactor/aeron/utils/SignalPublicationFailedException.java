@@ -15,7 +15,7 @@
  */
 package reactor.aeron.utils;
 
-import reactor.ipc.buffer.Buffer;
+import java.nio.Buffer;
 
 /**
  * @author Anatoly Kadyshev

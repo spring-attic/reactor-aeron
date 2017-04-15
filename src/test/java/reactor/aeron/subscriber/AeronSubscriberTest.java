@@ -21,17 +21,14 @@ import org.junit.Test;
 import reactor.aeron.Context;
 import reactor.aeron.utils.AeronTestUtils;
 import reactor.aeron.utils.ThreadSnapshot;
-
-import java.time.Duration;
-
-import static org.junit.Assert.assertTrue;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.TopicProcessor;
+import reactor.test.subscriber.AssertSubscriber;
 
 /**
  * @author Anatoly Kadyshev
  */
 public class AeronSubscriberTest {
-
-	private static final Duration TIMEOUT = Duration.ofSeconds(5);
 
 	private ThreadSnapshot threadSnapshot;
 
@@ -44,9 +41,9 @@ public class AeronSubscriberTest {
 
 	@After
 	public void doTearDown() throws InterruptedException {
-		AeronTestUtils.awaitMediaDriverIsTerminated(TIMEOUT);
+		AeronTestUtils.awaitMediaDriverIsTerminated();
 
-		assertTrue(threadSnapshot.takeAndCompare(new String[] {"global"}, TIMEOUT.toMillis()));
+		AeronTestUtils.assertThreadsTerminated(threadSnapshot);
 	}
 
 	@Test
@@ -57,5 +54,22 @@ public class AeronSubscriberTest {
 
 		subscriber.shutdown();
 	}
+
+	@Test
+	public void testTopicProcessor() {
+        TopicProcessor<String> processor = TopicProcessor.create();
+        Flux.just("1", "2", "3").subscribe(processor);
+
+        AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
+        processor.subscribe(subscriber);
+
+        subscriber.request(3);
+
+        subscriber.awaitAndAssertNextValues("1", "2", "3");
+
+        //FIXME: This call is redundant and should be removed
+        subscriber.request(1);
+        subscriber.await(AeronTestUtils.TIMEOUT).assertComplete();
+    }
 
 }

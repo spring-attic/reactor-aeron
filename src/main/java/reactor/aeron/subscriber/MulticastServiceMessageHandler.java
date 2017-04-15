@@ -15,6 +15,7 @@
  */
 package reactor.aeron.subscriber;
 
+import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.reactivestreams.Subscriber;
@@ -26,7 +27,6 @@ import reactor.aeron.utils.SignalType;
 import reactor.util.Loggers;
 import reactor.core.publisher.FluxProcessor;
 import reactor.util.Logger;
-import reactor.ipc.buffer.Buffer;
 import uk.co.real_logic.aeron.Publication;
 
 /**
@@ -64,7 +64,7 @@ class MulticastServiceMessageHandler implements ServiceMessageHandler {
 
 	private final InnerSubscriber subscriber;
 
-	class InnerSubscriber implements Subscriber<Buffer> {
+	class InnerSubscriber implements Subscriber<ByteBuffer> {
 
 		private static final String SESSION_ID = "<multicast>";
 
@@ -93,7 +93,7 @@ class MulticastServiceMessageHandler implements ServiceMessageHandler {
 		}
 
 		@Override
-		public void onNext(Buffer buffer) {
+		public void onNext(ByteBuffer buffer) {
 			signalSender.publishSignal(SESSION_ID, signalPub, buffer, SignalType.Next, true);
 
 			incrementCursor();
@@ -101,7 +101,7 @@ class MulticastServiceMessageHandler implements ServiceMessageHandler {
 
 		@Override
 		public void onError(Throwable t) {
-			Buffer buffer = Buffer.wrap(exceptionSerializer.serialize(t));
+			ByteBuffer buffer = ByteBuffer.wrap(exceptionSerializer.serialize(t));
 
 			signalSender.publishSignal(SESSION_ID, signalPub, buffer, SignalType.Error, true);
 
@@ -110,7 +110,7 @@ class MulticastServiceMessageHandler implements ServiceMessageHandler {
 
 		@Override
 		public void onComplete() {
-			Buffer buffer = new Buffer(0, true);
+			ByteBuffer buffer = ByteBuffer.allocate(0);
 
 			signalSender.publishSignal(SESSION_ID, signalPub, buffer, SignalType.Complete, true);
 
@@ -123,7 +123,7 @@ class MulticastServiceMessageHandler implements ServiceMessageHandler {
 
 	}
 
-	public MulticastServiceMessageHandler(FluxProcessor<Buffer, Buffer> processor,
+	public MulticastServiceMessageHandler(FluxProcessor<ByteBuffer, ByteBuffer> processor,
 										  AeronInfra aeronInfra,
 										  Context context,
 			Runnable shutdownTask) {

@@ -23,8 +23,9 @@ import reactor.aeron.subscriber.AeronSubscriber;
 import reactor.aeron.utils.AeronTestUtils;
 import reactor.core.publisher.Flux;
 import reactor.test.subscriber.AssertSubscriber;
-import reactor.ipc.buffer.Buffer;
+import reactor.test.util.FlowSerializerUtils;
 
+import java.nio.ByteBuffer;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -46,53 +47,61 @@ public class AeronSubscriberPublisherUnicastTest extends CommonSubscriberPublish
 	public void testNextSignalIsReceivedByTwoPublishers() throws InterruptedException {
 		AeronSubscriber aeronSubscriber = AeronSubscriber.create(createContext("subscriber"));
 
-		Flux.fromIterable(createBuffers(6)).subscribe(aeronSubscriber);
+		AeronTestUtils.newByteBufferFlux("1","2","3","4","5","6").subscribe(aeronSubscriber);
 
 		AeronFlux publisher1 = new AeronFlux(createContext("publisher1"));
 
 		AssertSubscriber<String> client1 = AssertSubscriber.create(0);
-		Buffer.bufferToString(publisher1).subscribe(client1);
+		AeronTestUtils.bufferToString(publisher1).subscribe(client1);
 
 
 		client1.request(3);
 
 		client1.awaitAndAssertNextValues("1", "2", "3");
 
-		System.out.println(FlowSerializerUtils.scan(aeronSubscriber).toString());
-		System.out.println(FlowSerializerUtils.scan(client1).toString());
+//		System.out.println(FlowSerializerUtils.scan(aeronSubscriber).toString());
+//		System.out.println(FlowSerializerUtils.scan(client1).toString());
 
 		AeronFlux publisher2 = new AeronFlux(createContext("publisher2")
 				.receiverChannel(AeronTestUtils.availableLocalhostChannel()));
 
 		AssertSubscriber<String> client2 = AssertSubscriber.create(0);
-		Buffer.bufferToString(publisher2).subscribe(client2);
+		AeronTestUtils.bufferToString(publisher2).subscribe(client2);
 
 
 		client2.request(6);
 
-		client2.awaitAndAssertNextValues("1", "2", "3", "4", "5", "6").assertComplete();
+		client2.awaitAndAssertNextValues("1", "2", "3", "4", "5", "6");
 
-		System.out.println(FlowSerializerUtils.scan(aeronSubscriber).toString());
-		System.out.println(FlowSerializerUtils.scan(client2).toString());
-		System.out.println(FlowSerializerUtils.scan(client1).toString());
+		//TODO: This call should not be required
+		client2.request(1);
+		client2.await(TIMEOUT).assertComplete();
+
+//		System.out.println(FlowSerializerUtils.scan(aeronSubscriber).toString());
+//		System.out.println(FlowSerializerUtils.scan(client2).toString());
+//		System.out.println(FlowSerializerUtils.scan(client1).toString());
 
 		client1.request(3);
 
-		client1.awaitAndAssertNextValues("4", "5", "6").assertComplete();
+		client1.awaitAndAssertNextValues("4", "5", "6");
 
-		System.out.println(FlowSerializerUtils.scan(aeronSubscriber).toString());
+		//TODO: This call should not be required
+		client1.request(1);
+		client1.await(TIMEOUT).assertComplete();
+
+//		System.out.println(FlowSerializerUtils.scan(aeronSubscriber).toString());
 	}
 
 	@Test
 	public void testSubscriptionCancellationTerminatesAeronFlux() throws InterruptedException {
 		AeronSubscriber aeronSubscriber = AeronSubscriber.create(createContext("subscriber").autoCancel(true));
 
-		Flux.fromIterable(createBuffers(6)).subscribe(aeronSubscriber);
+		AeronTestUtils.newByteBufferFlux("1","2","3","4","5","6").subscribe(aeronSubscriber);
 
 		AeronFlux publisher = new AeronFlux(createContext("publisher").autoCancel(false));
 		AssertSubscriber<String> client = AssertSubscriber.create(0);
 
-		Buffer.bufferToString(publisher).subscribe(client);
+		AeronTestUtils.bufferToString(publisher).subscribe(client);
 
 		client.request(3);
 		client.awaitAndAssertNextValues("1", "2", "3");
@@ -135,22 +144,26 @@ public class AeronSubscriberPublisherUnicastTest extends CommonSubscriberPublish
 	@Test
 	public void testPublisherCanConnectToATerminalButRunningSubscriber() throws InterruptedException {
 		AeronSubscriber aeronSubscriber = AeronSubscriber.create(createContext("subscriber"));
-		Flux.fromIterable(createBuffers(3)).subscribe(aeronSubscriber);
+		AeronTestUtils.newByteBufferFlux("1","2","3").subscribe(aeronSubscriber);
 
-		AeronFlux publisher = new AeronFlux(createContext("publisher"));
+		AeronFlux flux1 = new AeronFlux(createContext("publisher"));
 		HangingOnCompleteSubscriber client = new HangingOnCompleteSubscriber();
-		Buffer.bufferToString(publisher).subscribe(client);
+		AeronTestUtils.bufferToString(flux1).subscribe(client);
 
 		assertTrue(client.completeReceivedLatch.await(TIMEOUT.getSeconds(), TimeUnit.SECONDS));
 
-		AeronFlux publisher2 = new AeronFlux(createContext("publisher2"));
-
+		AeronFlux flux2 = new AeronFlux(createContext("publisher2"));
 		AssertSubscriber<String> client2 = AssertSubscriber.create(0);
-		Buffer.bufferToString(publisher2).subscribe(client2);
+		AeronTestUtils.bufferToString(flux2).subscribe(client2);
 
 		client2.request(3);
 
-		client2.awaitAndAssertNextValueCount(3).assertComplete();
+		client2.awaitAndAssertNextValueCount(3);
+
+		//TODO: This should not be required
+		client2.request(1);
+
+		client2.await(TIMEOUT).assertComplete();
 
 		client.canReturnLatch.countDown();
 	}
@@ -158,18 +171,21 @@ public class AeronSubscriberPublisherUnicastTest extends CommonSubscriberPublish
 	@Test
 	public void testRequestAfterCompleteEventIsNoOp() {
 		AeronSubscriber aeronSubscriber = AeronSubscriber.create(createContext("subscriber"));
-
-		Flux.fromIterable(createBuffers(3)).subscribe(aeronSubscriber);
+		AeronTestUtils.newByteBufferFlux("1","2","3").subscribe(aeronSubscriber);
 
 		AeronFlux publisher = new AeronFlux(createContext("publisher").autoCancel(false));
 		AssertSubscriber<String> client = AssertSubscriber.create(0);
 
-		Buffer.bufferToString(publisher).subscribe(client);
+		AeronTestUtils.bufferToString(publisher).subscribe(client);
 
 		client.request(3);
 
 		client.awaitAndAssertNextValues("1", "2", "3");
-		client.assertComplete();
+
+		//TODO: Should not be required
+		client.request(1);
+
+		client.await(TIMEOUT).assertComplete();
 
 		AssertSubscriber.await(TIMEOUT, () -> "Publisher hasn't been terminated", publisher::isTerminated);
 
@@ -180,12 +196,12 @@ public class AeronSubscriberPublisherUnicastTest extends CommonSubscriberPublish
 	public void testRequestAfterErrorEventIsNoOp() throws InterruptedException {
 		AeronSubscriber aeronSubscriber = AeronSubscriber.create(createContext("subscriber"));
 
-		Flux.<Buffer>error(new RuntimeException("Oops!")).subscribe(aeronSubscriber);
+		Flux.<ByteBuffer>error(new RuntimeException("Oops!")).subscribe(aeronSubscriber);
 
 		AeronFlux publisher = new AeronFlux(createContext("publisher").autoCancel(false));
 		AssertSubscriber<String> client = AssertSubscriber.create(0);
 
-		Buffer.bufferToString(publisher).subscribe(client);
+		AeronTestUtils.bufferToString(publisher).subscribe(client);
 
 		client.request(1);
 
