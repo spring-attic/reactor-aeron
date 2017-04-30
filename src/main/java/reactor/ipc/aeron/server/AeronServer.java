@@ -19,7 +19,7 @@ import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.AeronConnector;
-import reactor.ipc.aeron.AeronHelper;
+import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
@@ -71,17 +71,17 @@ public final class AeronServer implements AeronConnector {
 
         return Mono.create(sink -> {
             String category = name;
-            AeronHelper aeronHelper = new AeronHelper(category, options);
-            Subscription subscription = aeronHelper.addSubscription(options.serverChannel(), options.serverStreamId(),
+            AeronWrapper wrapper = new AeronWrapper(category, options);
+            Subscription subscription = wrapper.addSubscription(options.serverChannel(), options.serverStreamId(),
                     "receiving data and requests", null);
             ServerPooler pooler = new ServerPooler(subscription,
-                    new InnerSignalHandler(category, aeronHelper, ioHandler, options), name);
+                    new InnerSignalHandler(category, wrapper, ioHandler, options), name);
             pooler.initialise();
 
             sink.success(() -> {
                 pooler.shutdown().block();
                 subscription.close();
-                aeronHelper.shutdown();
+                wrapper.shutdown();
             });
         });
     }
@@ -92,7 +92,7 @@ public final class AeronServer implements AeronConnector {
 
         private final String category;
 
-        private final AeronHelper aeronHelper;
+        private final AeronWrapper wrapper;
 
         private final BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler;
 
@@ -101,11 +101,11 @@ public final class AeronServer implements AeronConnector {
         private final Logger logger;
 
         public InnerSignalHandler(String category,
-                                  AeronHelper aeronHelper,
+                                  AeronWrapper wrapper,
                                   BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler,
                                   AeronOptions options) {
             this.category = category;
-            this.aeronHelper = aeronHelper;
+            this.wrapper = wrapper;
             this.ioHandler = ioHandler;
             this.options = options;
             this.inboundBySessionId = new HashMap<>();
@@ -116,7 +116,7 @@ public final class AeronServer implements AeronConnector {
         public void onConnect(UUID sessionId, String channel, int streamId) {
             logger.debug("Received CONNECT for sessionId: {}, channel/streamId: {}/{}", sessionId, channel, streamId);
 
-            AeronOutbound outbound = new AeronOutbound(category, aeronHelper, channel, streamId, sessionId, options);
+            AeronOutbound outbound = new AeronOutbound(category, wrapper, channel, streamId, sessionId, options);
             AeronServerInbound inbound = new AeronServerInbound(category);
             inboundBySessionId.put(sessionId, inbound);
             Publisher<Void> publisher = ioHandler.apply(inbound, outbound);

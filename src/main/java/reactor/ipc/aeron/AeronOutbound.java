@@ -26,7 +26,6 @@ import reactor.ipc.connector.Outbound;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 import uk.co.real_logic.aeron.Publication;
-import uk.co.real_logic.agrona.concurrent.IdleStrategy;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;
@@ -45,12 +44,12 @@ public final class AeronOutbound implements Outbound<ByteBuffer> {
     private final Scheduler scheduler;
 
     public AeronOutbound(String category,
-                         AeronHelper aeronHelper,
+                         AeronWrapper wrapper,
                          String channel,
                          int streamId,
                          UUID sessionId,
                          AeronOptions options) {
-        Publication publication = aeronHelper.addPublication(channel, streamId, "sending data", sessionId);
+        Publication publication = wrapper.addPublication(channel, streamId, "sending data", sessionId);
 
         this.logger = Loggers.getLogger(AeronOutbound.class + "." + category);
         this.signalSender = new SignalSender(publication, sessionId, options);
@@ -78,14 +77,12 @@ public final class AeronOutbound implements Outbound<ByteBuffer> {
 
         private final UUID sessionId;
 
-        private final AeronOptions options;
-
-        private final IdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
+        private final MessagePublisher publisher;
 
         public SignalSender(Publication publication, UUID sessionId, AeronOptions options) {
             this.publication = publication;
             this.sessionId = sessionId;
-            this.options = options;
+            this.publisher = new MessagePublisher(logger, options.connectTimeoutMillis(), options.backpressureTimeoutMillis());
         }
 
         @Override
@@ -100,8 +97,7 @@ public final class AeronOutbound implements Outbound<ByteBuffer> {
             long result = 0;
             Exception cause = null;
             try {
-                result = AeronUtils.publish(logger, publication, RequestType.NEXT, byteBuffer, idleStrategy, sessionId,
-                        options.connectTimeoutMillis(), options.backpressureTimeoutMillis());
+                result = publisher.publish(publication, MessageType.NEXT, byteBuffer, sessionId);
             } catch (Exception e) {
                 cause = e;
             }

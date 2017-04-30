@@ -26,7 +26,7 @@ import java.util.UUID;
 /**
  * @author Anatoly Kadyshev
  */
-public final class AeronHelper {
+public final class AeronWrapper {
 
     private final Logger logger;
 
@@ -36,8 +36,8 @@ public final class AeronHelper {
 
     private final boolean isDriverLaunched;
 
-    public AeronHelper(String category, AeronOptions options) {
-        this.logger = Loggers.getLogger(AeronHelper.class + "." + category);
+    public AeronWrapper(String category, AeronOptions options) {
+        this.logger = Loggers.getLogger(AeronWrapper.class + "." + category);
 
         if (options.getAeron() == null) {
             driverManager.launchDriver();
@@ -57,15 +57,19 @@ public final class AeronHelper {
 
     public Publication addPublication(String channel, int streamId, String purpose, UUID sessionId) {
         Publication publication = aeron.addPublication(channel, streamId);
-        logger.debug("Added publication, sessionId: {} for {}: {}/{}", sessionId, purpose, channel, streamId);
+        if (logger.isDebugEnabled()) {
+            logger.debug("Added publication, sessionId: {} for {}: {}", sessionId, purpose,
+                    AeronUtils.format(channel, streamId));
+        }
         return publication;
     }
 
     public Subscription addSubscription(String channel, int streamId, String purpose, UUID sessionId) {
         Subscription subscription = aeron.addSubscription(channel, streamId);
-
-        logger.debug("Added subscription{} for {}: {}/{}", sessionId != null ? ", sessionId: " + sessionId: "",
-                purpose, channel, streamId);
+        if (logger.isDebugEnabled()) {
+            logger.debug("Added subscription{} for {}: {}/{}", sessionId != null ? ", sessionId: " + sessionId : "",
+                    purpose, AeronUtils.format(channel, streamId));
+        }
         return subscription;
     }
 

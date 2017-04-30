@@ -49,14 +49,14 @@ public class PoolerFragmentHandler implements FragmentHandler {
         index += BitUtil.SIZE_OF_LONG;
         UUID sessionId = new UUID(sessionIdMostSigBits, sessionIdLeastSigBits);
 
-        if (type == RequestType.CONNECT.ordinal()) {
+        if (type == MessageType.CONNECT.ordinal()) {
             int channelLength = buffer.getInt(index);
             String channel = buffer.getStringUtf8(index, channelLength);
             index += BitUtil.SIZE_OF_INT + channelLength;
             int streamId = buffer.getInt(index);
 
             handler.onConnect(sessionId, channel, streamId);
-        } else if (type == RequestType.NEXT.ordinal()) {
+        } else if (type == MessageType.NEXT.ordinal()) {
             int bytesLength = length - (index - offset);
             ByteBuffer dst = ByteBuffer.allocate(bytesLength);
             buffer.getBytes(index, dst, bytesLength);

@@ -16,7 +16,7 @@
 package reactor.ipc.aeron.client;
 
 import reactor.core.publisher.FluxProcessor;
-import reactor.ipc.aeron.AeronHelper;
+import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.server.AeronFlux;
 import uk.co.real_logic.aeron.Subscription;
@@ -33,10 +33,10 @@ final class AeronClientInbound implements AeronInbound {
 
     private final AeronFlux flux;
 
-    public AeronClientInbound(AeronHelper aeronHelper, String channel, int streamId, UUID sessionId, String name) {
+    public AeronClientInbound(AeronWrapper wrapper, String channel, int streamId, UUID sessionId, String name) {
         Objects.requireNonNull(sessionId, "sessionId");
 
-        Subscription subscription = aeronHelper.addSubscription(channel, streamId, "receiving data", sessionId);
+        Subscription subscription = wrapper.addSubscription(channel, streamId, "receiving data", sessionId);
 
         this.pooler = new ClientPooler(subscription, sessionId, name);
         this.flux = new AeronFlux(FluxProcessor.create(emitter -> {

@@ -19,16 +19,17 @@ import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.AeronConnector;
-import reactor.ipc.aeron.AeronHelper;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOutbound;
 import reactor.ipc.aeron.AeronUtils;
-import reactor.ipc.aeron.RequestType;
+import reactor.ipc.aeron.AeronWrapper;
+import reactor.ipc.aeron.MessagePublisher;
+import reactor.ipc.aeron.Protocol;
+import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.UUIDUtils;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 import uk.co.real_logic.aeron.Publication;
-import uk.co.real_logic.agrona.concurrent.IdleStrategy;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;
@@ -81,7 +82,7 @@ public final class AeronClient implements AeronConnector {
 
         private final String category;
 
-        private final AeronHelper aeronHelper;
+        private final AeronWrapper wrapper;
 
         private final UUID sessionId;
 
@@ -98,16 +99,16 @@ public final class AeronClient implements AeronConnector {
             this.ioHandler = ioHandler;
             this.options = options;
             this.category = name;
-            this.aeronHelper = new AeronHelper(category, options);
+            this.wrapper = new AeronWrapper(category, options);
             this.sessionId = UUIDUtils.create();
 
-            this.outbound = new AeronOutbound(category, aeronHelper,
+            this.outbound = new AeronOutbound(category, wrapper,
                     this.options.serverChannel(), this.options.serverStreamId(), sessionId, options);
 
-            this.inbound = new AeronClientInbound(aeronHelper,
+            this.inbound = new AeronClientInbound(wrapper,
                     this.options.clientChannel(), clientStreamId, sessionId, name);
 
-            this.connector = new Connector(category, aeronHelper,
+            this.connector = new Connector(category, wrapper,
                     this.options.serverChannel(), this.options.serverStreamId(),
                     this.options.clientChannel(), clientStreamId,
                     sessionId);
@@ -124,7 +125,7 @@ public final class AeronClient implements AeronConnector {
         @Override
         public void dispose() {
             inbound.shutdown();
-            aeronHelper.shutdown();
+            wrapper.shutdown();
         }
     }
 
@@ -141,26 +142,25 @@ public final class AeronClient implements AeronConnector {
         private final UUID sessionId;
 
         Connector(String category,
-                  AeronHelper aeronHelper,
+                  AeronWrapper wrapper,
                   String serverChannel, int serverStreamId,
                   String clientChannel, int clientStreamId, UUID sessionId) {
             this.clientChannel = clientChannel;
             this.clientStreamId = clientStreamId;
             this.sessionId = sessionId;
-            this.publication = aeronHelper.addPublication(serverChannel, serverStreamId, "sending requests", sessionId);
+            this.publication = wrapper.addPublication(serverChannel, serverStreamId, "sending requests", sessionId);
             this.logger = Loggers.getLogger(AeronClient.class + "." + category);
         }
 
         Mono<Void> connect(int timeoutMillis) {
             return Mono.create(sink -> {
-                IdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
-                ByteBuffer buffer = AeronUtils.createConnectBody(clientChannel, clientStreamId);
+                ByteBuffer buffer = Protocol.createConnectBody(clientChannel, clientStreamId);
                 long result = 0;
                 Exception cause = null;
                 logger.debug("Connecting to server at: {}", AeronUtils.format(publication));
+                MessagePublisher publisher = new MessagePublisher(logger, timeoutMillis, timeoutMillis);
                 try {
-                    result = AeronUtils.publish(logger, publication,
-                            RequestType.CONNECT, buffer, idleStrategy, sessionId, timeoutMillis, timeoutMillis);
+                    result = publisher.publish(publication, MessageType.CONNECT, buffer, sessionId);
                 } catch (Exception ex) {
                     cause = ex;
                 }
