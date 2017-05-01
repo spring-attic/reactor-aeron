@@ -15,7 +15,7 @@
  */
 package reactor.ipc.aeron;
 
-import uk.co.real_logic.aeron.Aeron;
+import io.aeron.Aeron;
 
 import java.time.Duration;
 
@@ -24,7 +24,7 @@ import java.time.Duration;
  */
 public class AeronOptions {
 
-    private static final String DEFAULT_SERVER_CHANNEL = "udp://localhost:12000";
+    private static final String DEFAULT_SERVER_CHANNEL = "aeron:udp?endpoint=localhost:12000";
 
     private static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = (int) Duration.ofSeconds(5).toMillis();
 

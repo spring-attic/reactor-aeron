@@ -15,11 +15,11 @@
  */
 package reactor.ipc.aeron;
 
+import io.aeron.Publication;
+import io.aeron.logbuffer.BufferClaim;
+import org.agrona.MutableDirectBuffer;
+import org.agrona.concurrent.IdleStrategy;
 import reactor.util.Logger;
-import uk.co.real_logic.aeron.Publication;
-import uk.co.real_logic.aeron.logbuffer.BufferClaim;
-import uk.co.real_logic.agrona.MutableDirectBuffer;
-import uk.co.real_logic.agrona.concurrent.IdleStrategy;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;

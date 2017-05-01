@@ -2,6 +2,8 @@ package reactor.ipc.aeron;
 
 import org.junit.Test;
 
+import java.time.Duration;
+
 /**
  * @author Anatoly Kadyshev
  */
@@ -16,9 +18,7 @@ public class DriverManagerTest {
             System.out.println(id + ", " + label);
         });
 
-        driverManager.shutdownDriver();
-
-        Thread.sleep(1000);
+        driverManager.shutdownDriver().block(Duration.ofSeconds(5));
     }
 
 }

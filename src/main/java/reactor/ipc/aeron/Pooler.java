@@ -16,13 +16,13 @@
 package reactor.ipc.aeron;
 
 
+import io.aeron.FragmentAssembler;
+import io.aeron.Subscription;
+import io.aeron.logbuffer.FragmentHandler;
+import io.aeron.logbuffer.Header;
+import org.agrona.DirectBuffer;
+import org.agrona.concurrent.BackoffIdleStrategy;
 import reactor.core.publisher.Mono;
-import uk.co.real_logic.aeron.FragmentAssembler;
-import uk.co.real_logic.aeron.Subscription;
-import uk.co.real_logic.aeron.logbuffer.FragmentHandler;
-import uk.co.real_logic.aeron.logbuffer.Header;
-import uk.co.real_logic.agrona.DirectBuffer;
-import uk.co.real_logic.agrona.concurrent.BackoffIdleStrategy;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -62,7 +62,7 @@ public class Pooler implements Runnable {
         return Mono.create(sink -> {
             isRunning = false;
             AtomicBoolean shouldRetry = new AtomicBoolean(true);
-            sink.setCancellation(() -> shouldRetry.set(false));
+            sink.onCancel(() -> shouldRetry.set(false));
             executor.shutdown();
             try {
                 while (shouldRetry.get()) {

@@ -15,12 +15,12 @@
  */
 package reactor.ipc.aeron;
 
+import io.aeron.logbuffer.FragmentHandler;
+import io.aeron.logbuffer.Header;
+import org.agrona.BitUtil;
+import org.agrona.DirectBuffer;
 import reactor.util.Logger;
 import reactor.util.Loggers;
-import uk.co.real_logic.aeron.logbuffer.FragmentHandler;
-import uk.co.real_logic.aeron.logbuffer.Header;
-import uk.co.real_logic.agrona.BitUtil;
-import uk.co.real_logic.agrona.DirectBuffer;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;

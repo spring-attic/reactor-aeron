@@ -15,11 +15,11 @@
  */
 package reactor.ipc.aeron.client;
 
+import io.aeron.Subscription;
 import reactor.core.publisher.FluxProcessor;
 import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.server.AeronFlux;
-import uk.co.real_logic.aeron.Subscription;
 
 import java.util.Objects;
 import java.util.UUID;

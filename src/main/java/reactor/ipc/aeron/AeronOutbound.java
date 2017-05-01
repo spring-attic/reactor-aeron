@@ -15,6 +15,7 @@
  */
 package reactor.ipc.aeron;
 
+import io.aeron.Publication;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
@@ -25,7 +26,6 @@ import reactor.ipc.aeron.publisher.MergePublisherSubscription;
 import reactor.ipc.connector.Outbound;
 import reactor.util.Logger;
 import reactor.util.Loggers;
-import uk.co.real_logic.aeron.Publication;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;

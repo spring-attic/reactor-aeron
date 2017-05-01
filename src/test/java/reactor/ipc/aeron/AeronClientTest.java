@@ -4,14 +4,16 @@ import org.junit.Test;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.client.AeronClient;
 import reactor.ipc.aeron.server.AeronServer;
-import reactor.test.subscriber.AssertSubscriber;
+import reactor.test.StepVerifier;
+
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author Anatoly Kadyshev
  */
 public class AeronClientTest extends BaseAeronTest {
 
-    private String serverChannel = "udp://localhost:" + SocketUtils.findAvailableUdpPort();
+    private String serverChannel = "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort();
 
     @Test(expected = RuntimeException.class)
     public void testClientCouldNotConnectToServer() {
@@ -28,14 +30,15 @@ public class AeronClientTest extends BaseAeronTest {
             return Mono.never();
         }));
 
-        AssertSubscriber<String> subscriber = AssertSubscriber.create();
+        AtomicReference<StepVerifier.FirstStep<String>> stepRef = new AtomicReference<>();
         AeronClient client = createAeronClient(null);
         addDisposable(client.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client").subscribe(subscriber);
+            stepRef.set(StepVerifier.create(
+                    inbound.receive().map(AeronUtils::byteBufferToString).log("client")));
             return Mono.never();
         }));
 
-        subscriber.awaitAndAssertNextValues("1", "2", "3");
+        stepRef.get().expectNext("1", "2", "3");
     }
 
     @Test
@@ -46,22 +49,24 @@ public class AeronClientTest extends BaseAeronTest {
             return Mono.never();
         }));
 
-        AssertSubscriber<String> subscriber1 = AssertSubscriber.create();
+        AtomicReference<StepVerifier.FirstStep<String>> stepRef1 = new AtomicReference<>();
         AeronClient client1 = createAeronClient("client-1");
         addDisposable(client1.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client-1").subscribe(subscriber1);
+            stepRef1.set(StepVerifier.create(
+                    inbound.receive().map(AeronUtils::byteBufferToString).log("client-1")));
             return Mono.never();
         }));
 
-        AssertSubscriber<String> subscriber2 = AssertSubscriber.create();
+        AtomicReference<StepVerifier.FirstStep<String>> stepRef2 = new AtomicReference<>();
         AeronClient client2 = createAeronClient("client-2");
         addDisposable(client2.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client-2").subscribe(subscriber2);
+            stepRef2.set(StepVerifier.create(
+                    inbound.receive().map(AeronUtils::byteBufferToString).log("client-2")));
             return Mono.never();
         }));
 
-        subscriber1.awaitAndAssertNextValues("1", "2", "3");
-        subscriber2.awaitAndAssertNextValues("1", "2", "3");
+        stepRef1.get().expectNext("1", "2", "3");
+        stepRef2.get().expectNext("1", "2", "3");
     }
 
     @Test
@@ -73,23 +78,27 @@ public class AeronClientTest extends BaseAeronTest {
             return Mono.never();
         }));
 
-        AssertSubscriber<String> subscriber1 = AssertSubscriber.create();
+        AtomicReference<StepVerifier.FirstStep<String>> stepRef1 = new AtomicReference<>();
         AeronClient client = createAeronClient(null);
         addDisposable(client.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client-1").subscribe(subscriber1);
+            stepRef1.set(StepVerifier.create(
+                    inbound.receive().map(AeronUtils::byteBufferToString).log("client-1")));
             return Mono.never();
         }));
 
-        AssertSubscriber<String> subscriber2 = AssertSubscriber.create();
+        AtomicReference<StepVerifier.FirstStep<String>> stepRef2 = new AtomicReference<>();
         addDisposable(client.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client-2").subscribe(subscriber2);
+            stepRef2.set(StepVerifier.create(
+                inbound.receive().map(AeronUtils::byteBufferToString).log("client-2")));
             return Mono.never();
         }));
 
-        subscriber1.awaitAndAssertNextValues("1", "2", "3");
-        subscriber1.assertValueCount(3);
-        subscriber2.awaitAndAssertNextValues("1", "2", "3");
-        subscriber2.assertValueCount(3);
+        StepVerifier.FirstStep<String> step1 = stepRef1.get();
+        step1.expectNext("1", "2", "3");
+        step1.expectNextCount(3);
+        StepVerifier.FirstStep<String> step2 = stepRef2.get();
+        step2.expectNext("1", "2", "3");
+        step2.expectNextCount(3);
     }
 
     private AeronClient createAeronClient(String name) {

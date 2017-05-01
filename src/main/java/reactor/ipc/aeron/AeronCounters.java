@@ -15,15 +15,15 @@
  */
 package reactor.ipc.aeron;
 
-import uk.co.real_logic.aeron.CncFileDescriptor;
-import uk.co.real_logic.agrona.DirectBuffer;
-import uk.co.real_logic.agrona.IoUtil;
-import uk.co.real_logic.agrona.concurrent.AtomicBuffer;
-import uk.co.real_logic.agrona.concurrent.CountersReader;
+import io.aeron.CncFileDescriptor;
+import org.agrona.DirectBuffer;
+import org.agrona.IoUtil;
+import org.agrona.collections.IntObjConsumer;
+import org.agrona.concurrent.AtomicBuffer;
+import org.agrona.concurrent.status.CountersReader;
 
 import java.io.File;
 import java.nio.MappedByteBuffer;
-import java.util.function.BiConsumer;
 
 /**
  * Based on <a href="https://github.com/real-logic/Aeron/blob/master/aeron-samples/src/main/java/uk/co/real_logic/aeron/samples/AeronStat.java">AeronCounters.java from Aeron</a>
@@ -35,7 +35,7 @@ public final class AeronCounters {
 	private final MappedByteBuffer cncByteBuffer;
 
 	public AeronCounters(String dirName) {
-		final File cncFile = new File(dirName + "/cnc");
+		final File cncFile = new File(dirName + "/" + CncFileDescriptor.CNC_FILE);
 
 		cncByteBuffer = IoUtil.mapExistingFile(cncFile, "cnc");
 		final DirectBuffer metaDataBuffer = CncFileDescriptor.createMetaDataBuffer(cncByteBuffer);
@@ -54,7 +54,7 @@ public final class AeronCounters {
 		IoUtil.unmap(cncByteBuffer);
 	}
 
-	public void forEach(BiConsumer<Integer, String> consumer) {
+	public void forEach(IntObjConsumer<String> consumer) {
 		counters.forEach(consumer);
 	}
 

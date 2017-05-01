@@ -15,11 +15,11 @@
  */
 package reactor.ipc.aeron;
 
+import io.aeron.Aeron;
+import io.aeron.Publication;
+import io.aeron.Subscription;
 import reactor.util.Logger;
 import reactor.util.Loggers;
-import uk.co.real_logic.aeron.Aeron;
-import uk.co.real_logic.aeron.Publication;
-import uk.co.real_logic.aeron.Subscription;
 
 import java.util.UUID;
 

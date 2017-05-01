@@ -15,11 +15,11 @@
  */
 package reactor.ipc.aeron.client;
 
+import io.aeron.Subscription;
 import reactor.core.publisher.FluxSink;
 import reactor.ipc.aeron.Pooler;
 import reactor.ipc.aeron.PoolerFragmentHandler;
 import reactor.ipc.aeron.SignalHandler;
-import uk.co.real_logic.aeron.Subscription;
 
 import java.nio.ByteBuffer;
 import java.util.Objects;

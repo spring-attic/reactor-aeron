@@ -78,12 +78,12 @@ public final class MergePublisher<T> {
         this.messageConsumer = messageConsumer;
     }
 
-    public Mono add(Object msg) {
+    public Mono<Void> add(Object msg) {
         if (!(msg instanceof Publisher) && messageConsumer == null) {
             return Mono.error(new IllegalArgumentException("Cannot add msg of class " + msg.getClass()));
         }
         else {
-            return Mono.create(sink -> {
+            return Mono.<Void>create(sink -> {
                 boolean success = pendingWriteOffer.test(sink, msg);
                 if (!success) {
                     sink.error(new Exception("Failed to enqueue publisher"));
@@ -191,7 +191,7 @@ public final class MergePublisher<T> {
             }
             v = pendingWrites.poll();
             if (log.isDebugEnabled()) {
-                log.debug("Terminated ChannelOperation. Dropping: {}", v);
+                log.debug("Terminated. Dropping: {}", v);
             }
 
             discardedHandler.accept(v);

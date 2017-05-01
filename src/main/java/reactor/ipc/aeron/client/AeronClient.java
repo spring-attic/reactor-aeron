@@ -15,6 +15,7 @@
  */
 package reactor.ipc.aeron.client;
 
+import io.aeron.Publication;
 import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
@@ -29,7 +30,6 @@ import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.UUIDUtils;
 import reactor.util.Logger;
 import reactor.util.Loggers;
-import uk.co.real_logic.aeron.Publication;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;

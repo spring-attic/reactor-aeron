@@ -4,7 +4,11 @@ import org.junit.Test;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.client.AeronClient;
 import reactor.ipc.aeron.server.AeronServer;
-import reactor.test.subscriber.AssertSubscriber;
+import reactor.test.StepVerifier;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author Anatoly Kadyshev
@@ -20,10 +24,13 @@ public class AeronServerTest extends BaseAeronTest {
 
     @Test
     public void testServerReceivesData() throws InterruptedException {
-        AssertSubscriber<String> subscriber = AssertSubscriber.create();
+        AtomicReference<StepVerifier.FirstStep<String>> stepRef1 = new AtomicReference<>();
         AeronServer server = AeronServer.create();
+        CountDownLatch latch = new CountDownLatch(1);
         addDisposable(server.newHandler((inbound, outbound) -> {
-            inbound.receive().asString().log("receive").subscribe(subscriber);
+            stepRef1.set(
+                    StepVerifier.create(inbound.receive().asString().log("receive")));
+            latch.countDown();
             return Mono.never();
         }));
 
@@ -33,7 +40,8 @@ public class AeronServerTest extends BaseAeronTest {
             return Mono.never();
         }));
 
-        subscriber.awaitAndAssertNextValues("Hello", "world!");
+        latch.await(5, TimeUnit.SECONDS);
+        stepRef1.get().expectNext("Hello", "world!");
     }
 
 }

@@ -15,6 +15,7 @@
  */
 package reactor.ipc.aeron.server;
 
+import io.aeron.Subscription;
 import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
@@ -26,7 +27,6 @@ import reactor.ipc.aeron.AeronOutbound;
 import reactor.ipc.aeron.SignalHandler;
 import reactor.util.Logger;
 import reactor.util.Loggers;
-import uk.co.real_logic.aeron.Subscription;
 
 import java.nio.ByteBuffer;
 import java.util.HashMap;

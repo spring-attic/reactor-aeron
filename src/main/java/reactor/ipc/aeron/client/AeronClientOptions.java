@@ -25,7 +25,7 @@ import java.util.Objects;
  */
 public final class AeronClientOptions extends AeronOptions {
 
-    private String clientChannel = "udp://localhost:" + SocketUtils.findAvailableUdpPort();
+    private String clientChannel = "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort();
 
     public String clientChannel() {
         return clientChannel;
