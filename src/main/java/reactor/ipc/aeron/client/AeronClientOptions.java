@@ -16,7 +16,6 @@
 package reactor.ipc.aeron.client;
 
 import reactor.ipc.aeron.AeronOptions;
-import reactor.ipc.aeron.SocketUtils;
 
 import java.util.Objects;
 
@@ -25,7 +24,7 @@ import java.util.Objects;
  */
 public final class AeronClientOptions extends AeronOptions {
 
-    private String clientChannel = "udp://localhost:" + SocketUtils.findAvailableUdpPort();
+    private String clientChannel = "aeron:udp?endpoint=localhost:13000";
 
     public String clientChannel() {
         return clientChannel;

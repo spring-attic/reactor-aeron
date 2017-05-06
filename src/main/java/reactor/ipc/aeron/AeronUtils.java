@@ -15,8 +15,8 @@
  */
 package reactor.ipc.aeron;
 
-import uk.co.real_logic.aeron.Publication;
-import uk.co.real_logic.agrona.concurrent.BackoffIdleStrategy;
+import io.aeron.Publication;
+import org.agrona.concurrent.BackoffIdleStrategy;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;

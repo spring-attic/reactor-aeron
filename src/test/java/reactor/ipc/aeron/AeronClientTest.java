@@ -2,16 +2,17 @@ package reactor.ipc.aeron;
 
 import org.junit.Test;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.ReplayProcessor;
 import reactor.ipc.aeron.client.AeronClient;
 import reactor.ipc.aeron.server.AeronServer;
-import reactor.test.subscriber.AssertSubscriber;
+import reactor.test.StepVerifier;
 
 /**
  * @author Anatoly Kadyshev
  */
 public class AeronClientTest extends BaseAeronTest {
 
-    private String serverChannel = "udp://localhost:" + SocketUtils.findAvailableUdpPort();
+    private String serverChannel = "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort();
 
     @Test(expected = RuntimeException.class)
     public void testClientCouldNotConnectToServer() {
@@ -28,14 +29,15 @@ public class AeronClientTest extends BaseAeronTest {
             return Mono.never();
         }));
 
-        AssertSubscriber<String> subscriber = AssertSubscriber.create();
+        ReplayProcessor<String> processor = ReplayProcessor.create();
         AeronClient client = createAeronClient(null);
         addDisposable(client.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client").subscribe(subscriber);
+            inbound.receive().map(AeronUtils::byteBufferToString).log("client").subscribe(processor);
             return Mono.never();
         }));
 
-        subscriber.awaitAndAssertNextValues("1", "2", "3");
+        StepVerifier.create(processor)
+                .expectNext("1", "2", "3");
     }
 
     @Test
@@ -46,22 +48,22 @@ public class AeronClientTest extends BaseAeronTest {
             return Mono.never();
         }));
 
-        AssertSubscriber<String> subscriber1 = AssertSubscriber.create();
+        ReplayProcessor<String> processor1 = ReplayProcessor.create();
         AeronClient client1 = createAeronClient("client-1");
         addDisposable(client1.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client-1").subscribe(subscriber1);
+            inbound.receive().map(AeronUtils::byteBufferToString).log("client-1").subscribe(processor1);
             return Mono.never();
         }));
 
-        AssertSubscriber<String> subscriber2 = AssertSubscriber.create();
+        ReplayProcessor<String> processor2 = ReplayProcessor.create();
         AeronClient client2 = createAeronClient("client-2");
         addDisposable(client2.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client-2").subscribe(subscriber2);
+            inbound.receive().map(AeronUtils::byteBufferToString).log("client-2").subscribe(processor2);
             return Mono.never();
         }));
 
-        subscriber1.awaitAndAssertNextValues("1", "2", "3");
-        subscriber2.awaitAndAssertNextValues("1", "2", "3");
+        StepVerifier.create(processor1).expectNext("1", "2", "3");
+        StepVerifier.create(processor2).expectNext("1", "2", "3");
     }
 
     @Test
@@ -73,23 +75,26 @@ public class AeronClientTest extends BaseAeronTest {
             return Mono.never();
         }));
 
-        AssertSubscriber<String> subscriber1 = AssertSubscriber.create();
+        ReplayProcessor<String> processor1 = ReplayProcessor.create();
         AeronClient client = createAeronClient(null);
         addDisposable(client.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client-1").subscribe(subscriber1);
+            inbound.receive().map(AeronUtils::byteBufferToString).log("client-1").subscribe(processor1);
             return Mono.never();
         }));
 
-        AssertSubscriber<String> subscriber2 = AssertSubscriber.create();
+        ReplayProcessor<String> processor2 = ReplayProcessor.create();
         addDisposable(client.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client-2").subscribe(subscriber2);
+            inbound.receive().map(AeronUtils::byteBufferToString).log("client-2").subscribe(processor2);
             return Mono.never();
         }));
 
-        subscriber1.awaitAndAssertNextValues("1", "2", "3");
-        subscriber1.assertValueCount(3);
-        subscriber2.awaitAndAssertNextValues("1", "2", "3");
-        subscriber2.assertValueCount(3);
+        StepVerifier.create(processor1)
+                .expectNext("1", "2", "3")
+                .expectNextCount(3);
+
+        StepVerifier.create(processor2)
+                .expectNext("1", "2", "3")
+                .expectNextCount(3);
     }
 
     private AeronClient createAeronClient(String name) {

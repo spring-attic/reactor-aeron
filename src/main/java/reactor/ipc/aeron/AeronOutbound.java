@@ -15,17 +15,18 @@
  */
 package reactor.ipc.aeron;
 
+import io.aeron.Publication;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
+import reactor.core.Disposable;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
-import reactor.ipc.aeron.publisher.MergePublisher;
-import reactor.ipc.aeron.publisher.MergePublisherSubscription;
+import reactor.ipc.aeron.publisher.WriteSequencer;
+import reactor.ipc.aeron.publisher.WriteSequencerSubscription;
 import reactor.ipc.connector.Outbound;
 import reactor.util.Logger;
 import reactor.util.Loggers;
-import uk.co.real_logic.aeron.Publication;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;
@@ -33,13 +34,13 @@ import java.util.UUID;
 /**
  * @author Anatoly Kadyshev
  */
-public final class AeronOutbound implements Outbound<ByteBuffer> {
+public final class AeronOutbound implements Outbound<ByteBuffer>, Disposable {
 
     private final Logger logger;
 
     private final SignalSender signalSender;
 
-    private final MergePublisher<ByteBuffer> publisher;
+    private final WriteSequencer<ByteBuffer> sequencer;
 
     private final Scheduler scheduler;
 
@@ -53,27 +54,30 @@ public final class AeronOutbound implements Outbound<ByteBuffer> {
 
         this.logger = Loggers.getLogger(AeronOutbound.class + "." + category);
         this.signalSender = new SignalSender(publication, sessionId, options);
-        this.publisher = new MergePublisher<>(signalSender,
+        this.sequencer = new WriteSequencer<>(signalSender,
                 th -> logger.error("Unexpected exception", th),
                 publisher -> {},
                 avoid -> false,
                 null);
 
-        this.scheduler = Schedulers.single();
+        this.scheduler = Schedulers.newParallel("aeron-sender", 1);
     }
 
     @Override
     public Outbound<ByteBuffer> send(Publisher<? extends ByteBuffer> dataStream) {
-        Outbound<ByteBuffer> result = then(publisher.add(dataStream));
-        scheduler.schedule(publisher::drain);
-        return result;
+        return then(sequencer.add(dataStream, scheduler));
+    }
+
+    @Override
+    public void dispose() {
+        scheduler.dispose();
     }
 
     class SignalSender implements Subscriber<ByteBuffer> {
 
         private final Publication publication;
 
-        private MergePublisherSubscription s;
+        private WriteSequencerSubscription s;
 
         private final UUID sessionId;
 
@@ -87,7 +91,7 @@ public final class AeronOutbound implements Outbound<ByteBuffer> {
 
         @Override
         public void onSubscribe(Subscription s) {
-            this.s = (MergePublisherSubscription) s;
+            this.s = (WriteSequencerSubscription) s;
 
             s.request(1);
         }

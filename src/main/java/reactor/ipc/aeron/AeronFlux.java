@@ -13,13 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package reactor.ipc.aeron.server;
+package reactor.ipc.aeron;
 
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSource;
-import reactor.ipc.aeron.AeronUtils;
 
 import java.nio.ByteBuffer;
 

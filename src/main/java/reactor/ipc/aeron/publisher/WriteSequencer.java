@@ -21,6 +21,7 @@ import org.reactivestreams.Subscription;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Operators;
+import reactor.core.scheduler.Scheduler;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 import reactor.util.concurrent.QueueSupplier;
@@ -36,9 +37,9 @@ import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
-public final class MergePublisher<T> {
+public final class WriteSequencer<T> {
 
-    private static final Logger log = Loggers.getLogger(MergePublisher.class);
+    private static final Logger log = Loggers.getLogger(WriteSequencer.class);
     /**
      * Cast the supplied queue (SpscLinkedArrayQueue) to use its atomic dual-insert
      * backed by {@link BiPredicate#test)
@@ -63,7 +64,7 @@ public final class MergePublisher<T> {
     private final BiConsumer<Object, MonoSink<?>> messageConsumer;
 
     @SuppressWarnings("unchecked")
-    public MergePublisher(Subscriber<T> delegate,
+    public WriteSequencer(Subscriber<T> delegate,
                           Consumer<Throwable> errorHandler,
                           Consumer<Object> discardedHandler,
                           Predicate<Void> backpressureChecker,
@@ -78,7 +79,7 @@ public final class MergePublisher<T> {
         this.messageConsumer = messageConsumer;
     }
 
-    public Mono add(Object msg) {
+    public Mono<Void> add(Object msg, Scheduler scheduler) {
         if (!(msg instanceof Publisher) && messageConsumer == null) {
             return Mono.error(new IllegalArgumentException("Cannot add msg of class " + msg.getClass()));
         }
@@ -88,7 +89,9 @@ public final class MergePublisher<T> {
                 if (!success) {
                     sink.error(new Exception("Failed to enqueue publisher"));
                 }
-            }).subscribe();
+
+                scheduler.schedule(this::drain);
+            });
         }
     }
 
@@ -191,7 +194,7 @@ public final class MergePublisher<T> {
             }
             v = pendingWrites.poll();
             if (log.isDebugEnabled()) {
-                log.debug("Terminated ChannelOperation. Dropping: {}", v);
+                log.debug("Terminated. Dropping: {}", v);
             }
 
             discardedHandler.accept(v);
@@ -201,9 +204,9 @@ public final class MergePublisher<T> {
     }
 
     static final class InnerSubscriber<T>
-            implements Subscriber<T>, MergePublisherSubscription {
+            implements Subscriber<T>, WriteSequencerSubscription {
 
-        final MergePublisher<T> parent;
+        final WriteSequencer<T> parent;
 
         final Subscriber<T> delegate;
 
@@ -228,7 +231,7 @@ public final class MergePublisher<T> {
         long           produced;
         MonoSink<?>    promise;
 
-        InnerSubscriber(MergePublisher<T> parent, Subscriber<T> delegate) {
+        InnerSubscriber(WriteSequencer<T> parent, Subscriber<T> delegate) {
             this.parent = parent;
             this.delegate = delegate;
             delegate.onSubscribe(this);
@@ -497,7 +500,7 @@ public final class MergePublisher<T> {
     }
 
     @SuppressWarnings("rawtypes")
-    static final AtomicIntegerFieldUpdater<MergePublisher> WIP =
-            AtomicIntegerFieldUpdater.newUpdater(MergePublisher.class, "wip");
+    static final AtomicIntegerFieldUpdater<WriteSequencer> WIP =
+            AtomicIntegerFieldUpdater.newUpdater(WriteSequencer.class, "wip");
 
 }

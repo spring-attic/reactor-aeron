@@ -15,16 +15,16 @@
  */
 package reactor.ipc.aeron;
 
+import io.aeron.Aeron;
+import io.aeron.driver.MediaDriver;
+import org.agrona.CloseHelper;
+import org.agrona.IoUtil;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
+import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
-import reactor.core.scheduler.TimedScheduler;
 import reactor.util.Logger;
 import reactor.util.Loggers;
-import uk.co.real_logic.aeron.Aeron;
-import uk.co.real_logic.aeron.driver.MediaDriver;
-import uk.co.real_logic.agrona.CloseHelper;
-import uk.co.real_logic.agrona.IoUtil;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -155,7 +155,7 @@ public final class DriverManager {
         aeron.close();
 
         MonoProcessor<Void> shutdownResult = MonoProcessor.create();
-        TimedScheduler timer = Schedulers.timer();
+        Scheduler timer = Schedulers.single();
         timer.schedule(new RetryShutdownTask(timer, shutdownResult), retryShutdownMillis, TimeUnit.MILLISECONDS);
         return shutdownResult;
     }
@@ -216,11 +216,11 @@ public final class DriverManager {
 
         private final long startNs;
 
-        private final TimedScheduler timer;
+        private final Scheduler timer;
 
         private final MonoProcessor<Void> shutdownResult;
 
-        public RetryShutdownTask(TimedScheduler timer, MonoProcessor<Void> shutdownResult) {
+        public RetryShutdownTask(Scheduler timer, MonoProcessor<Void> shutdownResult) {
             this.shutdownResult = shutdownResult;
             this.startNs = System.nanoTime();
             this.timer = timer;

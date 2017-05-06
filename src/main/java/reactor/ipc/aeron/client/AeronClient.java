@@ -15,6 +15,7 @@
  */
 package reactor.ipc.aeron.client;
 
+import io.aeron.Publication;
 import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
@@ -26,10 +27,8 @@ import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.MessagePublisher;
 import reactor.ipc.aeron.Protocol;
 import reactor.ipc.aeron.MessageType;
-import reactor.ipc.aeron.UUIDUtils;
 import reactor.util.Logger;
 import reactor.util.Loggers;
-import uk.co.real_logic.aeron.Publication;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;
@@ -115,17 +114,19 @@ public final class AeronClient implements AeronConnector {
         }
 
         Mono<Disposable> start() {
-                return connector.connect(options.connectTimeoutMillis())
-                        .doOnSuccess(avoid ->
-                                Mono.from(ioHandler.apply(inbound, outbound)).subscribe(ignore -> dispose()))
-                        .doOnTerminate((avoid, th) -> dispose())
-                        .then(Mono.just(this));
+            return connector.connect(options.connectTimeoutMillis())
+                    .doOnSuccess(avoid ->
+                            Mono.from(ioHandler.apply(inbound, outbound))
+                                    .doOnTerminate((aVoid, th) -> dispose())
+                                    .subscribe())
+                    .then(Mono.just(this));
         }
 
         @Override
         public void dispose() {
-            inbound.shutdown();
-            wrapper.shutdown();
+            inbound.dispose();
+            wrapper.dispose();
+            outbound.dispose();
         }
     }
 

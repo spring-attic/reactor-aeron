@@ -2,9 +2,10 @@ package reactor.ipc.aeron;
 
 import org.junit.Test;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.ReplayProcessor;
 import reactor.ipc.aeron.client.AeronClient;
 import reactor.ipc.aeron.server.AeronServer;
-import reactor.test.subscriber.AssertSubscriber;
+import reactor.test.StepVerifier;
 
 /**
  * @author Anatoly Kadyshev
@@ -20,10 +21,10 @@ public class AeronServerTest extends BaseAeronTest {
 
     @Test
     public void testServerReceivesData() throws InterruptedException {
-        AssertSubscriber<String> subscriber = AssertSubscriber.create();
         AeronServer server = AeronServer.create();
+        ReplayProcessor<String> processor = ReplayProcessor.create();
         addDisposable(server.newHandler((inbound, outbound) -> {
-            inbound.receive().asString().log("receive").subscribe(subscriber);
+            inbound.receive().asString().log("receive").subscribe(processor);
             return Mono.never();
         }));
 
@@ -33,7 +34,8 @@ public class AeronServerTest extends BaseAeronTest {
             return Mono.never();
         }));
 
-        subscriber.awaitAndAssertNextValues("Hello", "world!");
+        StepVerifier.create(processor)
+            .expectNext("Hello", "world!");
     }
 
 }
