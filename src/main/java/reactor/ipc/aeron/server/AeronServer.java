@@ -81,7 +81,7 @@ public final class AeronServer implements AeronConnector {
             sink.success(() -> {
                 pooler.shutdown().block();
                 subscription.close();
-                wrapper.shutdown();
+                wrapper.dispose();
             });
         });
     }

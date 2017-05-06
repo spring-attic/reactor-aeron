@@ -18,7 +18,7 @@ package reactor.ipc.aeron.publisher;
 import org.reactivestreams.Subscription;
 import reactor.core.publisher.MonoSink;
 
-public interface MergePublisherSubscription extends Subscription {
+public interface WriteSequencerSubscription extends Subscription {
 
     long getProduced();
 

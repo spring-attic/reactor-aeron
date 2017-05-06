@@ -16,10 +16,11 @@
 package reactor.ipc.aeron.client;
 
 import io.aeron.Subscription;
+import reactor.core.Disposable;
 import reactor.core.publisher.FluxProcessor;
 import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.AeronInbound;
-import reactor.ipc.aeron.server.AeronFlux;
+import reactor.ipc.aeron.AeronFlux;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -27,7 +28,7 @@ import java.util.UUID;
 /**
  * @author Anatoly Kadyshev
  */
-final class AeronClientInbound implements AeronInbound {
+final class AeronClientInbound implements AeronInbound, Disposable {
 
     private final ClientPooler pooler;
 
@@ -50,7 +51,8 @@ final class AeronClientInbound implements AeronInbound {
         return flux;
     }
 
-    public void shutdown() {
+    @Override
+    public void dispose() {
         pooler.shutdown();
     }
 

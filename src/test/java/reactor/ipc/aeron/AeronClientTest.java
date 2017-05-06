@@ -2,11 +2,10 @@ package reactor.ipc.aeron;
 
 import org.junit.Test;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.ReplayProcessor;
 import reactor.ipc.aeron.client.AeronClient;
 import reactor.ipc.aeron.server.AeronServer;
 import reactor.test.StepVerifier;
-
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author Anatoly Kadyshev
@@ -30,15 +29,15 @@ public class AeronClientTest extends BaseAeronTest {
             return Mono.never();
         }));
 
-        AtomicReference<StepVerifier.FirstStep<String>> stepRef = new AtomicReference<>();
+        ReplayProcessor<String> processor = ReplayProcessor.create();
         AeronClient client = createAeronClient(null);
         addDisposable(client.newHandler((inbound, outbound) -> {
-            stepRef.set(StepVerifier.create(
-                    inbound.receive().map(AeronUtils::byteBufferToString).log("client")));
+            inbound.receive().map(AeronUtils::byteBufferToString).log("client").subscribe(processor);
             return Mono.never();
         }));
 
-        stepRef.get().expectNext("1", "2", "3");
+        StepVerifier.create(processor)
+                .expectNext("1", "2", "3");
     }
 
     @Test
@@ -49,24 +48,22 @@ public class AeronClientTest extends BaseAeronTest {
             return Mono.never();
         }));
 
-        AtomicReference<StepVerifier.FirstStep<String>> stepRef1 = new AtomicReference<>();
+        ReplayProcessor<String> processor1 = ReplayProcessor.create();
         AeronClient client1 = createAeronClient("client-1");
         addDisposable(client1.newHandler((inbound, outbound) -> {
-            stepRef1.set(StepVerifier.create(
-                    inbound.receive().map(AeronUtils::byteBufferToString).log("client-1")));
+            inbound.receive().map(AeronUtils::byteBufferToString).log("client-1").subscribe(processor1);
             return Mono.never();
         }));
 
-        AtomicReference<StepVerifier.FirstStep<String>> stepRef2 = new AtomicReference<>();
+        ReplayProcessor<String> processor2 = ReplayProcessor.create();
         AeronClient client2 = createAeronClient("client-2");
         addDisposable(client2.newHandler((inbound, outbound) -> {
-            stepRef2.set(StepVerifier.create(
-                    inbound.receive().map(AeronUtils::byteBufferToString).log("client-2")));
+            inbound.receive().map(AeronUtils::byteBufferToString).log("client-2").subscribe(processor2);
             return Mono.never();
         }));
 
-        stepRef1.get().expectNext("1", "2", "3");
-        stepRef2.get().expectNext("1", "2", "3");
+        StepVerifier.create(processor1).expectNext("1", "2", "3");
+        StepVerifier.create(processor2).expectNext("1", "2", "3");
     }
 
     @Test
@@ -78,27 +75,26 @@ public class AeronClientTest extends BaseAeronTest {
             return Mono.never();
         }));
 
-        AtomicReference<StepVerifier.FirstStep<String>> stepRef1 = new AtomicReference<>();
+        ReplayProcessor<String> processor1 = ReplayProcessor.create();
         AeronClient client = createAeronClient(null);
         addDisposable(client.newHandler((inbound, outbound) -> {
-            stepRef1.set(StepVerifier.create(
-                    inbound.receive().map(AeronUtils::byteBufferToString).log("client-1")));
+            inbound.receive().map(AeronUtils::byteBufferToString).log("client-1").subscribe(processor1);
             return Mono.never();
         }));
 
-        AtomicReference<StepVerifier.FirstStep<String>> stepRef2 = new AtomicReference<>();
+        ReplayProcessor<String> processor2 = ReplayProcessor.create();
         addDisposable(client.newHandler((inbound, outbound) -> {
-            stepRef2.set(StepVerifier.create(
-                inbound.receive().map(AeronUtils::byteBufferToString).log("client-2")));
+            inbound.receive().map(AeronUtils::byteBufferToString).log("client-2").subscribe(processor2);
             return Mono.never();
         }));
 
-        StepVerifier.FirstStep<String> step1 = stepRef1.get();
-        step1.expectNext("1", "2", "3");
-        step1.expectNextCount(3);
-        StepVerifier.FirstStep<String> step2 = stepRef2.get();
-        step2.expectNext("1", "2", "3");
-        step2.expectNextCount(3);
+        StepVerifier.create(processor1)
+                .expectNext("1", "2", "3")
+                .expectNextCount(3);
+
+        StepVerifier.create(processor2)
+                .expectNext("1", "2", "3")
+                .expectNextCount(3);
     }
 
     private AeronClient createAeronClient(String name) {

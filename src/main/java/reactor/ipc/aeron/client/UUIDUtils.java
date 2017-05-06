@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package reactor.ipc.aeron;
+package reactor.ipc.aeron.client;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
@@ -28,7 +28,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * @author Jon Brisbin
  * @author Stephane Maldini
  */
-public enum UUIDUtils {
+enum UUIDUtils {
 	;
 
 	private static boolean IS_THREADLOCALRANDOM_AVAILABLE = false;

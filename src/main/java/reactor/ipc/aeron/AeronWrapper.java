@@ -18,6 +18,7 @@ package reactor.ipc.aeron;
 import io.aeron.Aeron;
 import io.aeron.Publication;
 import io.aeron.Subscription;
+import reactor.core.Disposable;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -26,7 +27,7 @@ import java.util.UUID;
 /**
  * @author Anatoly Kadyshev
  */
-public final class AeronWrapper {
+public final class AeronWrapper implements Disposable {
 
     private final Logger logger;
 
@@ -49,7 +50,8 @@ public final class AeronWrapper {
         }
     }
 
-    public void shutdown() {
+    @Override
+    public void dispose() {
         if (isDriverLaunched) {
             driverManager.shutdownDriver().block();
         }

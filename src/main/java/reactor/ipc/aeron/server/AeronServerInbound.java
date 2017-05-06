@@ -16,6 +16,7 @@
 package reactor.ipc.aeron.server;
 
 import reactor.core.publisher.TopicProcessor;
+import reactor.ipc.aeron.AeronFlux;
 import reactor.ipc.aeron.AeronInbound;
 
 import java.nio.ByteBuffer;

@@ -15,7 +15,6 @@
  */
 package reactor.ipc.aeron;
 
-import reactor.ipc.aeron.server.AeronFlux;
 import reactor.ipc.connector.Inbound;
 
 import java.nio.ByteBuffer;
