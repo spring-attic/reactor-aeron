@@ -13,17 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package reactor.ipc.aeron.publisher;
+package reactor.ipc.aeron;
 
-import org.reactivestreams.Subscription;
-import reactor.core.publisher.MonoSink;
-
-public interface WriteSequencerSubscription extends Subscription {
-
-    long getProduced();
-
-    void drainNextPublisher();
-
-    MonoSink<?> getPromise();
-
+public final class AbortedException extends RuntimeException {
 }

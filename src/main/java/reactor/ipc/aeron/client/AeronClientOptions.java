@@ -18,13 +18,18 @@ package reactor.ipc.aeron.client;
 import reactor.ipc.aeron.AeronOptions;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author Anatoly Kadyshev
  */
 public final class AeronClientOptions extends AeronOptions {
 
+    private static final AtomicInteger nextClientStreamId = new AtomicInteger(0);
+
     private String clientChannel = "aeron:udp?endpoint=localhost:13000";
+
+    private int clientStreamId = nextClientStreamId.incrementAndGet();
 
     public String clientChannel() {
         return clientChannel;
@@ -35,4 +40,9 @@ public final class AeronClientOptions extends AeronOptions {
 
         this.clientChannel = clientChannel;
     }
+
+    public int clientStreamId() {
+        return clientStreamId;
+    }
+
 }

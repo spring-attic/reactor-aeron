@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package reactor.ipc.aeron.publisher;
+package reactor.ipc.aeron;
 
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
@@ -37,7 +37,7 @@ import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
-public final class WriteSequencer<T> {
+abstract class WriteSequencer<T> {
 
     private static final Logger log = Loggers.getLogger(WriteSequencer.class);
     /**
@@ -53,7 +53,7 @@ public final class WriteSequencer<T> {
     // a publisher is being drained
     private volatile boolean innerActive;
 
-    private final InnerSubscriber inner;
+    final InnerSubscriber inner;
 
     private final Consumer<Throwable> errorHandler;
 
@@ -64,12 +64,11 @@ public final class WriteSequencer<T> {
     private final BiConsumer<Object, MonoSink<?>> messageConsumer;
 
     @SuppressWarnings("unchecked")
-    public WriteSequencer(Subscriber<T> delegate,
-                          Consumer<Throwable> errorHandler,
+    public WriteSequencer(Consumer<Throwable> errorHandler,
                           Consumer<Object> discardedHandler,
                           Predicate<Void> backpressureChecker,
                           BiConsumer<Object, MonoSink<?>> messageConsumer) {
-        this.inner = new InnerSubscriber<>(this, delegate);
+        this.inner = createInnerSubscriber();
         this.errorHandler = errorHandler;
         this.discardedHandler = discardedHandler;
         this.backpressureChecker = backpressureChecker;
@@ -181,6 +180,8 @@ public final class WriteSequencer<T> {
         }
     }
 
+    protected abstract InnerSubscriber<T> createInnerSubscriber();
+
     void discard() {
         while (!pendingWrites.isEmpty()) {
             Object v = pendingWrites.poll();
@@ -203,12 +204,9 @@ public final class WriteSequencer<T> {
         }
     }
 
-    static final class InnerSubscriber<T>
-            implements Subscriber<T>, WriteSequencerSubscription {
+    abstract static class InnerSubscriber<T> implements Subscriber<T>, Subscription {
 
         final WriteSequencer<T> parent;
-
-        final Subscriber<T> delegate;
 
         volatile Subscription missedSubscription;
         volatile long         missedRequested;
@@ -231,10 +229,8 @@ public final class WriteSequencer<T> {
         long           produced;
         MonoSink<?>    promise;
 
-        InnerSubscriber(WriteSequencer<T> parent, Subscriber<T> delegate) {
+        InnerSubscriber(WriteSequencer<T> parent) {
             this.parent = parent;
-            this.delegate = delegate;
-            delegate.onSubscribe(this);
         }
 
         public void setResultSink(MonoSink<?> promise) {
@@ -260,8 +256,10 @@ public final class WriteSequencer<T> {
                 produced(p);
             }
 
-            delegate.onComplete();
+            doOnComplete();
         }
+
+        abstract void doOnComplete();
 
         @Override
         public void onError(Throwable t) {
@@ -273,15 +271,19 @@ public final class WriteSequencer<T> {
                 produced(p);
             }
 
-            delegate.onError(t);
+            doOnError(t);
         }
+
+        abstract void doOnError(Throwable t);
 
         @Override
         public void onNext(T t) {
             produced++;
 
-            delegate.onNext(t);
+            doOnNext(t);
         }
+
+        abstract void doOnNext(T t);
 
         @Override
         public void onSubscribe(Subscription s) {
@@ -464,18 +466,7 @@ public final class WriteSequencer<T> {
             drain();
         }
 
-        @Override
-        public long getProduced() {
-            return produced;
-        }
-
-        @Override
-        public MonoSink<?> getPromise() {
-            return promise;
-        }
-
-        @Override
-        public void drainNextPublisher() {
+        protected void drainNextPublisher() {
             parent.drain();
         }
 

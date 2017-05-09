@@ -32,7 +32,6 @@ import reactor.util.Loggers;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
@@ -44,8 +43,6 @@ public final class AeronClient implements AeronConnector {
     private final AeronClientOptions options;
 
     private final String name;
-
-    private final AtomicInteger nextClientStreamId = new AtomicInteger(0);
 
     private AeronClient(String name, Consumer<AeronClientOptions> optionsConfigurer) {
         AeronClientOptions options = new AeronClientOptions();
@@ -69,7 +66,7 @@ public final class AeronClient implements AeronConnector {
     @Override
     public Mono<? extends Disposable> newHandler(
             BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler) {
-        ClientHandler handler = new ClientHandler(ioHandler, name, options, nextClientStreamId.incrementAndGet());
+        ClientHandler handler = new ClientHandler(ioHandler, name, options);
         return handler.start();
     }
 
@@ -93,8 +90,7 @@ public final class AeronClient implements AeronConnector {
 
         ClientHandler(BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler,
                       String name,
-                      AeronClientOptions options,
-                      int clientStreamId) {
+                      AeronClientOptions options) {
             this.ioHandler = ioHandler;
             this.options = options;
             this.category = name;
@@ -105,11 +101,11 @@ public final class AeronClient implements AeronConnector {
                     this.options.serverChannel(), this.options.serverStreamId(), sessionId, options);
 
             this.inbound = new AeronClientInbound(wrapper,
-                    this.options.clientChannel(), clientStreamId, sessionId, name);
+                    this.options.clientChannel(), options.clientStreamId(), sessionId, name);
 
             this.connector = new Connector(category, wrapper,
                     this.options.serverChannel(), this.options.serverStreamId(),
-                    this.options.clientChannel(), clientStreamId,
+                    this.options.clientChannel(), options.clientStreamId(),
                     sessionId);
         }
 

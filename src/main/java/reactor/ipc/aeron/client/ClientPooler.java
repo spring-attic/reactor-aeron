@@ -65,7 +65,7 @@ final class ClientPooler implements SignalHandler {
     @Override
     public void onNext(UUID sessionId, ByteBuffer buffer) {
         if (!sessionId.equals(this.sessionId)) {
-            throw new RuntimeException("Received session for unknown sessionId: " + sessionId);
+            throw new RuntimeException("Received Next for unknown sessionId: " + sessionId);
         }
         fluxSink.next(buffer);
     }
