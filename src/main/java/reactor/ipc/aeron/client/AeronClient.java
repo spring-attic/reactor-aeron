@@ -111,6 +111,7 @@ public final class AeronClient implements AeronConnector {
 
         Mono<Disposable> start() {
             return connector.connect(options.connectTimeoutMillis())
+                    .then(outbound.initialise())
                     .doOnSuccess(avoid ->
                             Mono.from(ioHandler.apply(inbound, outbound))
                                     .doOnTerminate((aVoid, th) -> dispose())

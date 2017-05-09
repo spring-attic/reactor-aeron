@@ -43,9 +43,9 @@ public class Pooler implements Runnable {
 
     private FragmentHandler delegateHandler;
 
-    public Pooler(Subscription subscription, FragmentHandler delegateHandler, String name) {
+    public Pooler(String name, Subscription subscription, SignalHandler signalHandler) {
         this.subscription = subscription;
-        this.delegateHandler = delegateHandler;
+        this.delegateHandler = new PoolerFragmentHandler(signalHandler);
         this.executor = Executors.newSingleThreadExecutor(r -> {
             Thread thread = new Thread(r, name + "-[pooler]");
             thread.setDaemon(true);

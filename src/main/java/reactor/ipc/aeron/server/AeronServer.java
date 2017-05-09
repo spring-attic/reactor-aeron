@@ -24,6 +24,7 @@ import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
+import reactor.ipc.aeron.Pooler;
 
 import java.util.Objects;
 import java.util.function.BiFunction;
@@ -67,8 +68,8 @@ public final class AeronServer implements AeronConnector {
             AeronWrapper wrapper = new AeronWrapper(category, options);
             Subscription subscription = wrapper.addSubscription(options.serverChannel(), options.serverStreamId(),
                     "receiving data and requests", null);
-            ServerPooler pooler = new ServerPooler(subscription,
-                    new AeronServerSignalHandler(category, wrapper, ioHandler, options), name);
+            AeronServerSignalHandler signalHandler = new AeronServerSignalHandler(category, wrapper, ioHandler, options);
+            Pooler pooler = new Pooler(name, subscription, signalHandler);
             pooler.initialise();
 
             sink.success(() -> {

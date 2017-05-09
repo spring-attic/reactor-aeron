@@ -18,7 +18,6 @@ package reactor.ipc.aeron.client;
 import io.aeron.Subscription;
 import reactor.core.publisher.FluxSink;
 import reactor.ipc.aeron.Pooler;
-import reactor.ipc.aeron.PoolerFragmentHandler;
 import reactor.ipc.aeron.SignalHandler;
 
 import java.nio.ByteBuffer;
@@ -44,8 +43,7 @@ final class ClientPooler implements SignalHandler {
         Objects.requireNonNull(aeronSub, "aeronSub");
         Objects.requireNonNull(sessionId, "sessionId");
 
-
-        this.pooler = new Pooler(aeronSub, new PoolerFragmentHandler(this), name);
+        this.pooler = new Pooler(name, aeronSub, this);
         this.sessionId = sessionId;
     }
 
@@ -65,7 +63,7 @@ final class ClientPooler implements SignalHandler {
     @Override
     public void onNext(UUID sessionId, ByteBuffer buffer) {
         if (!sessionId.equals(this.sessionId)) {
-            throw new RuntimeException("Received Next for unknown sessionId: " + sessionId);
+            throw new RuntimeException("Received NEXT for unknown sessionId: " + sessionId);
         }
         fluxSink.next(buffer);
     }

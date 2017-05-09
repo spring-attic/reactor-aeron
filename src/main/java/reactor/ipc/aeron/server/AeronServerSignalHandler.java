@@ -16,6 +16,7 @@
 package reactor.ipc.aeron.server;
 
 import org.reactivestreams.Publisher;
+import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
@@ -26,9 +27,9 @@ import reactor.util.Logger;
 import reactor.util.Loggers;
 
 import java.nio.ByteBuffer;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 
 /**
@@ -36,7 +37,7 @@ import java.util.function.BiFunction;
  */
 final class AeronServerSignalHandler implements SignalHandler {
 
-    private final Map<UUID, AeronServerInbound> inboundBySessionId;
+    private final Map<UUID, SessionData> inboundBySessionId;
 
     private final String category;
 
@@ -48,15 +49,57 @@ final class AeronServerSignalHandler implements SignalHandler {
 
     private final Logger logger;
 
-    public AeronServerSignalHandler(String category,
-                                    AeronWrapper wrapper,
-                                    BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler,
-                                    AeronOptions options) {
+    class SessionData implements Disposable {
+
+        final AeronOutbound outbound;
+
+        final AeronServerInbound inbound;
+
+        private final UUID sessionId;
+
+        SessionData(String category, AeronWrapper wrapper, String channel, int streamId, UUID sessionId, AeronOptions options) {
+            this.sessionId = sessionId;
+            this.outbound = new AeronOutbound(category, wrapper, channel, streamId, sessionId, options);
+            this.inbound = new AeronServerInbound(category);
+        }
+
+        void initialise() {
+            inboundBySessionId.put(sessionId, this);
+
+            outbound.initialise()
+                    .doOnSuccess(avoid -> {
+                        Publisher<Void> publisher = ioHandler.apply(inbound, outbound);
+                        Mono.from(publisher).doOnTerminate((avoid2, th) -> {
+                            dispose();
+                            logger.debug("Closed session with sessionId: {}", sessionId);
+                        }).subscribe();
+                    })
+                    .doOnError(th -> {
+                        dispose();
+                        logger.debug("Failed to connect to the client for sessionId: {}", sessionId);
+                    })
+                    .subscribe();
+        }
+
+        @Override
+        public void dispose() {
+            inboundBySessionId.remove(sessionId);
+
+            outbound.dispose();
+            inbound.dispose();
+        }
+
+    }
+
+    AeronServerSignalHandler(String category,
+                             AeronWrapper wrapper,
+                             BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler,
+                             AeronOptions options) {
         this.category = category;
         this.wrapper = wrapper;
         this.ioHandler = ioHandler;
         this.options = options;
-        this.inboundBySessionId = new HashMap<>();
+        this.inboundBySessionId = new ConcurrentHashMap<>();
         this.logger = Loggers.getLogger(AeronServer.class + "." + category);
     }
 
@@ -64,21 +107,8 @@ final class AeronServerSignalHandler implements SignalHandler {
     public void onConnect(UUID sessionId, String channel, int streamId) {
         logger.debug("Received CONNECT for sessionId: {}, channel/streamId: {}/{}", sessionId, channel, streamId);
 
-        AeronOutbound outbound = new AeronOutbound(category, wrapper, channel, streamId, sessionId, options);
-        AeronServerInbound inbound = new AeronServerInbound(category);
-        inboundBySessionId.put(sessionId, inbound);
-
-        outbound.initialise().doOnSuccess(avoid -> {
-            Publisher<Void> publisher = ioHandler.apply(inbound, outbound);
-            Mono.from(publisher).doOnTerminate((avoid2, th) -> {
-                inboundBySessionId.remove(sessionId);
-                outbound.dispose();
-                inbound.dispose();
-
-                logger.debug("Closed session with sessionId: {}", sessionId);
-            }).subscribe();
-        });
-        //FIXME: Handler an error during AeronOutbound initialisation
+        SessionData sessionData = new SessionData(category, wrapper, channel, streamId, sessionId, options);
+        sessionData.initialise();
     }
 
     @Override
@@ -87,13 +117,12 @@ final class AeronServerSignalHandler implements SignalHandler {
             logger.debug("Received NEXT for sessionId: {}, buffer: {}", sessionId, buffer);
         }
 
-        AeronServerInbound inbound = inboundBySessionId.get(sessionId);
-        if (inbound == null) {
-            //FIXME: Handle
-            logger.error("Could not find inbound for sessionId: {}", sessionId);
-            return;
+        SessionData sessionData = inboundBySessionId.get(sessionId);
+        if (sessionData != null) {
+            sessionData.inbound.onNext(buffer);
+        } else {
+            //FIXME: Add additional handling
+            logger.error("Could not find session with sessionId: {}", sessionId);
         }
-
-        inbound.onNext(buffer);
     }
 }

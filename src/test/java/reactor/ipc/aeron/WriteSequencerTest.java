@@ -8,6 +8,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 import static org.hamcrest.Matchers.hasItems;
 import static org.junit.Assert.assertThat;
@@ -39,17 +40,23 @@ public class WriteSequencerTest {
 
     static class WriteSequencerForTest extends WriteSequencer<String> {
 
+        static final Consumer<Throwable> ERROR_HANDLER = th -> System.err.println("Unexpected exception: " + th);
+
         private final SubscriberForTest inner;
 
         public WriteSequencerForTest() {
-            super(th -> System.err.println("Unexpected exception: " + th),
-                    o -> {}, avoid -> false, null);
+            super(o -> {}, avoid -> false, null);
             this.inner = new SubscriberForTest(this);
         }
 
         @Override
         InnerSubscriber<String> getInner() {
             return inner;
+        }
+
+        @Override
+        Consumer<Throwable> getErrorHandler() {
+            return ERROR_HANDLER;
         }
 
         void request(int n) {

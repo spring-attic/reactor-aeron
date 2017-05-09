@@ -22,8 +22,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import reactor.ipc.connector.Outbound;
-import reactor.util.Logger;
-import reactor.util.Loggers;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;
@@ -53,8 +51,7 @@ public final class AeronOutbound implements Outbound<ByteBuffer>, Disposable {
         this.sessionId = sessionId;
         this.options = options;
         this.publication = wrapper.addPublication(channel, streamId, "sending data", sessionId);
-        Logger logger = Loggers.getLogger(AeronOutbound.class + "." + category);
-        this.sequencer = new AeronWriteSequencer(logger, publication, options, sessionId);
+        this.sequencer = new AeronWriteSequencer(category, publication, options, sessionId);
         this.scheduler = Schedulers.newParallel("aeron-sender", 1);
     }
 

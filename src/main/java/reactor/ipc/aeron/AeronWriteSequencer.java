@@ -2,11 +2,13 @@ package reactor.ipc.aeron;
 
 import io.aeron.Publication;
 import reactor.util.Logger;
+import reactor.util.Loggers;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;
+import java.util.function.Consumer;
 
-public class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
+final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
 
     private final Logger logger;
 
@@ -18,16 +20,21 @@ public class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
 
     private final InnerSubscriber<ByteBuffer> inner;
 
-    public AeronWriteSequencer(Logger logger, Publication publication, AeronOptions options, UUID sessionId) {
-        super(th -> logger.error("Unexpected exception", th),
-                publisher -> {},
-                avoid -> false,
-                null);
-        this.logger = logger;
+    private final Consumer<Throwable> errorHandler;
+
+    AeronWriteSequencer(String category, Publication publication, AeronOptions options, UUID sessionId) {
+        super(publisher -> {}, avoid -> false,null);
         this.publication = publication;
         this.options = options;
         this.sessionId = sessionId;
         this.inner = new SignalSender(this, this.publication, this.sessionId, this.options);
+        this.logger = Loggers.getLogger(AeronWriteSequencer.class + "." + category);
+        this.errorHandler = th -> logger.error("Unexpected exception", th);
+    }
+
+    @Override
+    Consumer<Throwable> getErrorHandler() {
+        return errorHandler;
     }
 
     @Override
@@ -43,7 +50,7 @@ public class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
 
         private final MessagePublisher publisher;
 
-        public SignalSender(AeronWriteSequencer sequencer, Publication publication, UUID sessionId, AeronOptions options) {
+        SignalSender(AeronWriteSequencer sequencer, Publication publication, UUID sessionId, AeronOptions options) {
             super(sequencer);
 
             this.publication = publication;
@@ -54,7 +61,7 @@ public class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
         }
 
         @Override
-        public void doOnNext(ByteBuffer byteBuffer) {
+        void doOnNext(ByteBuffer byteBuffer) {
             long result = 0;
             Exception cause = null;
             try {
@@ -73,12 +80,12 @@ public class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
         }
 
         @Override
-        public void doOnError(Throwable t) {
+        void doOnError(Throwable t) {
             promise.error(t);
         }
 
         @Override
-        public void doOnComplete() {
+        void doOnComplete() {
             promise.success();
         }
 

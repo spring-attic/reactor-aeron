@@ -53,8 +53,6 @@ abstract class WriteSequencer<T> {
     // a publisher is being drained
     private volatile boolean innerActive;
 
-    private final Consumer<Throwable> errorHandler;
-
     private final Consumer<Object> discardedHandler;
 
     private final Predicate<Void> backpressureChecker;
@@ -62,11 +60,9 @@ abstract class WriteSequencer<T> {
     private final BiConsumer<Object, MonoSink<?>> messageConsumer;
 
     @SuppressWarnings("unchecked")
-    public WriteSequencer(Consumer<Throwable> errorHandler,
-                          Consumer<Object> discardedHandler,
+    public WriteSequencer(Consumer<Object> discardedHandler,
                           Predicate<Void> backpressureChecker,
                           BiConsumer<Object, MonoSink<?>> messageConsumer) {
-        this.errorHandler = errorHandler;
         this.discardedHandler = discardedHandler;
         this.backpressureChecker = backpressureChecker;
         this.pendingWrites = QueueSupplier.unbounded()
@@ -76,6 +72,8 @@ abstract class WriteSequencer<T> {
     }
 
     abstract InnerSubscriber<T> getInner();
+
+    abstract Consumer<Throwable> getErrorHandler();
 
     public Mono<Void> add(Object msg, Scheduler scheduler) {
         if (!(msg instanceof Publisher) && messageConsumer == null) {
@@ -122,7 +120,7 @@ abstract class WriteSequencer<T> {
                     promise = (MonoSink<?>) v;
                 }
                 catch (Throwable e) {
-                    errorHandler.accept(e);
+                    getErrorHandler().accept(e);
                     return;
                 }
 
@@ -188,7 +186,7 @@ abstract class WriteSequencer<T> {
                 promise = (MonoSink<?>) v;
             }
             catch (Throwable e) {
-                errorHandler.accept(e);
+                getErrorHandler().accept(e);
                 return;
             }
             v = pendingWrites.poll();

@@ -24,10 +24,10 @@ public class AeronClientTest extends BaseAeronTest {
     public void testClientReceivesSignalsFromServer() throws InterruptedException {
         AeronServer server = createAeronServer("server-1");
 
-        addDisposable(server.newHandler((inbound, outbound) -> {
-            Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("1", "2", "3").log("server"))).subscribe();
-            return Mono.never();
-        }));
+        addDisposable(server.newHandler((inbound, outbound) ->
+                Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("1", "2", "3")
+                        .log("server")))
+                        .subscribe()));
 
         ReplayProcessor<String> processor = ReplayProcessor.create();
         AeronClient client = createAeronClient(null);
