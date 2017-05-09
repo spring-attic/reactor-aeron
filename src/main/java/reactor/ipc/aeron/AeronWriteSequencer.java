@@ -16,6 +16,8 @@ public class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
 
     private final UUID sessionId;
 
+    private final InnerSubscriber<ByteBuffer> inner;
+
     public AeronWriteSequencer(Logger logger, Publication publication, AeronOptions options, UUID sessionId) {
         super(th -> logger.error("Unexpected exception", th),
                 publisher -> {},
@@ -25,11 +27,12 @@ public class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
         this.publication = publication;
         this.options = options;
         this.sessionId = sessionId;
+        this.inner = new SignalSender(this, this.publication, this.sessionId, this.options);
     }
 
     @Override
-    protected InnerSubscriber<ByteBuffer> createInnerSubscriber() {
-        return new SignalSender(this, publication, sessionId, options);
+    InnerSubscriber<ByteBuffer> getInner() {
+        return inner;
     }
 
     class SignalSender extends InnerSubscriber<ByteBuffer> {

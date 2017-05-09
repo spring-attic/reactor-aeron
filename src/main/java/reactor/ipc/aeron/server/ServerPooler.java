@@ -26,7 +26,7 @@ import java.util.Objects;
 /**
  * @author Anatoly Kadyshev
  */
-class ServerPooler {
+final class ServerPooler {
 
     private final Pooler pooler;
 

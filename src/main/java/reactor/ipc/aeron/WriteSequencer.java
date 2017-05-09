@@ -53,8 +53,6 @@ abstract class WriteSequencer<T> {
     // a publisher is being drained
     private volatile boolean innerActive;
 
-    final InnerSubscriber inner;
-
     private final Consumer<Throwable> errorHandler;
 
     private final Consumer<Object> discardedHandler;
@@ -68,7 +66,6 @@ abstract class WriteSequencer<T> {
                           Consumer<Object> discardedHandler,
                           Predicate<Void> backpressureChecker,
                           BiConsumer<Object, MonoSink<?>> messageConsumer) {
-        this.inner = createInnerSubscriber();
         this.errorHandler = errorHandler;
         this.discardedHandler = discardedHandler;
         this.backpressureChecker = backpressureChecker;
@@ -77,6 +74,8 @@ abstract class WriteSequencer<T> {
         this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
         this.messageConsumer = messageConsumer;
     }
+
+    abstract InnerSubscriber<T> getInner();
 
     public Mono<Void> add(Object msg, Scheduler scheduler) {
         if (!(msg instanceof Publisher) && messageConsumer == null) {
@@ -100,6 +99,7 @@ abstract class WriteSequencer<T> {
 
     @SuppressWarnings("unchecked")
     public void drain() {
+        InnerSubscriber<T> inner = getInner();
         if (WIP.getAndIncrement(this) == 0) {
 
             for ( ; ; ) {
@@ -138,7 +138,7 @@ abstract class WriteSequencer<T> {
                 v = pendingWrites.poll();
 
                 if (v instanceof Publisher) {
-                    Publisher<?> p = (Publisher<?>) v;
+                    Publisher<T> p = (Publisher<T>) v;
 
                     if (p instanceof Callable) {
                         @SuppressWarnings("unchecked") Callable<?> supplier = (Callable<?>) p;
@@ -164,7 +164,7 @@ abstract class WriteSequencer<T> {
                         else {
                             innerActive = true;
                             inner.setResultSink(promise);
-                            inner.onSubscribe(Operators.scalarSubscription(inner, vr));
+                            inner.onSubscribe(Operators.scalarSubscription(inner, (T)vr));
                         }
                     }
                     else {
@@ -179,8 +179,6 @@ abstract class WriteSequencer<T> {
             }
         }
     }
-
-    protected abstract InnerSubscriber<T> createInnerSubscriber();
 
     void discard() {
         while (!pendingWrites.isEmpty()) {
