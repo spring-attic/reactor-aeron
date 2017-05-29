@@ -21,10 +21,15 @@ import java.util.UUID;
 /**
  * @author Anatoly Kadyshev
  */
-public interface SignalHandler {
+public interface MessageHandler {
 
-    void onConnect(UUID sessionId, String channel, int streamId);
+    default void onConnect(UUID sessionId, String clientChannel, int clientStreamId, int clientAckStreamId) {
+    }
 
-    void onNext(UUID sessionId, ByteBuffer buffer);
+    default void onNext(UUID sessionId, ByteBuffer buffer) {
+    }
+
+    default void onConnectAck(UUID sessionId, int serverStreamId) {
+    }
 
 }

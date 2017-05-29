@@ -69,7 +69,7 @@ public final class AeronWrapper implements Disposable {
     public Subscription addSubscription(String channel, int streamId, String purpose, UUID sessionId) {
         Subscription subscription = aeron.addSubscription(channel, streamId);
         if (logger.isDebugEnabled()) {
-            logger.debug("Added subscription{} for {}: {}/{}", sessionId != null ? ", sessionId: " + sessionId : "",
+            logger.debug("Added subscription{} for {}: {}", sessionId != null ? ", sessionId: " + sessionId : "",
                     purpose, AeronUtils.format(channel, streamId));
         }
         return subscription;

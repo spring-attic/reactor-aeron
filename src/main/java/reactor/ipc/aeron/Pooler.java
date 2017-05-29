@@ -19,11 +19,12 @@ package reactor.ipc.aeron;
 import io.aeron.FragmentAssembler;
 import io.aeron.Subscription;
 import io.aeron.logbuffer.FragmentHandler;
-import io.aeron.logbuffer.Header;
-import org.agrona.DirectBuffer;
 import org.agrona.concurrent.BackoffIdleStrategy;
 import reactor.core.publisher.Mono;
 
+import java.util.Iterator;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -39,13 +40,10 @@ public class Pooler implements Runnable {
 
     private volatile boolean isRunning;
 
-    private Subscription subscription;
+    //FIXME: Use a different structure
+    private Queue<SubscriptonInfo> infos = new ConcurrentLinkedQueue<>();
 
-    private FragmentHandler delegateHandler;
-
-    public Pooler(String name, Subscription subscription, SignalHandler signalHandler) {
-        this.subscription = subscription;
-        this.delegateHandler = new PoolerFragmentHandler(signalHandler);
+    public Pooler(String name) {
         this.executor = Executors.newSingleThreadExecutor(r -> {
             Thread thread = new Thread(r, name + "-[pooler]");
             thread.setDaemon(true);
@@ -54,8 +52,15 @@ public class Pooler implements Runnable {
     }
 
     public void initialise() {
-        isRunning = true;
-        executor.submit(this);
+        //FIXME: Thread-safety
+        if (!isRunning) {
+            isRunning = true;
+            executor.submit(this);
+        }
+    }
+
+    public void addSubscription(Subscription subscription, MessageHandler messageHandler) {
+        infos.add(new SubscriptonInfo(subscription, messageHandler));
     }
 
     public Mono<Void> shutdown() {
@@ -81,16 +86,39 @@ public class Pooler implements Runnable {
     @Override
     public void run() {
         BackoffIdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
-        FragmentHandler fragmentHandler = new FragmentAssembler(new FragmentHandler() {
-            @Override
-            public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
-                delegateHandler.onFragment(buffer, offset, length, header);
-            }
-        });
         while (isRunning) {
-            int nReceived = subscription.poll(fragmentHandler, 1);
-            idleStrategy.idle(nReceived);
+            Iterator<SubscriptonInfo> it = infos.iterator();
+            while (it.hasNext()) {
+                SubscriptonInfo info = it.next();
+                int nReceived = info.subscription.poll(info.delegateHandler, 1);
+                idleStrategy.idle(nReceived);
+            }
         }
+    }
+
+    public void removeSubscription(Subscription subscription) {
+        for (Iterator<SubscriptonInfo> it = infos.iterator(); it.hasNext(); ) {
+            if (it.next().subscription == subscription) {
+                it.remove();
+                break;
+            }
+        }
+    }
+
+    static class SubscriptonInfo {
+
+        final FragmentHandler delegateHandler;
+
+        final Subscription subscription;
+
+        final MessageHandler messageHandler;
+
+        public SubscriptonInfo(Subscription subscription, MessageHandler messageHandler) {
+            this.subscription = subscription;
+            this.messageHandler = messageHandler;
+            this.delegateHandler = new FragmentAssembler(new PoolerFragmentHandler(messageHandler));
+        }
+
     }
 
 }

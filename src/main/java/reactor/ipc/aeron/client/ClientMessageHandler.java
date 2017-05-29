@@ -15,10 +15,9 @@
  */
 package reactor.ipc.aeron.client;
 
-import io.aeron.Subscription;
 import reactor.core.publisher.FluxSink;
-import reactor.ipc.aeron.Pooler;
-import reactor.ipc.aeron.SignalHandler;
+import reactor.ipc.aeron.MessageHandler;
+import reactor.ipc.aeron.MessageType;
 
 import java.nio.ByteBuffer;
 import java.util.Objects;
@@ -27,45 +26,30 @@ import java.util.UUID;
 /**
  * @author Anatoly Kadyshev
  */
-final class ClientPooler implements SignalHandler {
-
-    private final Pooler pooler;
+final class ClientMessageHandler implements MessageHandler {
 
     private final UUID sessionId;
 
-    private FluxSink<ByteBuffer> fluxSink;
+    private final FluxSink<ByteBuffer> emitter;
 
-    public void setFluxSink(FluxSink<ByteBuffer> fluxSink) {
-        this.fluxSink = fluxSink;
-    }
-
-    public ClientPooler(Subscription aeronSub, UUID sessionId, String name) {
-        Objects.requireNonNull(aeronSub, "aeronSub");
+    public ClientMessageHandler(UUID sessionId, FluxSink<ByteBuffer> emitter) {
         Objects.requireNonNull(sessionId, "sessionId");
 
-        this.pooler = new Pooler(name, aeronSub, this);
         this.sessionId = sessionId;
-    }
-
-    public void initialise() {
-        pooler.initialise();
-    }
-
-    public void shutdown() {
-        pooler.shutdown();
+        this.emitter = emitter;
     }
 
     @Override
-    public void onConnect(UUID sessionId, String channel, int streamId) {
+    public void onConnect(UUID sessionId, String clientChannel, int clientStreamId, int clientAckStreamId) {
         throw new UnsupportedOperationException("Client doesn't support CONNECT requests");
     }
 
     @Override
     public void onNext(UUID sessionId, ByteBuffer buffer) {
         if (!sessionId.equals(this.sessionId)) {
-            throw new RuntimeException("Received NEXT for unknown sessionId: " + sessionId);
+            throw new RuntimeException("Received " + MessageType.NEXT + " for unknown sessionId: " + sessionId);
         }
-        fluxSink.next(buffer);
+        emitter.next(buffer);
     }
 
 }

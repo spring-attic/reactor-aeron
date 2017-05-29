@@ -22,9 +22,9 @@ public class Protocol {
         return index;
     }
 
-    public static ByteBuffer createConnectBody(String clientChannel, int clientStreamId) {
+    public static ByteBuffer createConnectBody(String clientChannel, int clientStreamId, int clientAckStreamId) {
         byte[] clientChannelBytes = clientChannel.getBytes(StandardCharsets.UTF_8);
-        byte[] bytes = new byte[clientChannelBytes.length + BitUtil.SIZE_OF_INT * 2];
+        byte[] bytes = new byte[clientChannelBytes.length + BitUtil.SIZE_OF_INT * 3];
         UnsafeBuffer buffer = new UnsafeBuffer(bytes);
         int index = 0;
         buffer.putInt(index, clientChannelBytes.length);
@@ -33,7 +33,15 @@ public class Protocol {
         index += clientChannelBytes.length;
         buffer.putInt(index, clientStreamId);
         index += BitUtil.SIZE_OF_INT;
+        buffer.putInt(index, clientAckStreamId);
+        index += BitUtil.SIZE_OF_INT;
         return ByteBuffer.wrap(bytes, 0, index);
     }
 
+    public static ByteBuffer createConnectAckBody(int streamId) {
+        byte array[] = new byte[BitUtil.SIZE_OF_INT];
+        UnsafeBuffer buffer = new UnsafeBuffer(array);
+        buffer.putInt(0, streamId);
+        return ByteBuffer.wrap(array);
+    }
 }

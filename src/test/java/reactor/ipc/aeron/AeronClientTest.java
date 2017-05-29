@@ -7,6 +7,8 @@ import reactor.ipc.aeron.client.AeronClient;
 import reactor.ipc.aeron.server.AeronServer;
 import reactor.test.StepVerifier;
 
+import java.time.Duration;
+
 /**
  * @author Anatoly Kadyshev
  */
@@ -37,7 +39,10 @@ public class AeronClientTest extends BaseAeronTest {
         }));
 
         StepVerifier.create(processor)
-                .expectNext("1", "2", "3");
+                .expectNext("1", "2", "3")
+                .expectNoEvent(Duration.ofMillis(10))
+                .thenCancel()
+                .verify();
     }
 
     @Test
@@ -62,8 +67,17 @@ public class AeronClientTest extends BaseAeronTest {
             return Mono.never();
         }));
 
-        StepVerifier.create(processor1).expectNext("1", "2", "3");
-        StepVerifier.create(processor2).expectNext("1", "2", "3");
+        StepVerifier.create(processor1)
+                .expectNext("1", "2", "3")
+                .expectNoEvent(Duration.ofMillis(100))
+                .thenCancel()
+                .verify();
+
+        StepVerifier.create(processor2)
+                .expectNext("1", "2", "3")
+                .expectNoEvent(Duration.ofMillis(100))
+                .thenCancel()
+                .verify();
     }
 
     @Test
@@ -90,11 +104,15 @@ public class AeronClientTest extends BaseAeronTest {
 
         StepVerifier.create(processor1)
                 .expectNext("1", "2", "3")
-                .expectNextCount(3);
+                .expectNoEvent(Duration.ofMillis(100))
+                .thenCancel()
+                .verify();
 
         StepVerifier.create(processor2)
                 .expectNext("1", "2", "3")
-                .expectNextCount(3);
+                .expectNoEvent(Duration.ofMillis(100))
+                .thenCancel()
+                .verify();
     }
 
     private AeronClient createAeronClient(String name) {

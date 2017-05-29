@@ -32,9 +32,9 @@ public class PoolerFragmentHandler implements FragmentHandler {
 
     private Logger logger = Loggers.getLogger(PoolerFragmentHandler.class);
 
-    private final SignalHandler handler;
+    private final MessageHandler handler;
 
-    public PoolerFragmentHandler(SignalHandler handler) {
+    public PoolerFragmentHandler(MessageHandler handler) {
         this.handler = handler;
     }
 
@@ -54,17 +54,23 @@ public class PoolerFragmentHandler implements FragmentHandler {
             String channel = buffer.getStringUtf8(index, channelLength);
             index += BitUtil.SIZE_OF_INT + channelLength;
             int streamId = buffer.getInt(index);
+            index += BitUtil.SIZE_OF_INT;
+            int clientAckStreamId = buffer.getInt(index);
 
-            handler.onConnect(sessionId, channel, streamId);
+            handler.onConnect(sessionId, channel, streamId, clientAckStreamId);
         } else if (type == MessageType.NEXT.ordinal()) {
             int bytesLength = length - (index - offset);
             ByteBuffer dst = ByteBuffer.allocate(bytesLength);
             buffer.getBytes(index, dst, bytesLength);
             dst.rewind();
-            
+
             handler.onNext(sessionId, dst);
+        } else if (type == MessageType.CONNECT_ACK.ordinal()) {
+            int serverStreamId = buffer.getInt(index);
+
+            handler.onConnectAck(sessionId, serverStreamId);
         } else {
-            logger.error("Unknown type: {}", type);
+            logger.error("Unknown message type id: {}", type);
         }
     }
 

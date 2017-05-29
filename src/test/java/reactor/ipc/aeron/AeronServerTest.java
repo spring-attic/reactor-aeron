@@ -35,7 +35,9 @@ public class AeronServerTest extends BaseAeronTest {
         }));
 
         StepVerifier.create(processor)
-            .expectNext("Hello", "world!");
+            .expectNext("Hello", "world!")
+            .thenCancel()
+            .verify();
     }
 
 }

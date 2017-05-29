@@ -20,11 +20,10 @@ import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.AeronConnector;
-import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
-import reactor.ipc.aeron.Pooler;
+import reactor.ipc.aeron.AeronWrapper;
 
 import java.util.Objects;
 import java.util.function.BiFunction;
@@ -64,12 +63,10 @@ public final class AeronServer implements AeronConnector {
         Objects.requireNonNull(ioHandler, "ioHandler");
 
         return Mono.create(sink -> {
-            String category = name;
-            AeronWrapper wrapper = new AeronWrapper(category, options);
+            AeronWrapper wrapper = new AeronWrapper(name, options);
             Subscription subscription = wrapper.addSubscription(options.serverChannel(), options.serverStreamId(),
                     "receiving data and requests", null);
-            AeronServerSignalHandler signalHandler = new AeronServerSignalHandler(category, wrapper, ioHandler, options);
-            Pooler pooler = new Pooler(name, subscription, signalHandler);
+            ServerPooler pooler = new ServerPooler(name, wrapper, ioHandler, options, subscription);
             pooler.initialise();
 
             sink.success(() -> {

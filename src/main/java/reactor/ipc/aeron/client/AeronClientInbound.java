@@ -21,6 +21,7 @@ import reactor.core.publisher.FluxProcessor;
 import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronFlux;
+import reactor.ipc.aeron.Pooler;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -30,19 +31,21 @@ import java.util.UUID;
  */
 final class AeronClientInbound implements AeronInbound, Disposable {
 
-    private final ClientPooler pooler;
-
     private final AeronFlux flux;
 
-    public AeronClientInbound(AeronWrapper wrapper, String channel, int streamId, UUID sessionId, String name) {
+    private final Subscription subscription;
+
+    private final Pooler pooler;
+
+    public AeronClientInbound(Pooler pooler, AeronWrapper wrapper, String channel, int streamId, UUID sessionId, String name) {
+        this.pooler = pooler;
         Objects.requireNonNull(sessionId, "sessionId");
 
-        Subscription subscription = wrapper.addSubscription(channel, streamId, "receiving data", sessionId);
+        this.subscription = wrapper.addSubscription(channel, streamId, "receiving data", sessionId);
 
-        this.pooler = new ClientPooler(subscription, sessionId, name);
         this.flux = new AeronFlux(FluxProcessor.create(emitter -> {
-            pooler.setFluxSink(emitter);
-            pooler.initialise();
+            ClientMessageHandler messageHandler = new ClientMessageHandler(sessionId, emitter);
+            pooler.addSubscription(subscription, messageHandler);
         }));
     }
 
@@ -53,7 +56,8 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
     @Override
     public void dispose() {
-        pooler.shutdown();
+        pooler.removeSubscription(subscription);
+        subscription.close();
     }
 
 }

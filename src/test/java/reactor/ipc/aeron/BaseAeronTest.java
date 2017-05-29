@@ -14,7 +14,7 @@ import java.util.List;
  */
 public class BaseAeronTest {
 
-    public static final Duration TIMEOUT = Duration.ofSeconds(5);
+    public static final Duration TIMEOUT = Duration.ofSeconds(7);
 
     private final List<Disposable> disposables = Lists.newArrayList();
 
