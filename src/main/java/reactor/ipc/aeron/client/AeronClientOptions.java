@@ -27,7 +27,7 @@ public final class AeronClientOptions extends AeronOptions {
 
     private static final AtomicInteger nextClientStreamId = new AtomicInteger(0);
 
-    private String clientChannel = "aeron:udp?endpoint=localhost:13000";
+    private String clientChannel = "aeron:udp?endpoint=localhost:12001";
 
     private int clientStreamId = nextClientStreamId.incrementAndGet();
 

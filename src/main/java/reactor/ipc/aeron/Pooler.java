@@ -20,6 +20,8 @@ import io.aeron.FragmentAssembler;
 import io.aeron.Subscription;
 import io.aeron.logbuffer.FragmentHandler;
 import org.agrona.concurrent.BackoffIdleStrategy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.util.Iterator;
@@ -35,6 +37,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class Pooler implements Runnable {
 
+    private final Logger logger;
+
     //FIXME: Use something from reactor
     private final ExecutorService executor;
 
@@ -44,6 +48,7 @@ public class Pooler implements Runnable {
     private Queue<SubscriptonInfo> infos = new ConcurrentLinkedQueue<>();
 
     public Pooler(String name) {
+        this.logger = LoggerFactory.getLogger(this.getClass() + "." + name);
         this.executor = Executors.newSingleThreadExecutor(r -> {
             Thread thread = new Thread(r, name + "-[pooler]");
             thread.setDaemon(true);
@@ -85,6 +90,8 @@ public class Pooler implements Runnable {
 
     @Override
     public void run() {
+        logger.debug("Started");
+
         BackoffIdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
         while (isRunning) {
             Iterator<SubscriptonInfo> it = infos.iterator();
@@ -94,6 +101,8 @@ public class Pooler implements Runnable {
                 idleStrategy.idle(nReceived);
             }
         }
+
+        logger.debug("Finished");
     }
 
     public void removeSubscription(Subscription subscription) {

@@ -5,7 +5,6 @@ import reactor.util.Logger;
 import reactor.util.Loggers;
 
 import java.nio.ByteBuffer;
-import java.util.UUID;
 import java.util.function.Consumer;
 
 final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
@@ -16,13 +15,13 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
 
     private final AeronOptions options;
 
-    private final UUID sessionId;
+    private final long sessionId;
 
     private final InnerSubscriber<ByteBuffer> inner;
 
     private final Consumer<Throwable> errorHandler;
 
-    AeronWriteSequencer(String category, Publication publication, AeronOptions options, UUID sessionId) {
+    AeronWriteSequencer(String category, Publication publication, AeronOptions options, long sessionId) {
         super(publisher -> {}, avoid -> false,null);
         this.publication = publication;
         this.options = options;
@@ -46,11 +45,11 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
 
         private final Publication publication;
 
-        private final UUID sessionId;
+        private final long sessionId;
 
         private final MessagePublisher publisher;
 
-        SignalSender(AeronWriteSequencer sequencer, Publication publication, UUID sessionId, AeronOptions options) {
+        SignalSender(AeronWriteSequencer sequencer, Publication publication, long sessionId, AeronOptions options) {
             super(sequencer);
 
             this.publication = publication;

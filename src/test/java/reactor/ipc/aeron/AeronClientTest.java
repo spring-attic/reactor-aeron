@@ -14,7 +14,10 @@ import java.time.Duration;
  */
 public class AeronClientTest extends BaseAeronTest {
 
-    private String serverChannel = "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort();
+    private String serverChannel = "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort(13000);
+
+    private String clientChannel = "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort();
+
 
     @Test(expected = RuntimeException.class)
     public void testClientCouldNotConnectToServer() {
@@ -27,7 +30,7 @@ public class AeronClientTest extends BaseAeronTest {
         AeronServer server = createAeronServer("server-1");
 
         addDisposable(server.newHandler((inbound, outbound) ->
-                Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("1", "2", "3")
+                Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("hello1", "2", "3")
                         .log("server")))
                         .subscribe()));
 
@@ -39,7 +42,7 @@ public class AeronClientTest extends BaseAeronTest {
         }));
 
         StepVerifier.create(processor)
-                .expectNext("1", "2", "3")
+                .expectNext("hello1", "2", "3")
                 .expectNoEvent(Duration.ofMillis(10))
                 .thenCancel()
                 .verify();
@@ -116,8 +119,10 @@ public class AeronClientTest extends BaseAeronTest {
     }
 
     private AeronClient createAeronClient(String name) {
-        return AeronClient.create(name, options ->
-                options.serverChannel(serverChannel));
+        return AeronClient.create(name, options -> {
+                options.clientChannel(clientChannel);
+                options.serverChannel(serverChannel);
+        });
     }
 
     private AeronServer createAeronServer(String name) {

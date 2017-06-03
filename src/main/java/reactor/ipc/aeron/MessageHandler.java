@@ -23,13 +23,13 @@ import java.util.UUID;
  */
 public interface MessageHandler {
 
-    default void onConnect(UUID sessionId, String clientChannel, int clientStreamId, int clientAckStreamId) {
+    default void onConnect(UUID connectRequestId, String clientChannel, int clientControlStreamId, int clientDataStreamId) {
     }
 
-    default void onNext(UUID sessionId, ByteBuffer buffer) {
+    default void onNext(long sessionId, ByteBuffer buffer) {
     }
 
-    default void onConnectAck(UUID sessionId, int serverStreamId) {
+    default void onConnectAck(UUID connectRequestId, long sessionId, int serverDataStreamId) {
     }
 
 }

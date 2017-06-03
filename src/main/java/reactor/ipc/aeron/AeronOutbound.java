@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
  */
 public final class AeronOutbound implements Outbound<ByteBuffer>, Disposable {
 
+    //FIXME: Thread-safety
     private WriteSequencer<ByteBuffer> sequencer;
 
     private final Scheduler scheduler;
@@ -44,19 +45,15 @@ public final class AeronOutbound implements Outbound<ByteBuffer>, Disposable {
 
     private final String channel;
 
-    private final UUID sessionId;
-
     private final AeronOptions options;
 
     public AeronOutbound(String category,
                          AeronWrapper wrapper,
                          String channel,
-                         UUID sessionId,
                          AeronOptions options) {
         this.category = category;
         this.wrapper = wrapper;
         this.channel = channel;
-        this.sessionId = sessionId;
         this.options = options;
         this.scheduler = Schedulers.newParallel("aeron-sender", 1);
     }
@@ -71,7 +68,9 @@ public final class AeronOutbound implements Outbound<ByteBuffer>, Disposable {
         scheduler.dispose();
     }
 
-    public Mono<Void> initialise(int streamId) {
+    public Mono<Void> initialise(long sessionId, int streamId) {
+        System.err.println("initialise(sessionId=" + sessionId + ", streamId=" + streamId + ")");
+
         this.publication = wrapper.addPublication(channel, streamId, "sending data", sessionId);
         this.sequencer = new AeronWriteSequencer(category, publication, options, sessionId);
 

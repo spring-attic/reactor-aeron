@@ -28,11 +28,11 @@ import java.util.UUID;
  */
 final class ClientMessageHandler implements MessageHandler {
 
-    private final UUID sessionId;
+    private final long sessionId;
 
     private final FluxSink<ByteBuffer> emitter;
 
-    public ClientMessageHandler(UUID sessionId, FluxSink<ByteBuffer> emitter) {
+    public ClientMessageHandler(long sessionId, FluxSink<ByteBuffer> emitter) {
         Objects.requireNonNull(sessionId, "sessionId");
 
         this.sessionId = sessionId;
@@ -40,13 +40,13 @@ final class ClientMessageHandler implements MessageHandler {
     }
 
     @Override
-    public void onConnect(UUID sessionId, String clientChannel, int clientStreamId, int clientAckStreamId) {
-        throw new UnsupportedOperationException("Client doesn't support CONNECT requests");
+    public void onConnect(UUID connectRequestId, String clientChannel, int clientControlStreamId, int clientDataStreamId) {
+        throw new UnsupportedOperationException("Client doesn't support " + MessageType.CONNECT + " requests");
     }
 
     @Override
-    public void onNext(UUID sessionId, ByteBuffer buffer) {
-        if (!sessionId.equals(this.sessionId)) {
+    public void onNext(long sessionId, ByteBuffer buffer) {
+        if (sessionId != this.sessionId) {
             throw new RuntimeException("Received " + MessageType.NEXT + " for unknown sessionId: " + sessionId);
         }
         emitter.next(buffer);

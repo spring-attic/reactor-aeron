@@ -48,11 +48,14 @@ import java.util.function.Consumer;
  */
 public final class AeronClient implements AeronConnector {
 
+    //FIXME:
+    public static final int CONNECT_ACK_TIMEOUT = 10;
+
     private final AeronClientOptions options;
 
     private final String name;
 
-    private static int clientStreamIdCounter = 0;
+    private final AtomicInteger clientStreamIdCounter = new AtomicInteger();
 
     private volatile Pooler pooler;
 
@@ -60,11 +63,11 @@ public final class AeronClient implements AeronConnector {
 
     private final AeronWrapper wrapper;
 
-    private final AckMessageHandler ackMessageHandler;
+    private final ControlMessageHandler controlMessageHandler;
 
     private final AtomicInteger handlersCounter = new AtomicInteger(0);
 
-    private Subscription ackSubscription;
+    private Subscription controlSubscription;
 
     private AeronClient(String name, Consumer<AeronClientOptions> optionsConfigurer) {
         AeronClientOptions options = new AeronClientOptions();
@@ -73,7 +76,7 @@ public final class AeronClient implements AeronConnector {
         this.name = name == null ? "client" : name;
         this.logger = Loggers.getLogger(AeronClient.class + "." + this.name);
         this.wrapper = new AeronWrapper(this.name, options);
-        this.ackMessageHandler = new AckMessageHandler();
+        this.controlMessageHandler = new ControlMessageHandler();
     }
 
     public static AeronClient create(String name, Consumer<AeronClientOptions> optionsConfigurer) {
@@ -92,27 +95,27 @@ public final class AeronClient implements AeronConnector {
     public Mono<? extends Disposable> newHandler(
             BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler) {
         if (handlersCounter.getAndIncrement() == 0) {
-            initialiseAckSubscription();
+            initialiseControlSubscription();
         }
         ClientHandler handler = new ClientHandler(ioHandler);
         return handler.start();
     }
 
-    private synchronized void initialiseAckSubscription() {
+    private synchronized void initialiseControlSubscription() {
         if (pooler == null) {
-            ackSubscription = wrapper.addSubscription(options.clientChannel(), options.clientStreamId(), "server acks", null);
+            controlSubscription = wrapper.addSubscription(options.clientChannel(), options.clientStreamId(), "control requests", 0);
             Pooler pooler = new Pooler(this.name);
-            pooler.addSubscription(ackSubscription, ackMessageHandler);
+            pooler.addSubscription(controlSubscription, controlMessageHandler);
             pooler.initialise();
             this.pooler = pooler;
         }
     }
 
-    private synchronized void closeAckSubscription() {
-        pooler.removeSubscription(ackSubscription);
+    private synchronized void closeControlSubscription() {
+        pooler.removeSubscription(controlSubscription);
         pooler.shutdown();
-        ackSubscription.close();
-        ackSubscription = null;
+        controlSubscription.close();
+        controlSubscription = null;
         pooler = null;
     }
 
@@ -120,44 +123,52 @@ public final class AeronClient implements AeronConnector {
 
         private final BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler;
 
-        private final UUID sessionId;
+        private final UUID connectRequestId;
 
         private final AeronClientInbound inbound;
 
         private final AeronOutbound outbound;
 
-        private final int streamId;
+        private final int dataStreamId;
 
         ClientHandler(BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler) {
             this.ioHandler = ioHandler;
-            this.sessionId = UUIDUtils.create();
+            this.connectRequestId = UUIDUtils.create();
 
-            this.outbound = new AeronOutbound(name, wrapper,
-                    options.serverChannel(), sessionId, options);
+            this.outbound = new AeronOutbound(name, wrapper, options.serverChannel(), options);
 
-            this.streamId = options.clientStreamId() + clientStreamIdCounter++;
+            this.dataStreamId = options.clientStreamId() + clientStreamIdCounter.incrementAndGet();
             this.inbound = new AeronClientInbound(pooler, wrapper,
-                    options.clientChannel(), streamId, sessionId, name);
+                    options.clientChannel(), dataStreamId, name);
         }
 
+
         Mono<Disposable> start() {
-            return ackMessageHandler.awaitConnectAck(sessionId)
-                    .and(sendConnect(options.connectTimeoutMillis()), (serverStreamId, avoid) -> serverStreamId)
-                    .map(outbound::initialise)
+            Mono<ConnectAckData> connectAckMono = controlMessageHandler.awaitConnectAck(connectRequestId);
+            Mono<Void> connectMono = sendConnect(options.connectTimeoutMillis());
+            return connectAckMono.untilOther(connectMono)
+                    .flatMap(connectAckData -> {
+                        inbound.initialise(connectAckData.sessionId);
+                        return outbound.initialise(connectAckData.sessionId, connectAckData.serverDataStreamId);
+                    })
                     .doOnSuccess(avoid ->
                             Mono.from(ioHandler.apply(inbound, outbound))
                                     .doOnTerminate((aVoid, th) -> dispose())
-                                    .subscribe())
+                                    .subscribe()
+                    )
                     .then(Mono.just(this));
         }
 
         Mono<Void> sendConnect(int timeoutMillis) {
+            System.err.println("sendConnect called");
+
             //FIXME:
             Publication publication = wrapper.addPublication(options.serverChannel(), options.serverStreamId(),
-                    "sending requests", sessionId);
+                    "sending requests", 0);
 
             return Mono.create(sink -> {
-                ByteBuffer buffer = Protocol.createConnectBody(options.clientChannel(), streamId, options.clientStreamId());
+                ByteBuffer buffer = Protocol.createConnectBody(connectRequestId, options.clientChannel(),
+                        options.clientStreamId(), dataStreamId);
                 long result = 0;
                 Exception cause = null;
                 if (logger.isDebugEnabled()) {
@@ -165,7 +176,7 @@ public final class AeronClient implements AeronConnector {
                 }
                 MessagePublisher publisher = new MessagePublisher(logger, timeoutMillis, timeoutMillis);
                 try {
-                    result = publisher.publish(publication, MessageType.CONNECT, buffer, sessionId);
+                    result = publisher.publish(publication, MessageType.CONNECT, buffer, 0);
                 } catch (Exception ex) {
                     cause = ex;
                 }
@@ -185,35 +196,50 @@ public final class AeronClient implements AeronConnector {
             outbound.dispose();
 
             if (handlersCounter.decrementAndGet() == 0) {
-                closeAckSubscription();
+                closeControlSubscription();
             }
         }
     }
 
-    //FIXME: Rename into ControlMessageHandler?
-    private class AckMessageHandler implements MessageHandler {
+    static class ConnectAckData {
 
-        private final Map<UUID, MonoSink<Integer>> sinkByUuid = new ConcurrentHashMap<>();
+        final long sessionId;
+
+        final int serverDataStreamId;
+
+        public ConnectAckData(long sessionId, int serverDataStreamId) {
+            this.sessionId = sessionId;
+            this.serverDataStreamId = serverDataStreamId;
+        }
+
+    }
+
+    private class ControlMessageHandler implements MessageHandler {
+
+        private final Map<UUID, MonoSink<ConnectAckData>> sinkByConnectRequestId = new ConcurrentHashMap<>();
 
         @Override
-        public void onConnectAck(UUID sessionId, int serverStreamId) {
-            logger.debug("Received {} for sessionId: {}, serverStreamId: {}", MessageType.CONNECT_ACK,
-                    sessionId, serverStreamId);
+        public void onConnectAck(UUID connectRequestId, long sessionId, int serverDataStreamId) {
+            logger.debug("Received {} for connectRequestId: {}, serverStreamId: {}", MessageType.CONNECT_ACK,
+                    connectRequestId, serverDataStreamId);
 
-            MonoSink<Integer> sink = sinkByUuid.get(sessionId);
+            MonoSink<ConnectAckData> sink = sinkByConnectRequestId.get(connectRequestId);
             if (sink == null) {
-                logger.error("Could not find sessionId: {}", sessionId);
+                logger.error("Could not find sessionId: {}", connectRequestId);
             } else {
-                sink.success(serverStreamId);
+                sink.success(new ConnectAckData(sessionId, serverDataStreamId));
             }
         }
 
-        Mono<Integer> awaitConnectAck(UUID sessionId) {
-            return Mono.<Integer>create(sink -> {
-                sinkByUuid.put(sessionId, sink);
+        Mono<ConnectAckData> awaitConnectAck(UUID connectRequestId) {
+            System.err.println("awaitConnectAck called");
+            return Mono.<ConnectAckData>create(sink -> {
+                sinkByConnectRequestId.put(connectRequestId, sink);
                 sink.onDispose(() ->
-                        sinkByUuid.remove(sessionId));
-            }).timeout(Duration.ofSeconds(5));
+                        sinkByConnectRequestId.remove(connectRequestId));
+            })
+                    //FIXME: Move out?
+                    .timeout(Duration.ofSeconds(CONNECT_ACK_TIMEOUT));
         }
 
     }
