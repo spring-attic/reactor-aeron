@@ -17,6 +17,7 @@ package reactor.ipc.aeron.client;
 
 import reactor.ipc.aeron.AeronOptions;
 
+import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -31,18 +32,25 @@ public final class AeronClientOptions extends AeronOptions {
 
     private int clientStreamId = nextClientStreamId.incrementAndGet();
 
+    private Duration ackTimeoutSecs = Duration.ofSeconds(10);
+
     public String clientChannel() {
         return clientChannel;
     }
 
     public void clientChannel(String clientChannel) {
-        Objects.requireNonNull(clientChannel, "clientChannel");
-
-        this.clientChannel = clientChannel;
+        this.clientChannel = Objects.requireNonNull(clientChannel, "clientChannel");
     }
 
     public int clientStreamId() {
         return clientStreamId;
     }
 
+    public Duration ackTimeoutSecs() {
+        return ackTimeoutSecs;
+    }
+
+    public void ackTimeoutSecs(Duration ackTimeoutSecs) {
+        this.ackTimeoutSecs = Objects.requireNonNull(ackTimeoutSecs, "ackTimeoutSecs");
+    }
 }

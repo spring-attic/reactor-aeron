@@ -63,7 +63,10 @@ final class AeronClientInbound implements AeronInbound, Disposable {
     @Override
     public void dispose() {
         pooler.removeSubscription(subscription);
-        subscription.close();
+
+        if (subscription != null) {
+            subscription.close();
+        }
     }
 
 }

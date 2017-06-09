@@ -71,8 +71,9 @@ final class ServerPooler implements MessageHandler {
         this.ioHandler = ioHandler;
         this.options = options;
         this.logger = Loggers.getLogger(AeronServer.class + "." + category);
-        this.pooler = new Pooler(category);
+        Pooler pooler = new Pooler(category);
         pooler.addSubscription(subscription, this);
+        this.pooler = pooler;
     }
 
     public void initialise() {
@@ -89,38 +90,9 @@ final class ServerPooler implements MessageHandler {
                 connectRequestId, clientChannel, clientControlStreamId, clientDataStreamId);
 
         SessionData sessionData = new SessionData(clientChannel, clientDataStreamId, clientControlStreamId,
-                connectRequestId, nextSessionId.incrementAndGet());
+                connectRequestId, nextSessionId.incrementAndGet(),
+                options.serverStreamId() + serverStreamId.incrementAndGet());
         sessionData.initialise();
-    }
-
-    //FIXME: Refactor
-    static class MyMessageHandler implements MessageHandler {
-
-        private final AeronServerInbound inbound;
-
-        private final Logger logger;
-
-        private final long sessionId;
-
-        MyMessageHandler(AeronServerInbound inbound, Logger logger, long sessionId) {
-            this.inbound = inbound;
-            this.logger = logger;
-            this.sessionId = sessionId;
-        }
-
-        @Override
-        public void onNext(long sessionId, ByteBuffer buffer) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("Received {} for sessionId: {}, buffer: {}", MessageType.NEXT, sessionId, buffer);
-            }
-
-            if (this.sessionId != sessionId) {
-                inbound.onNext(buffer);
-            } else {
-                logger.error("Unexpected " + MessageType.NEXT + " for sessionId: " + sessionId);
-            }
-        }
-
     }
 
     @Override
@@ -128,7 +100,7 @@ final class ServerPooler implements MessageHandler {
         throw new UnsupportedOperationException();
     }
 
-    class SessionData implements Disposable {
+    class SessionData implements Disposable, MessageHandler {
 
         final AeronOutbound outbound;
 
@@ -144,7 +116,11 @@ final class ServerPooler implements MessageHandler {
 
         private final long sessionId;
 
-        SessionData(String clientChannel, int clientDataStreamId, int clientControlStreamId, UUID connectRequestId, long sessionId) {
+        private final int serverDataStreamId;
+
+        private volatile Subscription dataSubscription;
+
+        SessionData(String clientChannel, int clientDataStreamId, int clientControlStreamId, UUID connectRequestId, long sessionId, int serverStreamId) {
             this.clientChannel = clientChannel;
             this.clientDataStreamId = clientDataStreamId;
             this.clientControlStreamId = clientControlStreamId;
@@ -152,10 +128,16 @@ final class ServerPooler implements MessageHandler {
             this.connectRequestId = connectRequestId;
             this.sessionId = sessionId;
             this.inbound = new AeronServerInbound(category);
+            this.serverDataStreamId = serverStreamId;
         }
 
         void initialise() {
             sendConnectAck()
+                    .doOnSuccess(avoid -> {
+                        dataSubscription = wrapper.addSubscription(options.serverChannel(),
+                                serverDataStreamId, "client data", sessionId);
+                        pooler.addSubscription(dataSubscription, this);
+                    })
                     .then(outbound.initialise(sessionId, clientDataStreamId))
                     .doOnSuccess(avoid -> {
                         Publisher<Void> publisher = ioHandler.apply(inbound, outbound);
@@ -173,11 +155,11 @@ final class ServerPooler implements MessageHandler {
 
         private Mono<Void> sendConnectAck() {
             return Mono.create(sink -> {
-                Publication publication = wrapper.addPublication(clientChannel, clientControlStreamId, "sending " + MessageType.CONNECT_ACK, sessionId);
+                Publication publication = wrapper.addPublication(clientChannel, clientControlStreamId,
+                        "sending " + MessageType.CONNECT_ACK, sessionId);
                 MessagePublisher publisher = new MessagePublisher(logger, options.connectTimeoutMillis(),
                         options.backpressureTimeoutMillis());
 
-                int serverDataStreamId = options.serverStreamId() + serverStreamId.incrementAndGet();
                 //FIXME: Exceptions handling
                 long result = publisher.publish(publication,
                         MessageType.CONNECT_ACK,
@@ -185,20 +167,34 @@ final class ServerPooler implements MessageHandler {
 
                 if (result > 0) {
                     logger.debug("Sent " + MessageType.CONNECT_ACK + " to: " + AeronUtils.format(publication));
-                    //FIXME: Move out
-                    pooler.addSubscription(wrapper.addSubscription(options.serverChannel(),
-                            serverDataStreamId, "client data", sessionId), new MyMessageHandler(inbound, logger, sessionId));
-
                     sink.success();
                 } else {
                     sink.error(new Exception("Failed to send " + MessageType.CONNECT_ACK));
                 }
+
                 publication.close();
             });
         }
 
         @Override
+        public void onNext(long sessionId, ByteBuffer buffer) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Received {} for sessionId: {}, buffer: {}", MessageType.NEXT, sessionId, buffer);
+            }
+
+            if (this.sessionId != sessionId) {
+                inbound.onNext(buffer);
+            } else {
+                logger.error("Received {} for unexpected sessionId: {}", MessageType.NEXT, sessionId);
+            }
+        }
+
+        @Override
         public void dispose() {
+            if (dataSubscription != null) {
+                pooler.removeSubscription(dataSubscription);
+                dataSubscription.close();
+            }
             outbound.dispose();
             inbound.dispose();
         }
