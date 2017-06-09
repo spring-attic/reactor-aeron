@@ -13,17 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package reactor.ipc.aeron.publisher;
+package reactor.ipc.aeron;
 
-import org.reactivestreams.Subscription;
-import reactor.core.publisher.MonoSink;
+import java.nio.ByteBuffer;
+import java.util.UUID;
 
-public interface WriteSequencerSubscription extends Subscription {
+/**
+ * @author Anatoly Kadyshev
+ */
+public interface MessageHandler {
 
-    long getProduced();
+    default void onConnect(UUID connectRequestId, String clientChannel, int clientControlStreamId, int clientDataStreamId) {
+    }
 
-    void drainNextPublisher();
+    default void onNext(long sessionId, ByteBuffer buffer) {
+    }
 
-    MonoSink<?> getPromise();
+    default void onConnectAck(UUID connectRequestId, long sessionId, int serverDataStreamId) {
+    }
 
 }

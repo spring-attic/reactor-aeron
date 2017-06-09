@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package reactor.ipc.aeron.publisher;
+package reactor.ipc.aeron;
 
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
@@ -37,7 +37,7 @@ import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
-public final class WriteSequencer<T> {
+abstract class WriteSequencer<T> {
 
     private static final Logger log = Loggers.getLogger(WriteSequencer.class);
     /**
@@ -53,10 +53,6 @@ public final class WriteSequencer<T> {
     // a publisher is being drained
     private volatile boolean innerActive;
 
-    private final InnerSubscriber inner;
-
-    private final Consumer<Throwable> errorHandler;
-
     private final Consumer<Object> discardedHandler;
 
     private final Predicate<Void> backpressureChecker;
@@ -64,13 +60,9 @@ public final class WriteSequencer<T> {
     private final BiConsumer<Object, MonoSink<?>> messageConsumer;
 
     @SuppressWarnings("unchecked")
-    public WriteSequencer(Subscriber<T> delegate,
-                          Consumer<Throwable> errorHandler,
-                          Consumer<Object> discardedHandler,
+    public WriteSequencer(Consumer<Object> discardedHandler,
                           Predicate<Void> backpressureChecker,
                           BiConsumer<Object, MonoSink<?>> messageConsumer) {
-        this.inner = new InnerSubscriber<>(this, delegate);
-        this.errorHandler = errorHandler;
         this.discardedHandler = discardedHandler;
         this.backpressureChecker = backpressureChecker;
         this.pendingWrites = QueueSupplier.unbounded()
@@ -78,6 +70,10 @@ public final class WriteSequencer<T> {
         this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
         this.messageConsumer = messageConsumer;
     }
+
+    abstract InnerSubscriber<T> getInner();
+
+    abstract Consumer<Throwable> getErrorHandler();
 
     public Mono<Void> add(Object msg, Scheduler scheduler) {
         if (!(msg instanceof Publisher) && messageConsumer == null) {
@@ -101,6 +97,7 @@ public final class WriteSequencer<T> {
 
     @SuppressWarnings("unchecked")
     public void drain() {
+        InnerSubscriber<T> inner = getInner();
         if (WIP.getAndIncrement(this) == 0) {
 
             for ( ; ; ) {
@@ -123,7 +120,7 @@ public final class WriteSequencer<T> {
                     promise = (MonoSink<?>) v;
                 }
                 catch (Throwable e) {
-                    errorHandler.accept(e);
+                    getErrorHandler().accept(e);
                     return;
                 }
 
@@ -139,7 +136,7 @@ public final class WriteSequencer<T> {
                 v = pendingWrites.poll();
 
                 if (v instanceof Publisher) {
-                    Publisher<?> p = (Publisher<?>) v;
+                    Publisher<T> p = (Publisher<T>) v;
 
                     if (p instanceof Callable) {
                         @SuppressWarnings("unchecked") Callable<?> supplier = (Callable<?>) p;
@@ -165,7 +162,7 @@ public final class WriteSequencer<T> {
                         else {
                             innerActive = true;
                             inner.setResultSink(promise);
-                            inner.onSubscribe(Operators.scalarSubscription(inner, vr));
+                            inner.onSubscribe(Operators.scalarSubscription(inner, (T)vr));
                         }
                     }
                     else {
@@ -189,7 +186,7 @@ public final class WriteSequencer<T> {
                 promise = (MonoSink<?>) v;
             }
             catch (Throwable e) {
-                errorHandler.accept(e);
+                getErrorHandler().accept(e);
                 return;
             }
             v = pendingWrites.poll();
@@ -203,12 +200,9 @@ public final class WriteSequencer<T> {
         }
     }
 
-    static final class InnerSubscriber<T>
-            implements Subscriber<T>, WriteSequencerSubscription {
+    abstract static class InnerSubscriber<T> implements Subscriber<T>, Subscription {
 
         final WriteSequencer<T> parent;
-
-        final Subscriber<T> delegate;
 
         volatile Subscription missedSubscription;
         volatile long         missedRequested;
@@ -231,10 +225,8 @@ public final class WriteSequencer<T> {
         long           produced;
         MonoSink<?>    promise;
 
-        InnerSubscriber(WriteSequencer<T> parent, Subscriber<T> delegate) {
+        InnerSubscriber(WriteSequencer<T> parent) {
             this.parent = parent;
-            this.delegate = delegate;
-            delegate.onSubscribe(this);
         }
 
         public void setResultSink(MonoSink<?> promise) {
@@ -260,8 +252,10 @@ public final class WriteSequencer<T> {
                 produced(p);
             }
 
-            delegate.onComplete();
+            doOnComplete();
         }
+
+        abstract void doOnComplete();
 
         @Override
         public void onError(Throwable t) {
@@ -273,15 +267,19 @@ public final class WriteSequencer<T> {
                 produced(p);
             }
 
-            delegate.onError(t);
+            doOnError(t);
         }
+
+        abstract void doOnError(Throwable t);
 
         @Override
         public void onNext(T t) {
             produced++;
 
-            delegate.onNext(t);
+            doOnNext(t);
         }
+
+        abstract void doOnNext(T t);
 
         @Override
         public void onSubscribe(Subscription s) {
@@ -464,18 +462,7 @@ public final class WriteSequencer<T> {
             drain();
         }
 
-        @Override
-        public long getProduced() {
-            return produced;
-        }
-
-        @Override
-        public MonoSink<?> getPromise() {
-            return promise;
-        }
-
-        @Override
-        public void drainNextPublisher() {
+        protected void drainNextPublisher() {
             parent.drain();
         }
 

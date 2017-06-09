@@ -7,12 +7,17 @@ import reactor.ipc.aeron.client.AeronClient;
 import reactor.ipc.aeron.server.AeronServer;
 import reactor.test.StepVerifier;
 
+import java.time.Duration;
+
 /**
  * @author Anatoly Kadyshev
  */
 public class AeronClientTest extends BaseAeronTest {
 
-    private String serverChannel = "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort();
+    private String serverChannel = "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort(13000);
+
+    private String clientChannel = "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort();
+
 
     @Test(expected = RuntimeException.class)
     public void testClientCouldNotConnectToServer() {
@@ -24,10 +29,10 @@ public class AeronClientTest extends BaseAeronTest {
     public void testClientReceivesSignalsFromServer() throws InterruptedException {
         AeronServer server = createAeronServer("server-1");
 
-        addDisposable(server.newHandler((inbound, outbound) -> {
-            Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("1", "2", "3").log("server"))).subscribe();
-            return Mono.never();
-        }));
+        addDisposable(server.newHandler((inbound, outbound) ->
+                Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("hello1", "2", "3")
+                        .log("server")))
+                        .subscribe()));
 
         ReplayProcessor<String> processor = ReplayProcessor.create();
         AeronClient client = createAeronClient(null);
@@ -37,7 +42,10 @@ public class AeronClientTest extends BaseAeronTest {
         }));
 
         StepVerifier.create(processor)
-                .expectNext("1", "2", "3");
+                .expectNext("hello1", "2", "3")
+                .expectNoEvent(Duration.ofMillis(10))
+                .thenCancel()
+                .verify();
     }
 
     @Test
@@ -62,8 +70,17 @@ public class AeronClientTest extends BaseAeronTest {
             return Mono.never();
         }));
 
-        StepVerifier.create(processor1).expectNext("1", "2", "3");
-        StepVerifier.create(processor2).expectNext("1", "2", "3");
+        StepVerifier.create(processor1)
+                .expectNext("1", "2", "3")
+                .expectNoEvent(Duration.ofMillis(100))
+                .thenCancel()
+                .verify();
+
+        StepVerifier.create(processor2)
+                .expectNext("1", "2", "3")
+                .expectNoEvent(Duration.ofMillis(100))
+                .thenCancel()
+                .verify();
     }
 
     @Test
@@ -90,16 +107,22 @@ public class AeronClientTest extends BaseAeronTest {
 
         StepVerifier.create(processor1)
                 .expectNext("1", "2", "3")
-                .expectNextCount(3);
+                .expectNoEvent(Duration.ofMillis(100))
+                .thenCancel()
+                .verify();
 
         StepVerifier.create(processor2)
                 .expectNext("1", "2", "3")
-                .expectNextCount(3);
+                .expectNoEvent(Duration.ofMillis(100))
+                .thenCancel()
+                .verify();
     }
 
     private AeronClient createAeronClient(String name) {
-        return AeronClient.create(name, options ->
-                options.serverChannel(serverChannel));
+        return AeronClient.create(name, options -> {
+                options.clientChannel(clientChannel);
+                options.serverChannel(serverChannel);
+        });
     }
 
     private AeronServer createAeronServer(String name) {

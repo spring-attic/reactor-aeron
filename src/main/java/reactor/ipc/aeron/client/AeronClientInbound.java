@@ -21,29 +21,38 @@ import reactor.core.publisher.FluxProcessor;
 import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronFlux;
+import reactor.ipc.aeron.Pooler;
 
 import java.util.Objects;
-import java.util.UUID;
 
 /**
  * @author Anatoly Kadyshev
  */
 final class AeronClientInbound implements AeronInbound, Disposable {
 
-    private final ClientPooler pooler;
-
     private final AeronFlux flux;
 
-    public AeronClientInbound(AeronWrapper wrapper, String channel, int streamId, UUID sessionId, String name) {
+    //FIXME: Rethink
+    private volatile Subscription subscription;
+
+    private final Pooler pooler;
+
+    //FIXME: Rethink
+    private volatile long sessionId;
+
+    public AeronClientInbound(Pooler pooler, AeronWrapper wrapper, String channel, int streamId, String name) {
+        this.pooler = pooler;
         Objects.requireNonNull(sessionId, "sessionId");
 
-        Subscription subscription = wrapper.addSubscription(channel, streamId, "receiving data", sessionId);
-
-        this.pooler = new ClientPooler(subscription, sessionId, name);
         this.flux = new AeronFlux(FluxProcessor.create(emitter -> {
-            pooler.setFluxSink(emitter);
-            pooler.initialise();
+            this.subscription = wrapper.addSubscription(channel, streamId, "receiving data", sessionId);
+            ClientMessageHandler messageHandler = new ClientMessageHandler(sessionId, emitter);
+            pooler.addSubscription(subscription, messageHandler);
         }));
+    }
+
+    public void initialise(long sessionId) {
+        this.sessionId = sessionId;
     }
 
     @Override
@@ -53,7 +62,11 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
     @Override
     public void dispose() {
-        pooler.shutdown();
+        pooler.removeSubscription(subscription);
+
+        if (subscription != null) {
+            subscription.close();
+        }
     }
 
 }

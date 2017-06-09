@@ -19,9 +19,10 @@ package reactor.ipc.aeron;
 import io.aeron.FragmentAssembler;
 import io.aeron.Subscription;
 import io.aeron.logbuffer.FragmentHandler;
-import io.aeron.logbuffer.Header;
-import org.agrona.DirectBuffer;
+import org.agrona.collections.ArrayUtil;
 import org.agrona.concurrent.BackoffIdleStrategy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.util.concurrent.ExecutorService;
@@ -34,28 +35,40 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class Pooler implements Runnable {
 
-    //FIXME: Use something from reactor
+    private final Logger logger;
+
     private final ExecutorService executor;
 
     private volatile boolean isRunning;
 
-    private Subscription subscription;
+    private volatile SubscriptonData[] subscriptions = new SubscriptonData[0];
 
-    private FragmentHandler delegateHandler;
+    public Pooler(String name) {
+        this.logger = LoggerFactory.getLogger(this.getClass() + "." + name);
+        this.executor = createExecutor(name);
+    }
 
-    public Pooler(Subscription subscription, FragmentHandler delegateHandler, String name) {
-        this.subscription = subscription;
-        this.delegateHandler = delegateHandler;
-        this.executor = Executors.newSingleThreadExecutor(r -> {
+    private ExecutorService createExecutor(String name) {
+        return Executors.newSingleThreadExecutor(r -> {
             Thread thread = new Thread(r, name + "-[pooler]");
             thread.setDaemon(true);
             return thread;
         });
     }
 
+    //FIXME: Thread-safety
     public void initialise() {
-        isRunning = true;
-        executor.submit(this);
+        if (!isRunning) {
+            isRunning = true;
+            executor.submit(this);
+        }
+    }
+
+    public synchronized void addSubscription(Subscription subscription, MessageHandler messageHandler) {
+        FragmentAssembler handler = new FragmentAssembler(new PoolerFragmentHandler(messageHandler));
+        SubscriptonData data = new SubscriptonData(subscription, handler);
+
+        this.subscriptions = ArrayUtil.add(subscriptions, data);
     }
 
     public Mono<Void> shutdown() {
@@ -66,8 +79,8 @@ public class Pooler implements Runnable {
             executor.shutdown();
             try {
                 while (shouldRetry.get()) {
-                    boolean wasShutdown = executor.awaitTermination(1, TimeUnit.SECONDS);
-                    if (wasShutdown) {
+                    boolean isTerminated = executor.awaitTermination(1, TimeUnit.SECONDS);
+                    if (isTerminated) {
                         break;
                     }
                 }
@@ -75,22 +88,48 @@ public class Pooler implements Runnable {
                 Thread.currentThread().interrupt();
             }
             sink.success();
+
+            logger.debug("Terminated");
         });
     }
 
     @Override
     public void run() {
+        logger.debug("Started");
+
         BackoffIdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
-        FragmentHandler fragmentHandler = new FragmentAssembler(new FragmentHandler() {
-            @Override
-            public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
-                delegateHandler.onFragment(buffer, offset, length, header);
-            }
-        });
         while (isRunning) {
-            int nReceived = subscription.poll(fragmentHandler, 1);
-            idleStrategy.idle(nReceived);
+            SubscriptonData[] ss = subscriptions;
+            for (int i = 0; i < ss.length; i++) {
+                SubscriptonData data = ss[i];
+                int nReceived = data.subscription.poll(data.handler, 1);
+                idleStrategy.idle(nReceived);
+            }
         }
+    }
+
+    public synchronized void removeSubscription(Subscription subscription) {
+        SubscriptonData[] ss = subscriptions;
+        for (int i = 0; i < ss.length; i++) {
+            SubscriptonData data = ss[i];
+            if (data.subscription == subscription) {
+                this.subscriptions = ArrayUtil.remove(subscriptions, i);
+                break;
+            }
+        }
+    }
+
+    static class SubscriptonData {
+
+        final Subscription subscription;
+
+        final FragmentHandler handler;
+
+        SubscriptonData(Subscription subscription, FragmentHandler handler) {
+            this.subscription = subscription;
+            this.handler = handler;
+        }
+
     }
 
 }

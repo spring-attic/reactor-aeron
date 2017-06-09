@@ -15,6 +15,7 @@
  */
 package reactor.ipc.aeron.server;
 
+import reactor.core.Disposable;
 import reactor.core.publisher.TopicProcessor;
 import reactor.ipc.aeron.AeronFlux;
 import reactor.ipc.aeron.AeronInbound;
@@ -24,14 +25,13 @@ import java.nio.ByteBuffer;
 /**
  * @author Anatoly Kadyshev
  */
-final class AeronServerInbound implements AeronInbound {
+final class AeronServerInbound implements AeronInbound, Disposable {
 
     private final AeronFlux flux;
 
     private final TopicProcessor<ByteBuffer> processor;
 
-    public AeronServerInbound(String name) {
-        //FIXME: Use different processor
+    AeronServerInbound(String name) {
         this.processor = TopicProcessor.create(name);
         this.flux = new AeronFlux(processor);
     }
@@ -41,8 +41,12 @@ final class AeronServerInbound implements AeronInbound {
         return flux;
     }
 
-    public void onNext(ByteBuffer buffer) {
+    void onNext(ByteBuffer buffer) {
         processor.onNext(buffer);
     }
 
+    @Override
+    public void dispose() {
+        processor.dispose();
+    }
 }

@@ -42,12 +42,12 @@ public final class DriverManager {
 
     private final State notStartedState = new NotStartedState();
 
-    //FIXME:
+    //TODO: Make configurable
     private final int retryShutdownMillis = 250;
 
     private final long shutdownTimeoutNs = TimeUnit.SECONDS.toNanos(5);
 
-    //FIXME:
+    //TODO: Make configurable
     private final boolean deleteAeronDirsOnExit = true;
 
     private Thread shutdownHook;

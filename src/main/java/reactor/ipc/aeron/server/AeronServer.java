@@ -20,19 +20,12 @@ import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.AeronConnector;
-import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
-import reactor.ipc.aeron.SignalHandler;
-import reactor.util.Logger;
-import reactor.util.Loggers;
+import reactor.ipc.aeron.AeronWrapper;
 
-import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
@@ -70,12 +63,10 @@ public final class AeronServer implements AeronConnector {
         Objects.requireNonNull(ioHandler, "ioHandler");
 
         return Mono.create(sink -> {
-            String category = name;
-            AeronWrapper wrapper = new AeronWrapper(category, options);
+            AeronWrapper wrapper = new AeronWrapper(name, options);
             Subscription subscription = wrapper.addSubscription(options.serverChannel(), options.serverStreamId(),
-                    "receiving data and requests", null);
-            ServerPooler pooler = new ServerPooler(subscription,
-                    new InnerSignalHandler(category, wrapper, ioHandler, options), name);
+                    "control requests", 0);
+            ServerPooler pooler = new ServerPooler(name, wrapper, ioHandler, options, subscription);
             pooler.initialise();
 
             sink.success(() -> {
@@ -86,58 +77,4 @@ public final class AeronServer implements AeronConnector {
         });
     }
 
-    private static class InnerSignalHandler implements SignalHandler {
-
-        private final Map<UUID, AeronServerInbound> inboundBySessionId;
-
-        private final String category;
-
-        private final AeronWrapper wrapper;
-
-        private final BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler;
-
-        private final AeronOptions options;
-
-        private final Logger logger;
-
-        public InnerSignalHandler(String category,
-                                  AeronWrapper wrapper,
-                                  BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler,
-                                  AeronOptions options) {
-            this.category = category;
-            this.wrapper = wrapper;
-            this.ioHandler = ioHandler;
-            this.options = options;
-            this.inboundBySessionId = new HashMap<>();
-            this.logger = Loggers.getLogger(AeronServer.class + "." + category);
-        }
-
-        @Override
-        public void onConnect(UUID sessionId, String channel, int streamId) {
-            logger.debug("Received CONNECT for sessionId: {}, channel/streamId: {}/{}", sessionId, channel, streamId);
-
-            AeronOutbound outbound = new AeronOutbound(category, wrapper, channel, streamId, sessionId, options);
-            AeronServerInbound inbound = new AeronServerInbound(category);
-            inboundBySessionId.put(sessionId, inbound);
-            Publisher<Void> publisher = ioHandler.apply(inbound, outbound);
-            Mono.from(publisher).doOnSuccess(avoid -> {
-                inboundBySessionId.remove(sessionId);
-                logger.debug("Closed session with sessionId: {}", sessionId);
-            }).subscribe();
-        }
-
-        @Override
-        public void onNext(UUID sessionId, ByteBuffer buffer) {
-            logger.debug("Received NEXT - sessionId: {}, buffer: {}", sessionId, buffer);
-
-            AeronServerInbound inbound = inboundBySessionId.get(sessionId);
-            if (inbound == null) {
-                //FIXME: Handle
-                logger.error("Could not find inbound for sessionId: {}", sessionId);
-                return;
-            }
-
-            inbound.onNext(buffer);
-        }
-    }
 }

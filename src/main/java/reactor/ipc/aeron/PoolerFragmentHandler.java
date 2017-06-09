@@ -32,9 +32,9 @@ public class PoolerFragmentHandler implements FragmentHandler {
 
     private Logger logger = Loggers.getLogger(PoolerFragmentHandler.class);
 
-    private final SignalHandler handler;
+    private final MessageHandler handler;
 
-    public PoolerFragmentHandler(SignalHandler handler) {
+    public PoolerFragmentHandler(MessageHandler handler) {
         this.handler = handler;
     }
 
@@ -43,28 +43,47 @@ public class PoolerFragmentHandler implements FragmentHandler {
         int index = offset;
         int type = buffer.getByte(index);
         index += BitUtil.SIZE_OF_BYTE;
-        long sessionIdMostSigBits = buffer.getLong(index);
+        long sessionId = buffer.getLong(index);
         index += BitUtil.SIZE_OF_LONG;
-        long sessionIdLeastSigBits = buffer.getLong(index);
-        index += BitUtil.SIZE_OF_LONG;
-        UUID sessionId = new UUID(sessionIdMostSigBits, sessionIdLeastSigBits);
+
+        logger.debug("Received type: {}", type);
 
         if (type == MessageType.CONNECT.ordinal()) {
+            long mostSigBits = buffer.getLong(index);
+            index += BitUtil.SIZE_OF_LONG;
+            long leastSigBits = buffer.getLong(index);
+            index += BitUtil.SIZE_OF_LONG;
+            UUID connectRequestId = new UUID(mostSigBits, leastSigBits);
+
             int channelLength = buffer.getInt(index);
             String channel = buffer.getStringUtf8(index, channelLength);
             index += BitUtil.SIZE_OF_INT + channelLength;
-            int streamId = buffer.getInt(index);
 
-            handler.onConnect(sessionId, channel, streamId);
+            int clientControlStreamId = buffer.getInt(index);
+            index += BitUtil.SIZE_OF_INT;
+
+            int clientDataStreamId = buffer.getInt(index);
+
+            handler.onConnect(connectRequestId, channel, clientControlStreamId, clientDataStreamId);
         } else if (type == MessageType.NEXT.ordinal()) {
             int bytesLength = length - (index - offset);
             ByteBuffer dst = ByteBuffer.allocate(bytesLength);
             buffer.getBytes(index, dst, bytesLength);
             dst.rewind();
-            
+
             handler.onNext(sessionId, dst);
+        } else if (type == MessageType.CONNECT_ACK.ordinal()) {
+            int serverDataStreamId = buffer.getInt(index);
+            index += BitUtil.SIZE_OF_INT;
+
+            long mostSigBits = buffer.getLong(index);
+            index += BitUtil.SIZE_OF_LONG;
+            long leastSigBits = buffer.getLong(index);
+            UUID connectRequestId = new UUID(mostSigBits, leastSigBits);
+
+            handler.onConnectAck(connectRequestId, sessionId, serverDataStreamId);
         } else {
-            logger.error("Unknown type: {}", type);
+            logger.error("Unknown message type id: {}", type);
         }
     }
 

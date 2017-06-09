@@ -44,7 +44,7 @@ public class MessagePublisher {
         this.waitBackpressuredMillis = waitBackpressuredMillis;
     }
 
-    public long publish(Publication publication, MessageType msgType, ByteBuffer msgBody, UUID sessionId) {
+    public long publish(Publication publication, MessageType msgType, ByteBuffer msgBody, long sessionId) {
         BufferClaim bufferClaim = new BufferClaim();
         int headerSize = Protocol.HEADER_SIZE;
         int size = headerSize + msgBody.remaining();
