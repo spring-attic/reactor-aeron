@@ -22,8 +22,6 @@ import reactor.core.Disposable;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-import java.util.UUID;
-
 /**
  * @author Anatoly Kadyshev
  */

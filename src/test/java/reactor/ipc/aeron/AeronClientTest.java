@@ -31,8 +31,7 @@ public class AeronClientTest extends BaseAeronTest {
 
         addDisposable(server.newHandler((inbound, outbound) ->
                 Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("hello1", "2", "3")
-                        .log("server")))
-                        .subscribe()));
+                        .log("server")))));
 
         ReplayProcessor<String> processor = ReplayProcessor.create();
         AeronClient client = createAeronClient(null);

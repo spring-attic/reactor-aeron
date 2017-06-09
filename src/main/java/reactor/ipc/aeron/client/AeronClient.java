@@ -51,7 +51,7 @@ public final class AeronClient implements AeronConnector {
 
     private final String name;
 
-    private final AtomicInteger clientStreamIdCounter = new AtomicInteger();
+    private static final AtomicInteger streamIdCounter = new AtomicInteger();
 
     //TODO: shutdown it
     private final Pooler pooler;
@@ -66,6 +66,8 @@ public final class AeronClient implements AeronConnector {
 
     private Subscription controlSubscription;
 
+    private final int controlStreamId;
+
     private AeronClient(String name, Consumer<AeronClientOptions> optionsConfigurer) {
         AeronClientOptions options = new AeronClientOptions();
         optionsConfigurer.accept(options);
@@ -75,6 +77,7 @@ public final class AeronClient implements AeronConnector {
         this.wrapper = new AeronWrapper(this.name, options);
         this.controlMessageHandler = new ControlMessageHandler();
         this.pooler = new Pooler(this.name);
+        this.controlStreamId = streamIdCounter.incrementAndGet();
     }
 
     public static AeronClient create(String name, Consumer<AeronClientOptions> optionsConfigurer) {
@@ -99,7 +102,7 @@ public final class AeronClient implements AeronConnector {
     synchronized void clientHandlerCreated() {
         if (handlersCounter++ == 0) {
             controlSubscription = wrapper.addSubscription(
-                    options.clientChannel(), options.clientStreamId(), "control requests", 0);
+                    options.clientChannel(), controlStreamId, "control requests", 0);
             pooler.addSubscription(controlSubscription, controlMessageHandler);
             pooler.initialise();
         }
@@ -123,7 +126,7 @@ public final class AeronClient implements AeronConnector {
 
         private final AeronOutbound outbound;
 
-        private final int dataStreamId;
+        private final int clientSessionStreamId;
 
         ClientHandler(BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler) {
             this.ioHandler = ioHandler;
@@ -131,9 +134,9 @@ public final class AeronClient implements AeronConnector {
 
             this.outbound = new AeronOutbound(name, wrapper, options.serverChannel(), options);
 
-            this.dataStreamId = options.clientStreamId() + clientStreamIdCounter.incrementAndGet();
+            this.clientSessionStreamId = streamIdCounter.incrementAndGet();
             this.inbound = new AeronClientInbound(pooler, wrapper,
-                    options.clientChannel(), dataStreamId, name);
+                    options.clientChannel(), clientSessionStreamId);
         }
 
         Mono<Disposable> start() {
@@ -146,7 +149,7 @@ public final class AeronClient implements AeronConnector {
                     .untilOther(connectMono)
                     .flatMap(connectAckData -> {
                         inbound.initialise(connectAckData.sessionId);
-                        return outbound.initialise(connectAckData.sessionId, connectAckData.serverDataStreamId);
+                        return outbound.initialise(connectAckData.sessionId, connectAckData.serverSessionStreamId);
                     })
                     .doOnSuccess(avoid ->
                             Mono.from(ioHandler.apply(inbound, outbound))
@@ -162,7 +165,7 @@ public final class AeronClient implements AeronConnector {
                         "sending requests", 0);
 
                 ByteBuffer buffer = Protocol.createConnectBody(connectRequestId, options.clientChannel(),
-                        options.clientStreamId(), dataStreamId);
+                        controlStreamId, clientSessionStreamId);
                 long result = 0;
                 Exception cause = null;
                 if (logger.isDebugEnabled()) {
@@ -199,11 +202,11 @@ public final class AeronClient implements AeronConnector {
 
         final long sessionId;
 
-        final int serverDataStreamId;
+        final int serverSessionStreamId;
 
-        ConnectAckData(long sessionId, int serverDataStreamId) {
+        ConnectAckData(long sessionId, int serverSessionStreamId) {
             this.sessionId = sessionId;
-            this.serverDataStreamId = serverDataStreamId;
+            this.serverSessionStreamId = serverSessionStreamId;
         }
 
     }
@@ -213,15 +216,15 @@ public final class AeronClient implements AeronConnector {
         private final Map<UUID, MonoSink<ConnectAckData>> sinkByConnectRequestId = new ConcurrentHashMap<>();
 
         @Override
-        public void onConnectAck(UUID connectRequestId, long sessionId, int serverDataStreamId) {
-            logger.debug("Received {} for connectRequestId: {}, serverStreamId: {}", MessageType.CONNECT_ACK,
-                    connectRequestId, serverDataStreamId);
+        public void onConnectAck(UUID connectRequestId, long sessionId, int serverSessionStreamId) {
+            logger.debug("Received {} for connectRequestId: {}, serverSessionStreamId: {}", MessageType.CONNECT_ACK,
+                    connectRequestId, serverSessionStreamId);
 
             MonoSink<ConnectAckData> sink = sinkByConnectRequestId.get(connectRequestId);
             if (sink == null) {
                 logger.error("Could not find sessionId: {}", connectRequestId);
             } else {
-                sink.success(new ConnectAckData(sessionId, serverDataStreamId));
+                sink.success(new ConnectAckData(sessionId, serverSessionStreamId));
             }
         }
 

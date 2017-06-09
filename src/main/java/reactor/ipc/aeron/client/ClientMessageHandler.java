@@ -40,7 +40,7 @@ final class ClientMessageHandler implements MessageHandler {
     }
 
     @Override
-    public void onConnect(UUID connectRequestId, String clientChannel, int clientControlStreamId, int clientDataStreamId) {
+    public void onConnect(UUID connectRequestId, String clientChannel, int clientControlStreamId, int clientSessionStreamId) {
         throw new UnsupportedOperationException("Client doesn't support " + MessageType.CONNECT + " requests");
     }
 

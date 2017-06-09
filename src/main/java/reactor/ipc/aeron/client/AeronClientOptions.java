@@ -19,18 +19,13 @@ import reactor.ipc.aeron.AeronOptions;
 
 import java.time.Duration;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author Anatoly Kadyshev
  */
 public final class AeronClientOptions extends AeronOptions {
 
-    private static final AtomicInteger nextClientStreamId = new AtomicInteger(0);
-
     private String clientChannel = "aeron:udp?endpoint=localhost:12001";
-
-    private int clientStreamId = nextClientStreamId.incrementAndGet();
 
     private Duration ackTimeoutSecs = Duration.ofSeconds(10);
 
@@ -40,10 +35,6 @@ public final class AeronClientOptions extends AeronOptions {
 
     public void clientChannel(String clientChannel) {
         this.clientChannel = Objects.requireNonNull(clientChannel, "clientChannel");
-    }
-
-    public int clientStreamId() {
-        return clientStreamId;
     }
 
     public Duration ackTimeoutSecs() {

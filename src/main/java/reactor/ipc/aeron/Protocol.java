@@ -31,7 +31,8 @@ public class Protocol {
         return index;
     }
 
-    public static ByteBuffer createConnectBody(UUID connectRequestId, String clientChannel, int clientControlStreamId, int clientDataStreamId) {
+    public static ByteBuffer createConnectBody(UUID connectRequestId, String clientChannel, int clientControlStreamId,
+                                               int clientSessionStreamId) {
         byte[] clientChannelBytes = clientChannel.getBytes(StandardCharsets.UTF_8);
         byte[] bytes = new byte[clientChannelBytes.length + BitUtil.SIZE_OF_INT * 3 + BitUtil.SIZE_OF_LONG * 2];
         UnsafeBuffer buffer = new UnsafeBuffer(bytes);
@@ -46,17 +47,17 @@ public class Protocol {
         buffer.putInt(index, clientControlStreamId);
         index += BitUtil.SIZE_OF_INT;
 
-        buffer.putInt(index, clientDataStreamId);
+        buffer.putInt(index, clientSessionStreamId);
         index += BitUtil.SIZE_OF_INT;
 
         return ByteBuffer.wrap(bytes, 0, index);
     }
 
-    public static ByteBuffer createConnectAckBody(UUID connectRequestId, int serverDataStreamId) {
+    public static ByteBuffer createConnectAckBody(UUID connectRequestId, int serverSessionStreamId) {
         byte array[] = new byte[BitUtil.SIZE_OF_INT + SIZE_OF_UUID];
         UnsafeBuffer buffer = new UnsafeBuffer(array);
         int index = 0;
-        buffer.putInt(index, serverDataStreamId);
+        buffer.putInt(index, serverSessionStreamId);
         index += BitUtil.SIZE_OF_INT;
         putUuid(buffer, index, connectRequestId);
         return ByteBuffer.wrap(array);

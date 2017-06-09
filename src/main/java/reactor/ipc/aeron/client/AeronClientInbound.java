@@ -18,12 +18,10 @@ package reactor.ipc.aeron.client;
 import io.aeron.Subscription;
 import reactor.core.Disposable;
 import reactor.core.publisher.FluxProcessor;
-import reactor.ipc.aeron.AeronWrapper;
-import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronFlux;
+import reactor.ipc.aeron.AeronInbound;
+import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.Pooler;
-
-import java.util.Objects;
 
 /**
  * @author Anatoly Kadyshev
@@ -37,21 +35,29 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
     private final Pooler pooler;
 
+    private final AeronWrapper wrapper;
+
+    private final String channel;
+
+    private final int streamId;
+
     //FIXME: Rethink
     private volatile long sessionId;
 
-    public AeronClientInbound(Pooler pooler, AeronWrapper wrapper, String channel, int streamId, String name) {
+    public AeronClientInbound(Pooler pooler, AeronWrapper wrapper, String channel, int streamId) {
         this.pooler = pooler;
-        Objects.requireNonNull(sessionId, "sessionId");
+        this.wrapper = wrapper;
+        this.channel = channel;
+        this.streamId = streamId;
 
         this.flux = new AeronFlux(FluxProcessor.create(emitter -> {
-            this.subscription = wrapper.addSubscription(channel, streamId, "receiving data", sessionId);
             ClientMessageHandler messageHandler = new ClientMessageHandler(sessionId, emitter);
             pooler.addSubscription(subscription, messageHandler);
         }));
     }
 
     public void initialise(long sessionId) {
+        this.subscription = wrapper.addSubscription(channel, streamId, "receiving data", sessionId);
         this.sessionId = sessionId;
     }
 

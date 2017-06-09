@@ -25,17 +25,18 @@ import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.AeronWrapper;
+import reactor.ipc.aeron.MessageHandler;
 import reactor.ipc.aeron.MessagePublisher;
 import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.Pooler;
 import reactor.ipc.aeron.Protocol;
-import reactor.ipc.aeron.MessageHandler;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 
 /**
@@ -51,15 +52,13 @@ final class ServerPooler implements MessageHandler {
 
     private final AeronOptions options;
 
-    //FIXME: Get rid of
     private final Pooler pooler;
 
     private final Logger logger;
 
-    //FIXME: Rethink
-    static AtomicInteger serverStreamId = new AtomicInteger();
+    private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
-    private final AtomicInteger nextSessionId = new AtomicInteger(0);
+    private final AtomicLong nextSessionId = new AtomicLong(0);
 
     ServerPooler(String category,
                  AeronWrapper wrapper,
@@ -85,18 +84,19 @@ final class ServerPooler implements MessageHandler {
     }
 
     @Override
-    public void onConnect(UUID connectRequestId, String clientChannel, int clientControlStreamId, int clientDataStreamId) {
-        logger.debug("Received CONNECT for connectRequestId: {}, channel/clientControlStreamId/clientDataStreamId: {}/{}/{}",
-                connectRequestId, clientChannel, clientControlStreamId, clientDataStreamId);
+    public void onConnect(UUID connectRequestId, String clientChannel, int clientControlStreamId, int clientSessionStreamId) {
+        logger.debug("Received CONNECT for connectRequestId: {}, channel/clientControlStreamId/clientSessionStreamId: {}/{}/{}",
+                connectRequestId, clientChannel, clientControlStreamId, clientSessionStreamId);
 
-        SessionData sessionData = new SessionData(clientChannel, clientDataStreamId, clientControlStreamId,
-                connectRequestId, nextSessionId.incrementAndGet(),
-                options.serverStreamId() + serverStreamId.incrementAndGet());
+        int serverSessionStreamId = streamIdCounter.incrementAndGet();
+        long sessionId = nextSessionId.incrementAndGet();
+        SessionData sessionData = new SessionData(clientChannel, clientSessionStreamId, clientControlStreamId,
+                connectRequestId, sessionId, serverSessionStreamId);
         sessionData.initialise();
     }
 
     @Override
-    public void onConnectAck(UUID connectRequestId, long sessionId, int serverDataStreamId) {
+    public void onConnectAck(UUID connectRequestId, long sessionId, int serverSessionStreamId) {
         throw new UnsupportedOperationException();
     }
 
@@ -108,7 +108,7 @@ final class ServerPooler implements MessageHandler {
 
         private final String clientChannel;
 
-        private final int clientDataStreamId;
+        private final int clientSessionStreamId;
 
         private final int clientControlStreamId;
 
@@ -116,29 +116,30 @@ final class ServerPooler implements MessageHandler {
 
         private final long sessionId;
 
-        private final int serverDataStreamId;
+        private final int serverSessionStreamId;
 
         private volatile Subscription dataSubscription;
 
-        SessionData(String clientChannel, int clientDataStreamId, int clientControlStreamId, UUID connectRequestId, long sessionId, int serverStreamId) {
+        SessionData(String clientChannel, int clientSessionStreamId, int clientControlStreamId,
+                    UUID connectRequestId, long sessionId, int serverSessionStreamId) {
             this.clientChannel = clientChannel;
-            this.clientDataStreamId = clientDataStreamId;
+            this.clientSessionStreamId = clientSessionStreamId;
             this.clientControlStreamId = clientControlStreamId;
             this.outbound = new AeronOutbound(category, wrapper, clientChannel, options);
             this.connectRequestId = connectRequestId;
             this.sessionId = sessionId;
             this.inbound = new AeronServerInbound(category);
-            this.serverDataStreamId = serverStreamId;
+            this.serverSessionStreamId = serverSessionStreamId;
         }
 
         void initialise() {
             sendConnectAck()
                     .doOnSuccess(avoid -> {
                         dataSubscription = wrapper.addSubscription(options.serverChannel(),
-                                serverDataStreamId, "client data", sessionId);
+                                serverSessionStreamId, "client data", sessionId);
                         pooler.addSubscription(dataSubscription, this);
                     })
-                    .then(outbound.initialise(sessionId, clientDataStreamId))
+                    .then(outbound.initialise(sessionId, clientSessionStreamId))
                     .doOnSuccess(avoid -> {
                         Publisher<Void> publisher = ioHandler.apply(inbound, outbound);
                         Mono.from(publisher).doOnTerminate((avoid2, th) -> {
@@ -148,7 +149,7 @@ final class ServerPooler implements MessageHandler {
                     })
                     .doOnError(th -> {
                         dispose();
-                        logger.debug("Failed to connect to the client for sessionId: {}", sessionId);
+                        logger.debug("Failed to connect to the client for sessionId: {}", sessionId, th);
                     })
                     .subscribe();
         }
@@ -163,7 +164,7 @@ final class ServerPooler implements MessageHandler {
                 //FIXME: Exceptions handling
                 long result = publisher.publish(publication,
                         MessageType.CONNECT_ACK,
-                        Protocol.createConnectAckBody(connectRequestId, serverDataStreamId), sessionId);
+                        Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId), sessionId);
 
                 if (result > 0) {
                     logger.debug("Sent " + MessageType.CONNECT_ACK + " to: " + AeronUtils.format(publication));
@@ -182,7 +183,7 @@ final class ServerPooler implements MessageHandler {
                 logger.debug("Received {} for sessionId: {}, buffer: {}", MessageType.NEXT, sessionId, buffer);
             }
 
-            if (this.sessionId != sessionId) {
+            if (this.sessionId == sessionId) {
                 inbound.onNext(buffer);
             } else {
                 logger.error("Received {} for unexpected sessionId: {}", MessageType.NEXT, sessionId);

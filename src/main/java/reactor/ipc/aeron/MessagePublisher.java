@@ -22,7 +22,6 @@ import org.agrona.concurrent.IdleStrategy;
 import reactor.util.Logger;
 
 import java.nio.ByteBuffer;
-import java.util.UUID;
 
 /**
  * @author Anatoly Kadyshev

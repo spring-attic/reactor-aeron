@@ -62,9 +62,9 @@ public class PoolerFragmentHandler implements FragmentHandler {
             int clientControlStreamId = buffer.getInt(index);
             index += BitUtil.SIZE_OF_INT;
 
-            int clientDataStreamId = buffer.getInt(index);
+            int clientSessionStreamId = buffer.getInt(index);
 
-            handler.onConnect(connectRequestId, channel, clientControlStreamId, clientDataStreamId);
+            handler.onConnect(connectRequestId, channel, clientControlStreamId, clientSessionStreamId);
         } else if (type == MessageType.NEXT.ordinal()) {
             int bytesLength = length - (index - offset);
             ByteBuffer dst = ByteBuffer.allocate(bytesLength);
@@ -73,7 +73,7 @@ public class PoolerFragmentHandler implements FragmentHandler {
 
             handler.onNext(sessionId, dst);
         } else if (type == MessageType.CONNECT_ACK.ordinal()) {
-            int serverDataStreamId = buffer.getInt(index);
+            int serverSessionStreamId = buffer.getInt(index);
             index += BitUtil.SIZE_OF_INT;
 
             long mostSigBits = buffer.getLong(index);
@@ -81,7 +81,7 @@ public class PoolerFragmentHandler implements FragmentHandler {
             long leastSigBits = buffer.getLong(index);
             UUID connectRequestId = new UUID(mostSigBits, leastSigBits);
 
-            handler.onConnectAck(connectRequestId, sessionId, serverDataStreamId);
+            handler.onConnectAck(connectRequestId, sessionId, serverSessionStreamId);
         } else {
             logger.error("Unknown message type id: {}", type);
         }
