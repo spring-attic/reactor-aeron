@@ -53,7 +53,7 @@ public final class AeronOutbound implements Outbound<ByteBuffer>, Disposable {
         this.wrapper = wrapper;
         this.channel = channel;
         this.options = options;
-        this.scheduler = Schedulers.newParallel("aeron-sender", 1);
+        this.scheduler = Schedulers.newParallel(category + "-[sender]", 1);
     }
 
     @Override

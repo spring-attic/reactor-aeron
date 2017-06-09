@@ -169,7 +169,7 @@ public final class AeronClient implements AeronConnector {
                 long result = 0;
                 Exception cause = null;
                 if (logger.isDebugEnabled()) {
-                    logger.debug("Connecting to server at: {}", AeronUtils.format(serverControlPub));
+                    logger.debug("Connecting to server at {}", AeronUtils.format(serverControlPub));
                 }
                 MessagePublisher publisher = new MessagePublisher(logger, timeoutMillis, timeoutMillis);
                 try {

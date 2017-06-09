@@ -58,7 +58,7 @@ public final class AeronWrapper implements Disposable {
     public Publication addPublication(String channel, int streamId, String purpose, long sessionId) {
         Publication publication = aeron.addPublication(channel, streamId);
         if (logger.isDebugEnabled()) {
-            logger.debug("Added publication{} for {}: {}", sessionId > 0 ? " sessionId: " + sessionId: "",
+            logger.debug("Added publication{} for {} to {}", sessionId > 0 ? " sessionId: " + sessionId: "",
                     purpose, AeronUtils.format(channel, streamId));
         }
         return publication;
@@ -67,7 +67,7 @@ public final class AeronWrapper implements Disposable {
     public Subscription addSubscription(String channel, int streamId, String purpose, long sessionId) {
         Subscription subscription = aeron.addSubscription(channel, streamId);
         if (logger.isDebugEnabled()) {
-            logger.debug("Added subscription{} for {}: {}", sessionId != 0 ? " sessionId: " + sessionId : "",
+            logger.debug("Added subscription{} for {} on {}", sessionId != 0 ? " sessionId: " + sessionId : "",
                     purpose, AeronUtils.format(channel, streamId));
         }
         return subscription;

@@ -54,7 +54,7 @@ final class ServerPooler implements MessageHandler {
 
     private final Pooler pooler;
 
-    private final Logger logger;
+    private final Logger logger = Loggers.getLogger(ServerPooler.class.getName());
 
     private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
@@ -69,7 +69,6 @@ final class ServerPooler implements MessageHandler {
         this.wrapper = wrapper;
         this.ioHandler = ioHandler;
         this.options = options;
-        this.logger = Loggers.getLogger(AeronServer.class + "." + category);
         Pooler pooler = new Pooler(category);
         pooler.addSubscription(subscription, this);
         this.pooler = pooler;
@@ -85,14 +84,15 @@ final class ServerPooler implements MessageHandler {
 
     @Override
     public void onConnect(UUID connectRequestId, String clientChannel, int clientControlStreamId, int clientSessionStreamId) {
-        logger.debug("Received CONNECT for connectRequestId: {}, channel/clientControlStreamId/clientSessionStreamId: {}/{}/{}",
-                connectRequestId, clientChannel, clientControlStreamId, clientSessionStreamId);
+        logger.debug("Received {} for connectRequestId: {}, channel={}, clientControlStreamId={}, clientSessionStreamId={}",
+                MessageType.CONNECT, connectRequestId, AeronUtils.minifyChannel(clientChannel),
+                clientControlStreamId, clientSessionStreamId);
 
         int serverSessionStreamId = streamIdCounter.incrementAndGet();
         long sessionId = nextSessionId.incrementAndGet();
-        SessionData sessionData = new SessionData(clientChannel, clientSessionStreamId, clientControlStreamId,
+        SessionHandler sessionHandler = new SessionHandler(clientChannel, clientSessionStreamId, clientControlStreamId,
                 connectRequestId, sessionId, serverSessionStreamId);
-        sessionData.initialise();
+        sessionHandler.initialise();
     }
 
     @Override
@@ -100,11 +100,13 @@ final class ServerPooler implements MessageHandler {
         throw new UnsupportedOperationException();
     }
 
-    class SessionData implements Disposable, MessageHandler {
+    class SessionHandler implements Disposable, MessageHandler {
 
-        final AeronOutbound outbound;
+        private final Logger logger = Loggers.getLogger(SessionHandler.class.getName());
 
-        final AeronServerInbound inbound;
+        private final AeronOutbound outbound;
+
+        private final AeronServerInbound inbound;
 
         private final String clientChannel;
 
@@ -120,8 +122,8 @@ final class ServerPooler implements MessageHandler {
 
         private volatile Subscription dataSubscription;
 
-        SessionData(String clientChannel, int clientSessionStreamId, int clientControlStreamId,
-                    UUID connectRequestId, long sessionId, int serverSessionStreamId) {
+        SessionHandler(String clientChannel, int clientSessionStreamId, int clientControlStreamId,
+                       UUID connectRequestId, long sessionId, int serverSessionStreamId) {
             this.clientChannel = clientChannel;
             this.clientSessionStreamId = clientSessionStreamId;
             this.clientControlStreamId = clientControlStreamId;
@@ -167,7 +169,7 @@ final class ServerPooler implements MessageHandler {
                         Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId), sessionId);
 
                 if (result > 0) {
-                    logger.debug("Sent " + MessageType.CONNECT_ACK + " to: " + AeronUtils.format(publication));
+                    logger.debug("Sent {} to {}", MessageType.CONNECT_ACK, AeronUtils.format(publication));
                     sink.success();
                 } else {
                     sink.error(new Exception("Failed to send " + MessageType.CONNECT_ACK));

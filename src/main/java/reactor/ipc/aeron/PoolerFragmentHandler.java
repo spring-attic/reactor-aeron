@@ -46,8 +46,6 @@ public class PoolerFragmentHandler implements FragmentHandler {
         long sessionId = buffer.getLong(index);
         index += BitUtil.SIZE_OF_LONG;
 
-        logger.debug("Received type: {}", type);
-
         if (type == MessageType.CONNECT.ordinal()) {
             long mostSigBits = buffer.getLong(index);
             index += BitUtil.SIZE_OF_LONG;

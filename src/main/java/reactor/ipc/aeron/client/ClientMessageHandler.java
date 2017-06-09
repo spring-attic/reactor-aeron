@@ -32,10 +32,8 @@ final class ClientMessageHandler implements MessageHandler {
 
     private final FluxSink<ByteBuffer> emitter;
 
-    public ClientMessageHandler(long sessionId, FluxSink<ByteBuffer> emitter) {
-        Objects.requireNonNull(sessionId, "sessionId");
-
-        this.sessionId = sessionId;
+    ClientMessageHandler(long sessionId, FluxSink<ByteBuffer> emitter) {
+        this.sessionId = Objects.requireNonNull(sessionId, "sessionId");
         this.emitter = emitter;
     }
 

@@ -27,7 +27,7 @@ public class AeronClientTest extends BaseAeronTest {
 
     @Test
     public void testClientReceivesSignalsFromServer() throws InterruptedException {
-        AeronServer server = createAeronServer("server-1");
+        AeronServer server = createAeronServer("server");
 
         addDisposable(server.newHandler((inbound, outbound) ->
                 Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("hello1", "2", "3")
