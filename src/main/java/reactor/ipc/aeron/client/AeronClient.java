@@ -156,6 +156,7 @@ public final class AeronClient implements AeronConnector {
                                     .doOnTerminate((aVoid, th) -> dispose())
                                     .subscribe()
                     )
+                    .doOnError(th -> dispose())
                     .then(Mono.just(this));
         }
 

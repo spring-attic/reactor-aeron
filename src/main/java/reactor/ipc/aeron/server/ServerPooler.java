@@ -20,6 +20,7 @@ import io.aeron.Subscription;
 import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
@@ -34,9 +35,13 @@ import reactor.util.Logger;
 import reactor.util.Loggers;
 
 import java.nio.ByteBuffer;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
 /**
@@ -60,6 +65,10 @@ final class ServerPooler implements MessageHandler {
 
     private final AtomicLong nextSessionId = new AtomicLong(0);
 
+    private final HeartbeatWatchdog heartbeatWatchdog;
+
+    private final Map<Long, SessionHandler> sessionHandlerById = new ConcurrentHashMap<>();
+
     ServerPooler(String category,
                  AeronWrapper wrapper,
                  BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler,
@@ -72,6 +81,7 @@ final class ServerPooler implements MessageHandler {
         Pooler pooler = new Pooler(category);
         pooler.addSubscription(subscription, this);
         this.pooler = pooler;
+        this.heartbeatWatchdog = new HeartbeatWatchdog();
     }
 
     public void initialise() {
@@ -79,7 +89,8 @@ final class ServerPooler implements MessageHandler {
     }
 
     public Mono<Void> shutdown() {
-        return pooler.shutdown();
+        return pooler.shutdown()
+                .doOnTerminate((avoid, th) -> sessionHandlerById.values().forEach(SessionHandler::dispose));
     }
 
     @Override
@@ -120,7 +131,9 @@ final class ServerPooler implements MessageHandler {
 
         private final int serverSessionStreamId;
 
-        private volatile Subscription dataSubscription;
+        private volatile Subscription serverDataSub;
+
+        private volatile Publication clientControlPub;
 
         SessionHandler(String clientChannel, int clientSessionStreamId, int clientControlStreamId,
                        UUID connectRequestId, long sessionId, int serverSessionStreamId) {
@@ -137,17 +150,21 @@ final class ServerPooler implements MessageHandler {
         void initialise() {
             sendConnectAck()
                     .doOnSuccess(avoid -> {
-                        dataSubscription = wrapper.addSubscription(options.serverChannel(),
+                        serverDataSub = wrapper.addSubscription(options.serverChannel(),
                                 serverSessionStreamId, "client data", sessionId);
-                        pooler.addSubscription(dataSubscription, this);
+                        pooler.addSubscription(serverDataSub, this);
                     })
                     .then(outbound.initialise(sessionId, clientSessionStreamId))
                     .doOnSuccess(avoid -> {
                         Publisher<Void> publisher = ioHandler.apply(inbound, outbound);
                         Mono.from(publisher).doOnTerminate((avoid2, th) -> {
                             dispose();
-                            logger.debug("Closed session with sessionId: {}", sessionId);
                         }).subscribe();
+
+                        heartbeatWatchdog.add(sessionId, clientControlPub)
+                                .doOnError(th -> dispose()).subscribe();
+
+                        sessionHandlerById.put(sessionId, this);
                     })
                     .doOnError(th -> {
                         dispose();
@@ -158,24 +175,22 @@ final class ServerPooler implements MessageHandler {
 
         private Mono<Void> sendConnectAck() {
             return Mono.create(sink -> {
-                Publication publication = wrapper.addPublication(clientChannel, clientControlStreamId,
+                clientControlPub = wrapper.addPublication(clientChannel, clientControlStreamId,
                         "sending " + MessageType.CONNECT_ACK, sessionId);
                 MessagePublisher publisher = new MessagePublisher(logger, options.connectTimeoutMillis(),
                         options.backpressureTimeoutMillis());
 
                 //FIXME: Exceptions handling
-                long result = publisher.publish(publication,
+                long result = publisher.publish(clientControlPub,
                         MessageType.CONNECT_ACK,
                         Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId), sessionId);
 
                 if (result > 0) {
-                    logger.debug("Sent {} to {}", MessageType.CONNECT_ACK, AeronUtils.format(publication));
+                    logger.debug("Sent {} to {}", MessageType.CONNECT_ACK, AeronUtils.format(clientControlPub));
                     sink.success();
                 } else {
                     sink.error(new Exception("Failed to send " + MessageType.CONNECT_ACK));
                 }
-
-                publication.close();
             });
         }
 
@@ -194,12 +209,50 @@ final class ServerPooler implements MessageHandler {
 
         @Override
         public void dispose() {
-            if (dataSubscription != null) {
-                pooler.removeSubscription(dataSubscription);
-                dataSubscription.close();
+            sessionHandlerById.remove(this);
+
+            if (serverDataSub != null) {
+                pooler.removeSubscription(serverDataSub);
+                serverDataSub.close();
+            }
+
+            if (clientControlPub != null) {
+                heartbeatWatchdog.remove(sessionId);
+
+                clientControlPub.close();
             }
             outbound.dispose();
             inbound.dispose();
+
+            logger.debug("Closed session with sessionId: {}", sessionId);
+        }
+
+    }
+
+    static class HeartbeatWatchdog {
+
+        private final Map<Long, Disposable> disposableBySessionId = new ConcurrentHashMap<>();
+
+        Mono<Void> add(long sessionId, Publication publication) {
+            return Mono.create(sink -> {
+                AtomicReference<Runnable> taskRef = new AtomicReference<>(() -> {});
+                Disposable disposable = Schedulers.single().schedulePeriodically(
+                        () -> taskRef.get().run(), 1, 1, TimeUnit.SECONDS);
+                disposableBySessionId.put(sessionId, disposable);
+                taskRef.set(() -> {
+                    if (!publication.isConnected()) {
+                        disposable.dispose();
+                        sink.error(new RuntimeException("Session with sessionId: " + sessionId + " disconnected"));
+                    }
+                });
+            });
+        }
+
+        void remove(long sessionId) {
+            Disposable disposable = disposableBySessionId.remove(sessionId);
+            if (disposable != null) {
+                disposable.dispose();
+            }
         }
 
     }
