@@ -15,25 +15,25 @@
  */
 package reactor.ipc.aeron;
 
-import org.reactivestreams.Publisher;
+import java.nio.ByteBuffer;
+
 import org.reactivestreams.Subscriber;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.FluxSource;
-
-import java.nio.ByteBuffer;
+import reactor.core.publisher.FluxOperator;
+import reactor.util.context.Context;
 
 /**
  * @author Anatoly Kadyshev
  */
-public final class AeronFlux extends FluxSource<ByteBuffer, ByteBuffer> {
+public final class AeronFlux extends FluxOperator<ByteBuffer, ByteBuffer> {
 
-    public AeronFlux(Publisher<? extends ByteBuffer> source) {
+    public AeronFlux(Flux<? extends ByteBuffer> source) {
         super(source);
     }
 
     @Override
-    public void subscribe(Subscriber<? super ByteBuffer> s) {
-        source.subscribe(s);
+    public void subscribe(Subscriber<? super ByteBuffer> s, Context ctx) {
+        source.subscribe(s, ctx);
     }
 
     public Flux<String> asString() {
