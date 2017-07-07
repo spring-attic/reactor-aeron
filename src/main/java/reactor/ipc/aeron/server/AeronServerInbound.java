@@ -32,7 +32,7 @@ final class AeronServerInbound implements AeronInbound, Disposable {
     private final TopicProcessor<ByteBuffer> processor;
 
     AeronServerInbound(String name) {
-        this.processor = TopicProcessor.create(name);
+        this.processor = TopicProcessor.<ByteBuffer>builder().name(name).build();
         this.flux = new AeronFlux(processor);
     }
 

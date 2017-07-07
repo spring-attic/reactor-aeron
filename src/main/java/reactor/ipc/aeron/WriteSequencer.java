@@ -18,6 +18,7 @@ package reactor.ipc.aeron;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
+import reactor.core.CoreSubscriber;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Operators;
@@ -200,7 +201,7 @@ abstract class WriteSequencer<T> {
         }
     }
 
-    abstract static class InnerSubscriber<T> implements Subscriber<T>, Subscription {
+    abstract static class InnerSubscriber<T> implements CoreSubscriber<T>, Subscription {
 
         final WriteSequencer<T> parent;
 

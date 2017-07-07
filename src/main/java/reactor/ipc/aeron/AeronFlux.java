@@ -17,10 +17,9 @@ package reactor.ipc.aeron;
 
 import java.nio.ByteBuffer;
 
-import org.reactivestreams.Subscriber;
+import reactor.core.CoreSubscriber;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxOperator;
-import reactor.util.context.Context;
 
 /**
  * @author Anatoly Kadyshev
@@ -32,8 +31,8 @@ public final class AeronFlux extends FluxOperator<ByteBuffer, ByteBuffer> {
     }
 
     @Override
-    public void subscribe(Subscriber<? super ByteBuffer> s, Context ctx) {
-        source.subscribe(s, ctx);
+    public void subscribe(CoreSubscriber<? super ByteBuffer> s) {
+        source.subscribe(s);
     }
 
     public Flux<String> asString() {
