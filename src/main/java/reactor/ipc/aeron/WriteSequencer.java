@@ -15,18 +15,6 @@
  */
 package reactor.ipc.aeron;
 
-import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
-import reactor.core.CoreSubscriber;
-import reactor.core.publisher.Mono;
-import reactor.core.publisher.MonoSink;
-import reactor.core.publisher.Operators;
-import reactor.core.scheduler.Scheduler;
-import reactor.util.Logger;
-import reactor.util.Loggers;
-import reactor.util.concurrent.QueueSupplier;
-
 import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.Callable;
@@ -37,6 +25,17 @@ import java.util.function.BiConsumer;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscription;
+import reactor.core.CoreSubscriber;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoSink;
+import reactor.core.publisher.Operators;
+import reactor.core.scheduler.Scheduler;
+import reactor.util.Logger;
+import reactor.util.Loggers;
+import reactor.util.concurrent.Queues;
 
 abstract class WriteSequencer<T> {
 
@@ -66,8 +65,8 @@ abstract class WriteSequencer<T> {
                           BiConsumer<Object, MonoSink<?>> messageConsumer) {
         this.discardedHandler = discardedHandler;
         this.backpressureChecker = backpressureChecker;
-        this.pendingWrites = QueueSupplier.unbounded()
-                .get();
+        this.pendingWrites = Queues.unbounded()
+                                   .get();
         this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
         this.messageConsumer = messageConsumer;
     }
