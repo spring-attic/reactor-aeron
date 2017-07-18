@@ -146,7 +146,7 @@ public final class AeronClient implements AeronConnector {
             Mono<Void> connectMono = sendConnect(options.connectTimeoutMillis());
             return Mono.fromRunnable(() -> clientHandlerCreated())
                     .then(connectAckMono)
-                    .delayUntilOther(connectMono)
+                    .delayUntil(d -> connectMono)
                     .flatMap(connectAckData -> {
                         inbound.initialise(connectAckData.sessionId);
                         return outbound.initialise(connectAckData.sessionId, connectAckData.serverSessionStreamId);
