@@ -56,7 +56,7 @@ ext {
   javadocLinks = ["http://docs.oracle.com/javase/7/docs/api/",
 				  "http://docs.oracle.com/javaee/6/api/",
 				  "http://fasterxml.github.io/jackson-databind/javadoc/2.5/",
-				  "http://www.reactive-streams.org/reactive-streams-1.0.0-javadoc/",
+				  "http://www.reactive-streams.org/reactive-streams-1.0.1-javadoc/",
 				  "http://projectreactor.io/docs/core/release/api/",
 				  "http://projectreactor.io/docs/ipc/release/api/",
 				  "http://projectreactor.io/docs/netty/release/api/",] as String[]
@@ -151,7 +151,7 @@ configure(rootProject) { project ->
     compile "io.projectreactor:reactor-core:$reactorCoreVersion"
 
 	testCompile "io.projectreactor:reactor-test:$reactorCoreVersion"
-	testCompile "org.reactivestreams:reactive-streams-tck:1.0.0"
+	testCompile "org.reactivestreams:reactive-streams-tck:1.0.1"
 	testCompile "org.mockito:mockito-core:1.10.19"
 
 
