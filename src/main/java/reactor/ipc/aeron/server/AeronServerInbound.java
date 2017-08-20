@@ -31,6 +31,8 @@ final class AeronServerInbound implements AeronInbound, Disposable {
 
     private final TopicProcessor<ByteBuffer> processor;
 
+    private volatile long lastSignalTimeNs;
+
     AeronServerInbound(String name) {
         this.processor = TopicProcessor.<ByteBuffer>builder().name(name).build();
         this.flux = new AeronFlux(processor);
@@ -42,11 +44,17 @@ final class AeronServerInbound implements AeronInbound, Disposable {
     }
 
     void onNext(ByteBuffer buffer) {
+        //FIXME: Could affect performance
+        lastSignalTimeNs = System.nanoTime();
         processor.onNext(buffer);
     }
 
     @Override
     public void dispose() {
-        processor.dispose();
+        processor.onComplete();
+    }
+
+    long getLastSignalTimeNs() {
+        return lastSignalTimeNs;
     }
 }

@@ -62,4 +62,15 @@ public class Protocol {
         putUuid(buffer, index, connectRequestId);
         return ByteBuffer.wrap(array);
     }
+
+    public static ByteBuffer createHeartbeatBody(long sessionId) {
+        return ByteBuffer.wrap(new byte[0]);
+    }
+
+    public static ByteBuffer createDisconnectBody(long sessionId) {
+        byte[] bytes = new byte[BitUtil.SIZE_OF_LONG];
+        UnsafeBuffer buffer = new UnsafeBuffer(bytes);
+        buffer.putLong(0, sessionId);
+        return ByteBuffer.wrap(bytes);
+    }
 }

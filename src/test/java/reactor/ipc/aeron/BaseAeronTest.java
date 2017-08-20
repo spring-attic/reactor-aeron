@@ -18,8 +18,13 @@ public class BaseAeronTest {
 
     private final List<Disposable> disposables = Lists.newArrayList();
 
-    Disposable addDisposable(Mono<? extends Disposable> mono) {
+    Disposable blockAndAddDisposable(Mono<? extends Disposable> mono) {
         Disposable disposable = mono.block(TIMEOUT);
+        disposables.add(disposable);
+        return disposable;
+    }
+
+    Disposable addDisposable(Disposable disposable) {
         disposables.add(disposable);
         return disposable;
     }

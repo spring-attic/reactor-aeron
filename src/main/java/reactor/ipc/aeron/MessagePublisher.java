@@ -22,6 +22,7 @@ import org.agrona.concurrent.IdleStrategy;
 import reactor.util.Logger;
 
 import java.nio.ByteBuffer;
+import java.util.Objects;
 
 /**
  * @author Anatoly Kadyshev
@@ -37,12 +38,20 @@ public class MessagePublisher {
     private final long waitBackpressuredMillis;
 
     public MessagePublisher(Logger logger, long waitConnectedMillis, long waitBackpressuredMillis) {
+        Objects.requireNonNull(logger, "logger shouldn't be null");
+
         this.logger = logger;
         this.idleStrategy = AeronUtils.newBackoffIdleStrategy();
         this.waitConnectedMillis = waitConnectedMillis;
         this.waitBackpressuredMillis = waitBackpressuredMillis;
     }
 
+    /**
+     * Publishes a message into <code>publication</code>
+     *
+     * @throws IllegalArgumentException as specified for {@link Publication#tryClaim(int, BufferClaim)}
+     * @throws RuntimeException when unexpected exception occurs
+     */
     public long publish(Publication publication, MessageType msgType, ByteBuffer msgBody, long sessionId) {
         BufferClaim bufferClaim = new BufferClaim();
         int headerSize = Protocol.HEADER_SIZE;
@@ -57,11 +66,8 @@ public class MessagePublisher {
                 bufferClaim.commit();
             } catch (Exception ex) {
                 bufferClaim.abort();
-                throw ex;
+                throw new RuntimeException("Unexpected exception", ex);
             }
-        } else {
-            logger.debug("Failed to publish message into {}, type: {}, body: {}",
-                    AeronUtils.format(publication), msgType, msgBody);
         }
         return result;
     }

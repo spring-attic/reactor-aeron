@@ -1,11 +1,11 @@
 package reactor.ipc.aeron;
 
-import groovy.json.internal.Charsets;
 import io.aeron.driver.Configuration;
 import io.aeron.driver.MediaDriver;
 import reactor.core.publisher.Flux;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -26,7 +26,7 @@ public class AeronTestUtils {
     }
 
     public static ByteBuffer stringToByteBuffer(String str) {
-        return ByteBuffer.wrap(str.getBytes(Charsets.UTF_8));
+        return ByteBuffer.wrap(str.getBytes(StandardCharsets.UTF_8));
     }
 
     public static Flux<ByteBuffer> newByteBufferFlux(String... items) {

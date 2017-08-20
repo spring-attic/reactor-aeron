@@ -24,7 +24,6 @@ import reactor.core.scheduler.Schedulers;
 import reactor.ipc.connector.Outbound;
 
 import java.nio.ByteBuffer;
-import java.util.concurrent.TimeUnit;
 
 /**
  * @author Anatoly Kadyshev
@@ -64,32 +63,28 @@ public final class AeronOutbound implements Outbound<ByteBuffer>, Disposable {
     @Override
     public void dispose() {
         scheduler.dispose();
-        publication.close();
+
+        if (publication != null) {
+            publication.close();
+        }
     }
 
     public Mono<Void> initialise(long sessionId, int streamId) {
-        this.publication = wrapper.addPublication(channel, streamId, "sending data", sessionId);
-        this.sequencer = new AeronWriteSequencer(category, publication, options, sessionId);
-
         return Mono.create(sink -> {
-            Scheduler scheduler = Schedulers.single();
-            long startTime = System.currentTimeMillis();
-            Runnable checkConnectedTask = new Runnable() {
-                @Override
-                public void run() {
-                    if (System.currentTimeMillis() - startTime < options.connectTimeoutMillis()) {
-                        if (!publication.isConnected()) {
-                            scheduler.schedule(this, 500, TimeUnit.MILLISECONDS);
-                        } else {
-                            sink.success();
-                        }
-                    } else {
-                        sink.error(new Exception("Failed to connect to client for sessionId: " + sessionId));
-                    }
+            this.publication = wrapper.addPublication(channel, streamId, "sending data", sessionId);
+            this.sequencer = new AeronWriteSequencer(category, publication, options, sessionId);
+            new RetryTask(Schedulers.single(), 100, options.connectTimeoutMillis(), () -> {
+                if (publication.isConnected()) {
+                    sink.success();
+                    return true;
                 }
-            };
-            scheduler.schedule(checkConnectedTask);
+                return false;
+            }, () -> sink.error(new Exception("Failed to connect to client for sessionId: " + sessionId))).schedule();
         });
+    }
+
+    public Publication getPublication() {
+        return publication;
     }
 
 }

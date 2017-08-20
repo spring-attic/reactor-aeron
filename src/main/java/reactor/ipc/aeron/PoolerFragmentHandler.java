@@ -80,6 +80,12 @@ public class PoolerFragmentHandler implements FragmentHandler {
             UUID connectRequestId = new UUID(mostSigBits, leastSigBits);
 
             handler.onConnectAck(connectRequestId, sessionId, serverSessionStreamId);
+        } else if (type == MessageType.HEARTBEAT.ordinal()) {
+            handler.onHeartbeat(sessionId);
+        } else if (type == MessageType.DISCONNECT.ordinal()) {
+            handler.onDisonnect(sessionId);
+        } else if (type == MessageType.COMPLETE.ordinal()) {
+            handler.onComplete(sessionId);
         } else {
             logger.error("Unknown message type id: {}", type);
         }

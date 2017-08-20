@@ -29,7 +29,16 @@ public interface MessageHandler {
     default void onNext(long sessionId, ByteBuffer buffer) {
     }
 
+    default void onComplete(long sessionId) {
+    }
+
     default void onConnectAck(UUID connectRequestId, long sessionId, int serverSessionStreamId) {
+    }
+
+    default void onHeartbeat(long sessionId) {
+    }
+
+    default void onDisonnect(long sessionId) {
     }
 
 }

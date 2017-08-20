@@ -27,7 +27,7 @@ public final class AeronClientOptions extends AeronOptions {
 
     private String clientChannel = "aeron:udp?endpoint=localhost:12001";
 
-    private Duration ackTimeoutSecs = Duration.ofSeconds(10);
+    private Duration ackTimeout = Duration.ofSeconds(10);
 
     public String clientChannel() {
         return clientChannel;
@@ -37,11 +37,11 @@ public final class AeronClientOptions extends AeronOptions {
         this.clientChannel = Objects.requireNonNull(clientChannel, "clientChannel");
     }
 
-    public Duration ackTimeoutSecs() {
-        return ackTimeoutSecs;
+    public Duration ackTimeout() {
+        return ackTimeout;
     }
 
-    public void ackTimeoutSecs(Duration ackTimeoutSecs) {
-        this.ackTimeoutSecs = Objects.requireNonNull(ackTimeoutSecs, "ackTimeoutSecs");
+    public void ackTimeout(Duration ackTimeout) {
+        this.ackTimeout = Objects.requireNonNull(ackTimeout, "ackTimeout");
     }
 }
