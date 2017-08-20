@@ -1,6 +1,7 @@
 package reactor.ipc.aeron;
 
 import org.junit.Test;
+import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.ipc.aeron.client.AeronClient;
@@ -22,52 +23,63 @@ public class AeronClientTest extends BaseAeronTest {
     @Test(expected = RuntimeException.class)
     public void testClientCouldNotConnectToServer() {
         AeronClient client = AeronClient.create();
-        client.newHandler((inbound, outbound) -> Mono.never()).block();
+        try {
+            client.newHandler((inbound, outbound) -> Mono.never()).block();
+        } finally {
+            client.dispose();
+        }
     }
 
     @Test
     public void testClientReceivesSignalsFromServer() throws InterruptedException {
         AeronServer server = createAeronServer("server");
 
-        addDisposable(server.newHandler((inbound, outbound) ->
+        server.newHandler((inbound, outbound) ->
                 Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("hello1", "2", "3")
-                        .log("server")))));
+                        .log("server")))).block(TIMEOUT);
 
         ReplayProcessor<String> processor = ReplayProcessor.create();
         AeronClient client = createAeronClient(null);
-        addDisposable(client.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client").subscribe(processor);
-            return Mono.never();
-        }));
+        try {
+            client.newHandler((inbound, outbound) -> {
+                inbound.receive().map(AeronUtils::byteBufferToString).log("client").subscribe(processor);
+                return Mono.never();
+            }).block(TIMEOUT);
 
-        StepVerifier.create(processor)
-                .expectNext("hello1", "2", "3")
-                .expectNoEvent(Duration.ofMillis(10))
-                .thenCancel()
-                .verify();
+            StepVerifier.create(processor)
+                    .expectNext("hello1", "2", "3")
+                    .expectNoEvent(Duration.ofMillis(10))
+                    .thenCancel()
+                    .verify();
+        } finally {
+            processor.dispose();
+            client.dispose();
+        }
     }
 
     @Test
     public void testTwoClientsReceiveDataFromServer() throws InterruptedException {
         AeronServer server = createAeronServer("server");
-        addDisposable(server.newHandler((inbound, outbound) -> {
+        blockAndAddDisposable(server.newHandler((inbound, outbound) -> {
             Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("1", "2", "3").log())).subscribe();
             return Mono.never();
         }));
 
         ReplayProcessor<String> processor1 = ReplayProcessor.create();
         AeronClient client1 = createAeronClient("client-1");
-        addDisposable(client1.newHandler((inbound, outbound) -> {
+        blockAndAddDisposable(client1.newHandler((inbound, outbound) -> {
             inbound.receive().map(AeronUtils::byteBufferToString).log("client-1").subscribe(processor1);
             return Mono.never();
         }));
+        addDisposable(client1);
 
         ReplayProcessor<String> processor2 = ReplayProcessor.create();
         AeronClient client2 = createAeronClient("client-2");
-        addDisposable(client2.newHandler((inbound, outbound) -> {
+        blockAndAddDisposable(client2.newHandler((inbound, outbound) -> {
             inbound.receive().map(AeronUtils::byteBufferToString).log("client-2").subscribe(processor2);
             return Mono.never();
         }));
+        addDisposable(client2);
 
         StepVerifier.create(processor1)
                 .expectNext("1", "2", "3")
@@ -86,23 +98,24 @@ public class AeronClientTest extends BaseAeronTest {
     public void testClientWith2HandlersReceiveData() {
         AeronServer server = createAeronServer("server-1");
 
-        addDisposable(server.newHandler((inbound, outbound) -> {
+        blockAndAddDisposable(server.newHandler((inbound, outbound) -> {
             Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("1", "2", "3").log("server"))).subscribe();
             return Mono.never();
         }));
 
         ReplayProcessor<String> processor1 = ReplayProcessor.create();
         AeronClient client = createAeronClient(null);
-        addDisposable(client.newHandler((inbound, outbound) -> {
+        blockAndAddDisposable(client.newHandler((inbound, outbound) -> {
             inbound.receive().map(AeronUtils::byteBufferToString).log("client-1").subscribe(processor1);
             return Mono.never();
         }));
 
         ReplayProcessor<String> processor2 = ReplayProcessor.create();
-        addDisposable(client.newHandler((inbound, outbound) -> {
+        blockAndAddDisposable(client.newHandler((inbound, outbound) -> {
             inbound.receive().map(AeronUtils::byteBufferToString).log("client-2").subscribe(processor2);
             return Mono.never();
         }));
+        addDisposable(client);
 
         StepVerifier.create(processor1)
                 .expectNext("1", "2", "3")
@@ -115,6 +128,37 @@ public class AeronClientTest extends BaseAeronTest {
                 .expectNoEvent(Duration.ofMillis(100))
                 .thenCancel()
                 .verify();
+    }
+
+    @Test
+    public void testClientClosesSessionUponHeartbeatLoss() throws Exception {
+        AeronServer server = AeronServer.create("server", options -> {
+                options.serverChannel(serverChannel);
+                options.heartbeatTimeoutMillis(500);
+        });
+
+        Disposable serverHandlerDisposable = server.newHandler((inbound, outbound) ->
+                Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("hello1", "2", "3")
+                        .delayElements(Duration.ofSeconds(1))
+                        .log("server")))).block(TIMEOUT);
+
+        ReplayProcessor<String> processor = ReplayProcessor.create();
+        AeronClient client = AeronClient.create("client", options -> {
+            options.clientChannel(clientChannel);
+            options.serverChannel(serverChannel);
+            options.heartbeatTimeoutMillis(500);
+        });
+        addDisposable(client);
+        client.newHandler((inbound, outbound) -> {
+            inbound.receive().map(AeronUtils::byteBufferToString).log("client").subscribe(processor);
+            return Mono.never();
+        }).block(TIMEOUT);
+
+        processor.elementAt(2).block(Duration.ofSeconds(4));
+
+        serverHandlerDisposable.dispose();
+
+        Thread.sleep(1500);
     }
 
     private AeronClient createAeronClient(String name) {

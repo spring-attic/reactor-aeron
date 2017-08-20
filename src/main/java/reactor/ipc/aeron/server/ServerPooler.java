@@ -20,34 +20,43 @@ import io.aeron.Subscription;
 import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoSink;
 import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.AeronWrapper;
+import reactor.ipc.aeron.HeartbeatSender;
+import reactor.ipc.aeron.HeartbeatWatchdog;
 import reactor.ipc.aeron.MessageHandler;
 import reactor.ipc.aeron.MessagePublisher;
 import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.Pooler;
 import reactor.ipc.aeron.Protocol;
+import reactor.ipc.aeron.RetryTask;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
 import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
 /**
  * @author Anatoly Kadyshev
  */
 final class ServerPooler implements MessageHandler {
+
+    private static final Logger logger = Loggers.getLogger(ServerPooler.class);
+
+    private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
+
+    public static final Disposable NO_OP = () -> {};
 
     private final String category;
 
@@ -59,15 +68,13 @@ final class ServerPooler implements MessageHandler {
 
     private final Pooler pooler;
 
-    private final Logger logger = Loggers.getLogger(ServerPooler.class.getName());
-
-    private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
-
     private final AtomicLong nextSessionId = new AtomicLong(0);
 
     private final HeartbeatWatchdog heartbeatWatchdog;
 
     private final Map<Long, SessionHandler> sessionHandlerById = new ConcurrentHashMap<>();
+
+    private final HeartbeatSender heartbeatSender;
 
     ServerPooler(String category,
                  AeronWrapper wrapper,
@@ -81,7 +88,8 @@ final class ServerPooler implements MessageHandler {
         Pooler pooler = new Pooler(category);
         pooler.addSubscription(subscription, this);
         this.pooler = pooler;
-        this.heartbeatWatchdog = new HeartbeatWatchdog();
+        this.heartbeatWatchdog = new HeartbeatWatchdog(options.heartbeatTimeoutMillis(), category);
+        this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), category);
     }
 
     public void initialise() {
@@ -111,19 +119,29 @@ final class ServerPooler implements MessageHandler {
         throw new UnsupportedOperationException();
     }
 
+    //FIXME: Remove
+    @Override
+    public void onDisonnect(long sessionId) {
+        SessionHandler sessionHandler = sessionHandlerById.get(sessionId);
+        if (sessionHandler != null) {
+            sessionHandler.dispose();
+        }
+    }
+
+    @Override
+    public void onHeartbeat(long sessionId) {
+        heartbeatWatchdog.heartbeatReceived(sessionId);
+    }
+
     class SessionHandler implements Disposable, MessageHandler {
 
-        private final Logger logger = Loggers.getLogger(SessionHandler.class.getName());
+        private final Logger logger = Loggers.getLogger(SessionHandler.class);
 
         private final AeronOutbound outbound;
 
         private final AeronServerInbound inbound;
 
-        private final String clientChannel;
-
         private final int clientSessionStreamId;
-
-        private final int clientControlStreamId;
 
         private final UUID connectRequestId;
 
@@ -131,40 +149,51 @@ final class ServerPooler implements MessageHandler {
 
         private final int serverSessionStreamId;
 
-        private volatile Subscription serverDataSub;
+        private final Publication clientControlPub;
 
-        private volatile Publication clientControlPub;
+        private final Subscription serverDataSub;
+
+        private volatile Disposable heartbeatDisposable = NO_OP;
 
         SessionHandler(String clientChannel, int clientSessionStreamId, int clientControlStreamId,
                        UUID connectRequestId, long sessionId, int serverSessionStreamId) {
-            this.clientChannel = clientChannel;
             this.clientSessionStreamId = clientSessionStreamId;
-            this.clientControlStreamId = clientControlStreamId;
             this.outbound = new AeronOutbound(category, wrapper, clientChannel, options);
             this.connectRequestId = connectRequestId;
             this.sessionId = sessionId;
             this.inbound = new AeronServerInbound(category);
             this.serverSessionStreamId = serverSessionStreamId;
+            this.clientControlPub = wrapper.addPublication(clientChannel, clientControlStreamId,
+                    "sending " + MessageType.CONNECT_ACK, sessionId);
+            this.serverDataSub = wrapper.addSubscription(options.serverChannel(),
+                    serverSessionStreamId, "client data", sessionId);
         }
 
         void initialise() {
+            pooler.addSubscription(serverDataSub, this);
+
+            Mono<Void> initialiseOutbound = outbound.initialise(sessionId, clientSessionStreamId);
+
             sendConnectAck()
+                    .then(initialiseOutbound)
                     .doOnSuccess(avoid -> {
-                        serverDataSub = wrapper.addSubscription(options.serverChannel(),
-                                serverSessionStreamId, "client data", sessionId);
-                        pooler.addSubscription(serverDataSub, this);
-                    })
-                    .then(outbound.initialise(sessionId, clientSessionStreamId))
-                    .doOnSuccess(avoid -> {
+
+                        heartbeatWatchdog.add(sessionId, () -> {
+                                heartbeatWatchdog.remove(sessionId);
+                                dispose();
+                            },
+                                ignore -> inbound.getLastSignalTimeNs());
+
+                        heartbeatDisposable = heartbeatSender.scheduleHeartbeats(clientControlPub, sessionId)
+                                .doOnError(th -> heartbeatDisposable.dispose())
+                                .subscribe();
+
+                        sessionHandlerById.put(sessionId, this);
+
                         Publisher<Void> publisher = ioHandler.apply(inbound, outbound);
                         Mono.from(publisher).doOnTerminate((avoid2, th) -> {
                             dispose();
                         }).subscribe();
-
-                        heartbeatWatchdog.add(sessionId, clientControlPub)
-                                .doOnError(th -> dispose()).subscribe();
-
-                        sessionHandlerById.put(sessionId, this);
                     })
                     .doOnError(th -> {
                         dispose();
@@ -174,30 +203,16 @@ final class ServerPooler implements MessageHandler {
         }
 
         private Mono<Void> sendConnectAck() {
-            return Mono.create(sink -> {
-                clientControlPub = wrapper.addPublication(clientChannel, clientControlStreamId,
-                        "sending " + MessageType.CONNECT_ACK, sessionId);
-                MessagePublisher publisher = new MessagePublisher(logger, options.connectTimeoutMillis(),
-                        options.backpressureTimeoutMillis());
-
-                //FIXME: Exceptions handling
-                long result = publisher.publish(clientControlPub,
-                        MessageType.CONNECT_ACK,
-                        Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId), sessionId);
-
-                if (result > 0) {
-                    logger.debug("Sent {} to {}", MessageType.CONNECT_ACK, AeronUtils.format(clientControlPub));
-                    sink.success();
-                } else {
-                    sink.error(new Exception("Failed to send " + MessageType.CONNECT_ACK));
-                }
-            });
+            return Mono.create(sink ->
+                    new RetryTask(Schedulers.single(), 100,
+                            options.connectTimeoutMillis() + options.backpressureTimeoutMillis(),
+                            new SendConnectAckTask(sink)).schedule());
         }
 
         @Override
         public void onNext(long sessionId, ByteBuffer buffer) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("Received {} for sessionId: {}, buffer: {}", MessageType.NEXT, sessionId, buffer);
+            if (logger.isTraceEnabled()) {
+                logger.trace("Received {} for sessionId: {}, buffer: {}", MessageType.NEXT, sessionId, buffer);
             }
 
             if (this.sessionId == sessionId) {
@@ -208,50 +223,64 @@ final class ServerPooler implements MessageHandler {
         }
 
         @Override
+        public void onComplete(long sessionId) {
+            if (logger.isTraceEnabled()) {
+                logger.trace("Received {} for sessionId: {}", MessageType.COMPLETE, sessionId);
+            }
+
+            SessionHandler sessionHandler = sessionHandlerById.get(sessionId);
+            if (sessionHandler != null) {
+                sessionHandler.dispose();
+            }
+        }
+
+        @Override
         public void dispose() {
             sessionHandlerById.remove(this);
 
-            if (serverDataSub != null) {
-                pooler.removeSubscription(serverDataSub);
-                serverDataSub.close();
-            }
+            pooler.removeSubscription(serverDataSub);
+            serverDataSub.close();
 
-            if (clientControlPub != null) {
-                heartbeatWatchdog.remove(sessionId);
+            heartbeatDisposable.dispose();
+            heartbeatWatchdog.remove(sessionId);
 
-                clientControlPub.close();
-            }
+            clientControlPub.close();
+
             outbound.dispose();
             inbound.dispose();
 
             logger.debug("Closed session with sessionId: {}", sessionId);
         }
 
-    }
+        class SendConnectAckTask implements Callable<Boolean> {
 
-    static class HeartbeatWatchdog {
+            private final MessagePublisher publisher;
 
-        private final Map<Long, Disposable> disposableBySessionId = new ConcurrentHashMap<>();
+            private final MonoSink<?> sink;
 
-        Mono<Void> add(long sessionId, Publication publication) {
-            return Mono.create(sink -> {
-                AtomicReference<Runnable> taskRef = new AtomicReference<>(() -> {});
-                Disposable disposable = Schedulers.single().schedulePeriodically(
-                        () -> taskRef.get().run(), 1, 1, TimeUnit.SECONDS);
-                disposableBySessionId.put(sessionId, disposable);
-                taskRef.set(() -> {
-                    if (!publication.isConnected()) {
-                        disposable.dispose();
-                        sink.error(new RuntimeException("Session with sessionId: " + sessionId + " disconnected"));
+            SendConnectAckTask(MonoSink<?> sink) {
+                this.sink = sink;
+                this.publisher = new MessagePublisher(logger, 0, 0);
+            }
+
+            @Override
+            public Boolean call() {
+                Exception cause = null;
+                try {
+                    long result = publisher.publish(clientControlPub, MessageType.CONNECT_ACK,
+                            Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId), sessionId);
+                    if (result > 0) {
+                        logger.debug("Sent {} to {}", MessageType.CONNECT_ACK, AeronUtils.format(clientControlPub));
+                        sink.success();
+                        return true;
+                    } else if (result != Publication.CLOSED) {
+                        return false;
                     }
-                });
-            });
-        }
-
-        void remove(long sessionId) {
-            Disposable disposable = disposableBySessionId.remove(sessionId);
-            if (disposable != null) {
-                disposable.dispose();
+                } catch (Exception ex) {
+                    cause = ex;
+                }
+                sink.error(new RuntimeException("Failed to send " + MessageType.CONNECT_ACK, cause));
+                return true;
             }
         }
 

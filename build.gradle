@@ -65,7 +65,7 @@ ext {
 apply from: "$gradleScriptDir/setup.gradle"
 apply from: "$gradleScriptDir/doc.gradle"
 
-configure(rootProject) { project ->
+configure(allprojects) { project ->
   group = 'io.projectreactor.ipc'
 
   apply plugin: 'propdeps'
@@ -182,6 +182,27 @@ configure(rootProject) { project ->
 }
 
 configurations.all {
-  // check for updates every build
-  resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+	// check for updates every build
+	resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+}
+
+configure(rootProject) {
+	archivesBaseName = 'reactor-aeron'
+	description = 'Reactor Aeron: A reactive API for Aeron'
+
+	artifacts {
+		archives sourcesJar
+		archives javadocJar
+	}
+}
+
+project(':reactor-aeron-tools') {
+	archivesBaseName = 'reactor-aeron-tools'
+	description = 'Tools for Reactor Aeron'
+
+	dependencies {
+		compile rootProject
+		compile rootProject.sourceSets.test.output
+		compile 'ch.qos.logback:logback-classic:1.1.5'
+	}
 }

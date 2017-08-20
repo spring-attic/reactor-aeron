@@ -26,9 +26,9 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
         this.publication = publication;
         this.options = options;
         this.sessionId = sessionId;
-        this.inner = new SignalSender(this, this.publication, this.sessionId, this.options);
         this.logger = Loggers.getLogger(AeronWriteSequencer.class + "." + category);
         this.errorHandler = th -> logger.error("Unexpected exception", th);
+        this.inner = new SignalSender(this, this.publication, this.sessionId, this.options, logger);
     }
 
     @Override
@@ -49,7 +49,7 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
 
         private final MessagePublisher publisher;
 
-        SignalSender(AeronWriteSequencer sequencer, Publication publication, long sessionId, AeronOptions options) {
+        SignalSender(AeronWriteSequencer sequencer, Publication publication, long sessionId, AeronOptions options, Logger logger) {
             super(sequencer);
 
             this.publication = publication;
@@ -61,21 +61,21 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
 
         @Override
         void doOnNext(ByteBuffer byteBuffer) {
-            long result = 0;
             Exception cause = null;
+            long result = 0;
             try {
                 result = publisher.publish(publication, MessageType.NEXT, byteBuffer, sessionId);
-            } catch (Exception e) {
-                cause = e;
-            }
-            if (result > 0) {
-                request(1);
-            } else {
+                if (result > 0) {
+                    request(1);
+                    return;
+                }
+            } catch (Exception ex) {
                 cancel();
 
-                String message = "Failed to publish signal into session with Id: " + sessionId;
-                promise.error(cause == null ? new Exception(message): new Exception(message, cause));
+                cause = ex;
             }
+            promise.error(new Exception("Failed to publish signal into session with Id: " + sessionId
+                    + ", result=" + result, cause));
         }
 
         @Override

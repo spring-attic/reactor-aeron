@@ -30,6 +30,8 @@ public class AeronOptions {
 
     private static final int DEFAULT_BACKPRESSURE_TIMEOUT_MILLIS = (int) Duration.ofSeconds(5).toMillis();
 
+    private static final int DEFAULT_HEARTBEAT_TIMEOUT_MILLIS = (int) Duration.ofSeconds(5).toMillis();
+
     private String serverChannel = DEFAULT_SERVER_CHANNEL;
 
     private int serverStreamId = 1;
@@ -39,6 +41,8 @@ public class AeronOptions {
     private Aeron aeron;
 
     private int backpressureTimeoutMillis = DEFAULT_BACKPRESSURE_TIMEOUT_MILLIS;
+
+    private int heartbeatTimeoutMillis = DEFAULT_HEARTBEAT_TIMEOUT_MILLIS;
 
     public int connectTimeoutMillis() {
         return connectTimeoutMillis;
@@ -90,5 +94,16 @@ public class AeronOptions {
         }
 
         this.backpressureTimeoutMillis = backpressureTimeoutMillis;
+    }
+
+    public void heartbeatTimeoutMillis(int heartbeatTimeoutMillis) {
+        if (heartbeatTimeoutMillis <= 0) {
+            throw new IllegalArgumentException("heartbeatTimeoutMillis > 0 expected, but got: " + heartbeatTimeoutMillis);
+        }
+        this.heartbeatTimeoutMillis = heartbeatTimeoutMillis;
+    }
+
+    public int heartbeatTimeoutMillis() {
+        return heartbeatTimeoutMillis;
     }
 }
