@@ -33,25 +33,22 @@ plugins {
 description = 'Integration of Aeron library with reactor'
 
 ext {
-  gradleVersion = '2.8'
+  gradleVersion = '3.5'
   gradleScriptDir = "${rootProject.projectDir}/gradle"
 
-  reactorIpcVersion = '0.6.3.BUILD-SNAPSHOT'
-  reactorCoreVersion = '3.1.0.BUILD-SNAPSHOT'
-
-  // Languages
-  groovyVersion = '2.4.1'
+  reactorIpcVersion = '0.7.0.M1'
+  reactorCoreVersion = '3.1.0.M3'
 
   // Logging
   slf4jVersion = '1.7.12'
-  logbackVersion = '1.1.2'
+  logbackVersion = '1.1.5'
 
   // Libraries
-  aeronVersion = '1.2.5'
+  aeronVersion = '1.4.0'
 
   // Testing
-  mockitoVersion = '1.10.19'
-  spockVersion = '1.0-groovy-2.4'
+  assertJVersion = '3.6.1'
+  mockitoVersion = '2.7.22'
 
   javadocLinks = ["http://docs.oracle.com/javase/7/docs/api/",
 				  "http://docs.oracle.com/javaee/6/api/",
@@ -117,17 +114,6 @@ configure(allprojects) { project ->
 	exclude group: 'commons-logging', module: 'commons-logging'
   }
 
-  project.tasks.withType(Test).all {
-	systemProperty("java.awt.headless", "true")
-	systemProperty("reactor.trace.cancel", "true")
-	systemProperty("reactor.trace.nocapacity", "true")
-	systemProperty("testGroups", project.properties.get("testGroups"))
-	scanForTestClasses = false
-	include '**/*Tests.*'
-	include '**/*Spec.*'
-	exclude '**/*Abstract*.*'
-  }
-
   repositories {
 	mavenLocal()
 	maven { url 'http://repo.spring.io/libs-milestone' }
@@ -150,17 +136,14 @@ configure(allprojects) { project ->
 	compile "io.projectreactor.ipc:reactor-ipc:$reactorIpcVersion"
     compile "io.projectreactor:reactor-core:$reactorCoreVersion"
 
-	testCompile "io.projectreactor:reactor-test:$reactorCoreVersion"
-	testCompile "org.reactivestreams:reactive-streams-tck:1.0.1"
-	testCompile "org.mockito:mockito-core:1.10.19"
-
+    testCompile 'junit:junit:4.12'
+    testCompile "io.projectreactor:reactor-test:$reactorCoreVersion"
 
 	testRuntime "ch.qos.logback:logback-classic:$logbackVersion"
 	// Testing
-	testCompile "org.codehaus.groovy:groovy:$groovyVersion",
-			"org.spockframework:spock-core:$spockVersion",
-			"org.hamcrest:hamcrest-library:1.3",
-			"org.testng:testng:6.8.5"
+    testCompile "org.hamcrest:hamcrest-library:1.3",
+            "org.assertj:assertj-core:$assertJVersion",
+            "org.mockito:mockito-core:$mockitoVersion"
   }
 
 
@@ -203,6 +186,6 @@ project(':reactor-aeron-tools') {
 	dependencies {
 		compile rootProject
 		compile rootProject.sourceSets.test.output
-		compile 'ch.qos.logback:logback-classic:1.1.5'
+		compile "ch.qos.logback:logback-classic:$logbackVersion"
 	}
 }

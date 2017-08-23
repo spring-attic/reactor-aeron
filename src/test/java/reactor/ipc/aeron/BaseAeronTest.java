@@ -1,12 +1,12 @@
 package reactor.ipc.aeron;
 
-import com.beust.jcommander.internal.Lists;
 import org.junit.After;
 import org.junit.BeforeClass;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -16,7 +16,7 @@ public class BaseAeronTest {
 
     public static final Duration TIMEOUT = Duration.ofSeconds(100);
 
-    private final List<Disposable> disposables = Lists.newArrayList();
+    private final List<Disposable> disposables = new ArrayList<>();
 
     Disposable blockAndAddDisposable(Mono<? extends Disposable> mono) {
         Disposable disposable = mono.block(TIMEOUT);
