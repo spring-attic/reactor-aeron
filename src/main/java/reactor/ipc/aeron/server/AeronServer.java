@@ -65,7 +65,7 @@ public final class AeronServer implements AeronConnector {
         return Mono.create(sink -> {
             AeronWrapper wrapper = new AeronWrapper(name, options);
             Subscription subscription = wrapper.addSubscription(options.serverChannel(), options.serverStreamId(),
-                    "control requests", 0);
+                    "to receive control requests on", 0);
             ServerPooler pooler = new ServerPooler(name, wrapper, ioHandler, options, subscription);
             pooler.initialise();
 

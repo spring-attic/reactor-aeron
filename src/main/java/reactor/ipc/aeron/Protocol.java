@@ -63,7 +63,7 @@ public class Protocol {
         return ByteBuffer.wrap(array);
     }
 
-    public static ByteBuffer createHeartbeatBody(long sessionId) {
+    public static ByteBuffer createHeartbeatBody() {
         return ByteBuffer.wrap(new byte[0]);
     }
 

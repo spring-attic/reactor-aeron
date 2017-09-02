@@ -92,11 +92,11 @@ final class ServerPooler implements MessageHandler {
         this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), category);
     }
 
-    public void initialise() {
+    void initialise() {
         pooler.initialise();
     }
 
-    public Mono<Void> shutdown() {
+    Mono<Void> shutdown() {
         return pooler.shutdown()
                 .doOnTerminate((avoid, th) -> sessionHandlerById.values().forEach(SessionHandler::dispose));
     }
@@ -111,21 +111,15 @@ final class ServerPooler implements MessageHandler {
         long sessionId = nextSessionId.incrementAndGet();
         SessionHandler sessionHandler = new SessionHandler(clientChannel, clientSessionStreamId, clientControlStreamId,
                 connectRequestId, sessionId, serverSessionStreamId);
-        sessionHandler.initialise();
+
+        sessionHandler.initialise()
+                .subscribeOn(Schedulers.single())
+                .subscribe();
     }
 
     @Override
     public void onConnectAck(UUID connectRequestId, long sessionId, int serverSessionStreamId) {
         throw new UnsupportedOperationException();
-    }
-
-    //FIXME: Remove
-    @Override
-    public void onDisonnect(long sessionId) {
-        SessionHandler sessionHandler = sessionHandlerById.get(sessionId);
-        if (sessionHandler != null) {
-            sessionHandler.dispose();
-        }
     }
 
     @Override
@@ -164,17 +158,17 @@ final class ServerPooler implements MessageHandler {
             this.inbound = new AeronServerInbound(category);
             this.serverSessionStreamId = serverSessionStreamId;
             this.clientControlPub = wrapper.addPublication(clientChannel, clientControlStreamId,
-                    "sending " + MessageType.CONNECT_ACK, sessionId);
+                    "to send control requests to client", sessionId);
             this.serverDataSub = wrapper.addSubscription(options.serverChannel(),
-                    serverSessionStreamId, "client data", sessionId);
+                    serverSessionStreamId, "to receive client data on", sessionId);
         }
 
-        void initialise() {
+        Mono<Void> initialise() {
             pooler.addSubscription(serverDataSub, this);
 
             Mono<Void> initialiseOutbound = outbound.initialise(sessionId, clientSessionStreamId);
 
-            sendConnectAck()
+            return sendConnectAck()
                     .then(initialiseOutbound)
                     .doOnSuccess(avoid -> {
 
@@ -190,6 +184,9 @@ final class ServerPooler implements MessageHandler {
 
                         sessionHandlerById.put(sessionId, this);
 
+                        logger.debug("Client with connectRequestId: {} successfully connected, sessionId: {}",
+                                connectRequestId, sessionId);
+
                         Publisher<Void> publisher = ioHandler.apply(inbound, outbound);
                         Mono.from(publisher).doOnTerminate((avoid2, th) -> {
                             dispose();
@@ -198,15 +195,16 @@ final class ServerPooler implements MessageHandler {
                     .doOnError(th -> {
                         dispose();
                         logger.debug("Failed to connect to the client for sessionId: {}", sessionId, th);
-                    })
-                    .subscribe();
+                    });
         }
 
         private Mono<Void> sendConnectAck() {
             return Mono.create(sink ->
                     new RetryTask(Schedulers.single(), 100,
                             options.connectTimeoutMillis() + options.backpressureTimeoutMillis(),
-                            new SendConnectAckTask(sink)).schedule());
+                            new SendConnectAckTask(sink),
+                            th -> sink.error(new RuntimeException("Failed to send " + MessageType.CONNECT_ACK
+                                    + " into " + AeronUtils.format(clientControlPub), th))).schedule());
         }
 
         @Override
@@ -264,23 +262,18 @@ final class ServerPooler implements MessageHandler {
             }
 
             @Override
-            public Boolean call() {
-                Exception cause = null;
-                try {
-                    long result = publisher.publish(clientControlPub, MessageType.CONNECT_ACK,
-                            Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId), sessionId);
-                    if (result > 0) {
-                        logger.debug("Sent {} to {}", MessageType.CONNECT_ACK, AeronUtils.format(clientControlPub));
-                        sink.success();
-                        return true;
-                    } else if (result != Publication.CLOSED) {
-                        return false;
-                    }
-                } catch (Exception ex) {
-                    cause = ex;
+            public Boolean call() throws Exception{
+                long result = publisher.publish(clientControlPub, MessageType.CONNECT_ACK,
+                        Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId), sessionId);
+                if (result > 0) {
+                    logger.debug("Sent {} to {}", MessageType.CONNECT_ACK, AeronUtils.format(clientControlPub));
+                    sink.success();
+                    return true;
+                } else if (result == Publication.CLOSED) {
+                    throw new RuntimeException("Publication " + AeronUtils.format(clientControlPub) + " has been closed");
                 }
-                sink.error(new RuntimeException("Failed to send " + MessageType.CONNECT_ACK, cause));
-                return true;
+
+                return false;
             }
         }
 

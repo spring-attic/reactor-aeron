@@ -61,7 +61,7 @@ public class HeartbeatSender {
                 return;
             }
 
-            ByteBuffer buffer = Protocol.createHeartbeatBody(sessionId);
+            ByteBuffer buffer = Protocol.createHeartbeatBody();
             MessagePublisher publisher = new MessagePublisher(logger, 0, 0);
             Exception cause = null;
             long result = 0;

@@ -19,7 +19,7 @@ public class WriteSequencerTest {
     @Test
     public void itProvidesSignalsFromAddedPublishers() throws Exception {
         WriteSequencerForTest sequencer = new WriteSequencerForTest();
-        Scheduler scheduler = Schedulers.newParallel("sequencer", 1);
+        Scheduler scheduler = Schedulers.newSingle("sequencer", false);
 
         Flux<String> flux = Flux.just("Hello", "world");
         Flux<String> publishOn = flux.publishOn(Schedulers.newSingle("scheduler-1"));

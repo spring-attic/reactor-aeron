@@ -52,7 +52,7 @@ public final class AeronOutbound implements Outbound<ByteBuffer>, Disposable {
         this.wrapper = wrapper;
         this.channel = channel;
         this.options = options;
-        this.scheduler = Schedulers.newParallel(category + "-[sender]", 1);
+        this.scheduler = Schedulers.newSingle(category + "-[sender]", false);
     }
 
     @Override
@@ -71,7 +71,7 @@ public final class AeronOutbound implements Outbound<ByteBuffer>, Disposable {
 
     public Mono<Void> initialise(long sessionId, int streamId) {
         return Mono.create(sink -> {
-            this.publication = wrapper.addPublication(channel, streamId, "sending data", sessionId);
+            this.publication = wrapper.addPublication(channel, streamId, "to send data to", sessionId);
             this.sequencer = new AeronWriteSequencer(category, publication, options, sessionId);
             new RetryTask(Schedulers.single(), 100, options.connectTimeoutMillis(), () -> {
                 if (publication.isConnected()) {
@@ -79,7 +79,7 @@ public final class AeronOutbound implements Outbound<ByteBuffer>, Disposable {
                     return true;
                 }
                 return false;
-            }, () -> sink.error(new Exception("Failed to connect to client for sessionId: " + sessionId))).schedule();
+            }, th -> sink.error(new Exception("Failed to connect to client for sessionId: " + sessionId, th))).schedule();
         });
     }
 

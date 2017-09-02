@@ -4,6 +4,8 @@ import reactor.core.scheduler.Scheduler;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 
 /**
  * @author Anatoly Kadyshev
@@ -18,17 +20,15 @@ public final class RetryTask implements Runnable {
 
     private final Callable<Boolean> task;
 
-    private final Runnable onTimeoutTask;
+    private final Consumer<Throwable> onTimeoutTask;
 
     private long startTimeNs = 0;
 
-    public RetryTask(Scheduler scheduler, long retryMillis, long timeoutMillis,
-                     Callable<Boolean> task) {
-        this(scheduler, retryMillis, timeoutMillis, task, () -> {});
-    }
-
-    RetryTask(Scheduler scheduler, long retryMillis, long timeoutMillis,
-              Callable<Boolean> task, Runnable onTimeoutTask) {
+    public RetryTask(Scheduler scheduler,
+                     long retryMillis,
+                     long timeoutMillis,
+                     Callable<Boolean> task,
+                     Consumer<Throwable> onTimeoutTask) {
         this.scheduler = scheduler;
         this.retryMillis = retryMillis;
         this.timeoutNs = TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
@@ -45,11 +45,12 @@ public final class RetryTask implements Runnable {
                 if(now - startTimeNs < timeoutNs) {
                     scheduler.schedule(this, retryMillis, TimeUnit.MILLISECONDS);
                 } else {
-                    onTimeoutTask.run();
+                    onTimeoutTask.accept(new TimeoutException("Retry operation was unsuccessful during "
+                            + TimeUnit.NANOSECONDS.toMillis(timeoutNs) + " millis"));
                 }
             }
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            onTimeoutTask.accept(e);
         }
     }
 

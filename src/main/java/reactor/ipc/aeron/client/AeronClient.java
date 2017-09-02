@@ -88,7 +88,7 @@ public final class AeronClient implements AeronConnector, Disposable {
 
         this.wrapper = new AeronWrapper(this.name, options);
         this.controlSubscription = wrapper.addSubscription(
-                options.clientChannel(), controlStreamId, "control requests", 0);
+                options.clientChannel(), controlStreamId, "to receive control requests on", 0);
 
         Pooler pooler = new Pooler(this.name);
         pooler.addSubscription(controlSubscription, controlMessageHandler);
@@ -151,7 +151,7 @@ public final class AeronClient implements AeronConnector, Disposable {
             this.connectRequestId = UUIDUtils.create();
             this.clientSessionStreamId = streamIdCounter.incrementAndGet();
             this.serverControlPub = wrapper.addPublication(options.serverChannel(), options.serverStreamId(),
-                    "sending requests", 0);
+                    "to send control requests to server", 0);
             this.outbound = new AeronOutbound(name, wrapper, options.serverChannel(), options);
         }
 
@@ -176,6 +176,12 @@ public final class AeronClient implements AeronConnector, Disposable {
                         heartbeatWatchdog.add(connectAckResponse.sessionId, this::dispose, ignore -> inbound.getLastSignalTimeNs());
 
                         return outbound.initialise(connectAckResponse.sessionId, connectAckResponse.serverSessionStreamId);
+                    })
+                    .doOnSuccess(ignore -> {
+                        if (logger.isDebugEnabled()) {
+                            logger.debug("Successfully connected to server at {}, sessionId: {}",
+                                    AeronUtils.format(serverControlPub), sessionId);
+                        }
                     })
                     .doOnSuccess(avoid -> Mono.from(ioHandler.apply(inbound, outbound))
                             .doOnTerminate((avoid2, th) -> dispose())
@@ -214,6 +220,7 @@ public final class AeronClient implements AeronConnector, Disposable {
                 try {
                     long result = publisher.publish(publication, messageType, buffer, sessionId);
                     if (result > 0) {
+                        logger.debug("Sent {} to {}", messageType, AeronUtils.format(publication));
                         sink.success();
                         return;
                     }
@@ -230,9 +237,7 @@ public final class AeronClient implements AeronConnector, Disposable {
 
             handlers.remove(this);
 
-            if (heartbeatDisposable != null) {
-                heartbeatDisposable.dispose();
-            }
+            heartbeatDisposable.dispose();
 
             heartbeatWatchdog.remove(sessionId);
 

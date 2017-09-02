@@ -54,7 +54,7 @@ public class Server_Throughput {
                 }
             }
 
-            System.out.printf("Rate: %d MB/s, %ds avg rate: %d\n", toMb(value), SLIDING_AVG_DURATION_SEC,
+            System.out.printf("Rate: %d MB/s, %ds avg rate: %d MB/s\n", toMb(value), SLIDING_AVG_DURATION_SEC,
                     toMb(total) / SLIDING_AVG_DURATION_SEC);
         }, 1, 1, TimeUnit.SECONDS);
 

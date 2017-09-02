@@ -45,7 +45,7 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
     public AeronClientInbound(Pooler pooler, AeronWrapper wrapper, String channel, int streamId, long sessionId) {
         this.pooler = Objects.requireNonNull(pooler);
-        this.subscription = wrapper.addSubscription(channel, streamId, "receiving server data", sessionId);
+        this.subscription = wrapper.addSubscription(channel, streamId, "to receive data from server on", sessionId);
 
         this.flux = new AeronFlux(FluxProcessor.create(emitter -> {
             messageHandler = new ClientMessageHandler(sessionId, emitter);

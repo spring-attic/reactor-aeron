@@ -38,7 +38,4 @@ public interface MessageHandler {
     default void onHeartbeat(long sessionId) {
     }
 
-    default void onDisonnect(long sessionId) {
-    }
-
 }

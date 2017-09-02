@@ -20,7 +20,6 @@ package reactor.ipc.aeron;
  */
 public enum MessageType {
     CONNECT,
-    DISCONNECT,
     CONNECT_ACK,
     HEARTBEAT,
     NEXT,

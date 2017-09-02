@@ -46,7 +46,14 @@ public class PoolerFragmentHandler implements FragmentHandler {
         long sessionId = buffer.getLong(index);
         index += BitUtil.SIZE_OF_LONG;
 
-        if (type == MessageType.CONNECT.ordinal()) {
+        if (type == MessageType.NEXT.ordinal()) {
+            int bytesLength = length - (index - offset);
+            ByteBuffer dst = ByteBuffer.allocate(bytesLength);
+            buffer.getBytes(index, dst, bytesLength);
+            dst.rewind();
+
+            handler.onNext(sessionId, dst);
+        } else if (type == MessageType.CONNECT.ordinal()) {
             long mostSigBits = buffer.getLong(index);
             index += BitUtil.SIZE_OF_LONG;
             long leastSigBits = buffer.getLong(index);
@@ -63,13 +70,6 @@ public class PoolerFragmentHandler implements FragmentHandler {
             int clientSessionStreamId = buffer.getInt(index);
 
             handler.onConnect(connectRequestId, channel, clientControlStreamId, clientSessionStreamId);
-        } else if (type == MessageType.NEXT.ordinal()) {
-            int bytesLength = length - (index - offset);
-            ByteBuffer dst = ByteBuffer.allocate(bytesLength);
-            buffer.getBytes(index, dst, bytesLength);
-            dst.rewind();
-
-            handler.onNext(sessionId, dst);
         } else if (type == MessageType.CONNECT_ACK.ordinal()) {
             int serverSessionStreamId = buffer.getInt(index);
             index += BitUtil.SIZE_OF_INT;
@@ -82,8 +82,6 @@ public class PoolerFragmentHandler implements FragmentHandler {
             handler.onConnectAck(connectRequestId, sessionId, serverSessionStreamId);
         } else if (type == MessageType.HEARTBEAT.ordinal()) {
             handler.onHeartbeat(sessionId);
-        } else if (type == MessageType.DISCONNECT.ordinal()) {
-            handler.onDisonnect(sessionId);
         } else if (type == MessageType.COMPLETE.ordinal()) {
             handler.onComplete(sessionId);
         } else {
