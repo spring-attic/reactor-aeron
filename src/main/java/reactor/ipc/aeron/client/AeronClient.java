@@ -161,9 +161,7 @@ public final class AeronClient implements AeronConnector, Disposable {
             Mono<ConnectAckResponse> awaitConnectAckMono = controlMessageHandler.awaitConnectAck(connectRequestId)
                     .timeout(options.ackTimeout());
 
-            Mono<Void> sendConnectMono = sendConnectRequest();
-            return awaitConnectAckMono.and(sendConnectMono.then(Mono.just("ignore")),
-                    (connectAckResponse, ignore) -> connectAckResponse)
+            return awaitConnectAckMono.delayUntil(c -> sendConnectRequest())
                     .flatMap(connectAckResponse -> {
                         inbound = new AeronClientInbound(pooler, wrapper, options.clientChannel(),
                                 clientSessionStreamId, connectAckResponse.sessionId);
