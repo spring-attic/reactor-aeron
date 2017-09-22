@@ -98,7 +98,8 @@ final class ServerPooler implements MessageHandler {
 
     Mono<Void> shutdown() {
         return pooler.shutdown()
-                .doOnTerminate((avoid, th) -> sessionHandlerById.values().forEach(SessionHandler::dispose));
+                     .doOnTerminate(() -> sessionHandlerById.values().forEach
+                             (SessionHandler::dispose));
     }
 
     @Override
@@ -188,9 +189,7 @@ final class ServerPooler implements MessageHandler {
                                 connectRequestId, sessionId);
 
                         Publisher<Void> publisher = ioHandler.apply(inbound, outbound);
-                        Mono.from(publisher).doOnTerminate((avoid2, th) -> {
-                            dispose();
-                        }).subscribe();
+                        Mono.from(publisher).doOnTerminate(this::dispose).subscribe();
                     })
                     .doOnError(th -> {
                         dispose();

@@ -182,7 +182,7 @@ public final class AeronClient implements AeronConnector, Disposable {
                         }
                     })
                     .doOnSuccess(avoid -> Mono.from(ioHandler.apply(inbound, outbound))
-                            .doOnTerminate((avoid2, th) -> dispose())
+                            .doOnTerminate(this::dispose)
                             .subscribe())
                     .doOnError(th -> {
                         logger.error("Unexpected exception", th);
