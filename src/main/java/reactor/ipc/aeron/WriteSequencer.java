@@ -339,7 +339,7 @@ abstract class WriteSequencer<T> {
                     return;
                 }
 
-                Operators.getAndAddCap(MISSED_REQUESTED, this, n);
+                Operators.addCap(MISSED_REQUESTED, this, n);
 
                 drain();
             }
@@ -457,7 +457,7 @@ abstract class WriteSequencer<T> {
                 return;
             }
 
-            Operators.getAndAddCap(MISSED_PRODUCED, this, n);
+            Operators.addCap(MISSED_PRODUCED, this, n);
 
             drain();
         }
