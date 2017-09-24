@@ -20,7 +20,7 @@ import io.aeron.Subscription;
 import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.MonoSink;
+import reactor.core.publisher.MonoProcessor;
 import reactor.ipc.aeron.AeronConnector;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOutbound;
@@ -161,7 +161,8 @@ public final class AeronClient implements AeronConnector, Disposable {
             Mono<ConnectAckResponse> awaitConnectAckMono = controlMessageHandler.awaitConnectAck(connectRequestId)
                     .timeout(options.ackTimeout());
 
-            return awaitConnectAckMono.delayUntil(c -> sendConnectRequest())
+            return sendConnectRequest()
+                    .then(awaitConnectAckMono)
                     .flatMap(connectAckResponse -> {
                         inbound = new AeronClientInbound(pooler, wrapper, options.clientChannel(),
                                 clientSessionStreamId, connectAckResponse.sessionId);
@@ -207,10 +208,9 @@ public final class AeronClient implements AeronConnector, Disposable {
                 if (logger.isDebugEnabled()) {
                     logger.debug("Disconnecting from server at {}", AeronUtils.format(serverControlPub));
                 }
-            }).then(send(buffer, MessageType.COMPLETE, outbound.getPublication(), options.backpressureTimeoutMillis()));
+            }).then(send(buffer, MessageType.COMPLETE, outbound.getPublication(), options.connectTimeoutMillis()));
         }
 
-        //FIXME: Make static
         private Mono<Void> send(ByteBuffer buffer, MessageType messageType, Publication publication, long timeoutMillis) {
             return Mono.create(sink -> {
                 MessagePublisher publisher = new MessagePublisher(logger, timeoutMillis, timeoutMillis);
@@ -265,18 +265,19 @@ public final class AeronClient implements AeronConnector, Disposable {
 
     class ControlMessageHandler implements MessageHandler {
 
-        private final Map<UUID, MonoSink<ConnectAckResponse>> sinkByConnectRequestId = new ConcurrentHashMap<>();
+        private final Map<UUID, MonoProcessor<ConnectAckResponse>> sinkByConnectRequestId = new ConcurrentHashMap<>();
 
         @Override
         public void onConnectAck(UUID connectRequestId, long sessionId, int serverSessionStreamId) {
             logger.debug("Received {} for connectRequestId: {}, serverSessionStreamId: {}", MessageType.CONNECT_ACK,
                     connectRequestId, serverSessionStreamId);
 
-            MonoSink<ConnectAckResponse> sink = sinkByConnectRequestId.get(connectRequestId);
-            if (sink == null) {
+            MonoProcessor<ConnectAckResponse> processor = sinkByConnectRequestId.remove(connectRequestId);
+            if (processor == null) {
                 logger.error("Could not find connectRequestId: {}", connectRequestId);
             } else {
-                sink.success(new ConnectAckResponse(sessionId, serverSessionStreamId));
+                processor.onNext(new ConnectAckResponse(sessionId, serverSessionStreamId));
+                processor.onComplete();
             }
         }
 
@@ -286,11 +287,9 @@ public final class AeronClient implements AeronConnector, Disposable {
         }
 
         Mono<ConnectAckResponse> awaitConnectAck(UUID connectRequestId) {
-            return Mono.create(sink -> {
-                sinkByConnectRequestId.put(connectRequestId, sink);
-                sink.onDispose(() ->
-                        sinkByConnectRequestId.remove(connectRequestId));
-            });
+            MonoProcessor<ConnectAckResponse> processor = MonoProcessor.create();
+            sinkByConnectRequestId.put(connectRequestId, processor);
+            return processor;
         }
 
     }

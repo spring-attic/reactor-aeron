@@ -200,7 +200,7 @@ final class ServerPooler implements MessageHandler {
         private Mono<Void> sendConnectAck() {
             return Mono.create(sink ->
                     new RetryTask(Schedulers.single(), 100,
-                            options.connectTimeoutMillis() + options.backpressureTimeoutMillis(),
+                            options.connectTimeoutMillis() * 2,
                             new SendConnectAckTask(sink),
                             th -> sink.error(new RuntimeException("Failed to send " + MessageType.CONNECT_ACK
                                     + " into " + AeronUtils.format(clientControlPub), th))).schedule());
