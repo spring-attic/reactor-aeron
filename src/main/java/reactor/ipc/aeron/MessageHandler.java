@@ -23,6 +23,8 @@ import java.util.UUID;
  */
 public interface MessageHandler {
 
+    long requested();
+
     default void onConnect(UUID connectRequestId, String clientChannel, int clientControlStreamId, int clientSessionStreamId) {
     }
 

@@ -2,7 +2,6 @@ package reactor.ipc.aeron.demo;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.ipc.aeron.AeronTestUtils;
 import reactor.ipc.aeron.client.AeronClient;
 
 import java.nio.ByteBuffer;
@@ -12,7 +11,7 @@ import java.nio.ByteBuffer;
  */
 public class Client_Throughput {
 
-    public static final String HOST = "localhost";
+    private static final String HOST = "localhost";
 
     public static void main(String[] args) {
         AeronClient client = AeronClient.create("client", options -> {
@@ -31,7 +30,8 @@ public class Client_Throughput {
                 }
                 sink.complete();
                 System.out.println("Send complete");
-            })).then().subscribe(avoid -> {}, th -> th.printStackTrace());
+            })).then().subscribe(avoid -> {}, th ->
+                    System.err.printf("Failed to send flux due to: %s\n", th));
 
             return Mono.never();
         }).block();
