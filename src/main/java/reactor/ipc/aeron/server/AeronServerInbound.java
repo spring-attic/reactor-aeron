@@ -16,6 +16,7 @@
 package reactor.ipc.aeron.server;
 
 import reactor.core.Disposable;
+import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.TopicProcessor;
 import reactor.ipc.aeron.AeronFlux;
 import reactor.ipc.aeron.AeronInbound;
@@ -29,12 +30,13 @@ final class AeronServerInbound implements AeronInbound, Disposable {
 
     private final AeronFlux flux;
 
-    private final TopicProcessor<ByteBuffer> processor;
+    private final FluxSink<ByteBuffer> sink;
 
     private volatile long lastSignalTimeNs;
 
     AeronServerInbound(String name) {
-        this.processor = TopicProcessor.<ByteBuffer>builder().name(name).build();
+        TopicProcessor<ByteBuffer> processor = TopicProcessor.<ByteBuffer>builder().name(name).build();
+        this.sink = processor.sink();
         this.flux = new AeronFlux(processor);
     }
 
@@ -46,15 +48,20 @@ final class AeronServerInbound implements AeronInbound, Disposable {
     void onNext(ByteBuffer buffer) {
         //FIXME: Could affect performance
         lastSignalTimeNs = System.nanoTime();
-        processor.onNext(buffer);
+        sink.next(buffer);
     }
 
     @Override
     public void dispose() {
-        processor.onComplete();
+        sink.complete();
     }
 
     long getLastSignalTimeNs() {
         return lastSignalTimeNs;
     }
+
+    long requested() {
+        return sink.requestedFromDownstream();
+    }
+
 }

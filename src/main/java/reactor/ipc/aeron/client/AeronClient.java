@@ -142,7 +142,7 @@ public final class AeronClient implements AeronConnector, Disposable {
 
         private final Publication serverControlPub;
 
-        private volatile Disposable heartbeatDisposable = () -> {};
+        private volatile Disposable heartbeatSenderDisposable = () -> {};
 
         private volatile long sessionId;
 
@@ -167,9 +167,8 @@ public final class AeronClient implements AeronConnector, Disposable {
                         inbound = new AeronClientInbound(pooler, wrapper, options.clientChannel(),
                                 clientSessionStreamId, connectAckResponse.sessionId);
 
-                        heartbeatDisposable = heartbeatSender.scheduleHeartbeats(serverControlPub, connectAckResponse.sessionId)
-                                .doOnError(th -> heartbeatDisposable.dispose())
-                                .subscribe();
+                        heartbeatSenderDisposable = heartbeatSender.scheduleHeartbeats(serverControlPub, connectAckResponse.sessionId)
+                                .subscribe(avoid -> {}, th -> {});
 
                         this.sessionId = connectAckResponse.sessionId;
                         heartbeatWatchdog.add(connectAckResponse.sessionId, this::dispose, ignore -> inbound.getLastSignalTimeNs());
@@ -235,7 +234,7 @@ public final class AeronClient implements AeronConnector, Disposable {
 
             handlers.remove(this);
 
-            heartbeatDisposable.dispose();
+            heartbeatSenderDisposable.dispose();
 
             heartbeatWatchdog.remove(sessionId);
 
@@ -266,6 +265,11 @@ public final class AeronClient implements AeronConnector, Disposable {
     class ControlMessageHandler implements MessageHandler {
 
         private final Map<UUID, MonoProcessor<ConnectAckResponse>> sinkByConnectRequestId = new ConcurrentHashMap<>();
+
+        @Override
+        public long requested() {
+            return 1;
+        }
 
         @Override
         public void onConnectAck(UUID connectRequestId, long sessionId, int serverSessionStreamId) {

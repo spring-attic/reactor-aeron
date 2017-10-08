@@ -41,7 +41,7 @@ public class Pooler implements Runnable {
 
     private volatile boolean isRunning;
 
-    private volatile SubscriptonData[] subscriptions = new SubscriptonData[0];
+    private volatile InnerPooler[] poolers = new InnerPooler[0];
 
     public Pooler(String name) {
         this.logger = LoggerFactory.getLogger(this.getClass() + "." + name);
@@ -66,9 +66,9 @@ public class Pooler implements Runnable {
 
     public synchronized void addSubscription(Subscription subscription, MessageHandler messageHandler) {
         FragmentAssembler handler = new FragmentAssembler(new PoolerFragmentHandler(messageHandler));
-        SubscriptonData data = new SubscriptonData(subscription, handler);
+        InnerPooler data = new InnerPooler(subscription, handler, messageHandler);
 
-        this.subscriptions = ArrayUtil.add(subscriptions, data);
+        this.poolers = ArrayUtil.add(poolers, data);
     }
 
     public Mono<Void> shutdown() {
@@ -99,35 +99,46 @@ public class Pooler implements Runnable {
 
         BackoffIdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
         while (isRunning) {
-            SubscriptonData[] ss = subscriptions;
-            for (int i = 0; i < ss.length; i++) {
-                SubscriptonData data = ss[i];
-                int nReceived = data.subscription.poll(data.handler, 1);
-                idleStrategy.idle(nReceived);
+            InnerPooler[] ss = poolers;
+            int nReceived = 0;
+            for (InnerPooler data : ss) {
+                nReceived = data.poll();
             }
+            idleStrategy.idle(nReceived);
         }
     }
 
     public synchronized void removeSubscription(Subscription subscription) {
-        SubscriptonData[] ss = subscriptions;
+        InnerPooler[] ss = poolers;
         for (int i = 0; i < ss.length; i++) {
-            SubscriptonData data = ss[i];
-            if (data.subscription == subscription) {
-                this.subscriptions = ArrayUtil.remove(subscriptions, i);
+            InnerPooler pooler = ss[i];
+            if (pooler.subscription == subscription) {
+                this.poolers = ArrayUtil.remove(poolers, i);
                 break;
             }
         }
     }
 
-    static class SubscriptonData {
+    static class InnerPooler {
 
         final Subscription subscription;
 
         final FragmentHandler handler;
 
-        SubscriptonData(Subscription subscription, FragmentHandler handler) {
+        final MessageHandler messageHandler;
+
+        InnerPooler(Subscription subscription, FragmentHandler handler, MessageHandler messageHandler) {
             this.subscription = subscription;
             this.handler = handler;
+            this.messageHandler = messageHandler;
+        }
+
+        int poll() {
+            int requested = (int) Math.max(messageHandler.requested(), 8);
+            if (requested > 0) {
+                return subscription.poll(handler, requested);
+            }
+            return 0;
         }
 
     }

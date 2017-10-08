@@ -56,7 +56,7 @@ final class ServerPooler implements MessageHandler {
 
     private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
-    public static final Disposable NO_OP = () -> {};
+    private static final Disposable NO_OP = () -> {};
 
     private final String category;
 
@@ -100,6 +100,11 @@ final class ServerPooler implements MessageHandler {
         return pooler.shutdown()
                      .doOnTerminate(() -> sessionHandlerById.values().forEach
                              (SessionHandler::dispose));
+    }
+
+    @Override
+    public long requested() {
+        return 1;
     }
 
     @Override
@@ -148,7 +153,7 @@ final class ServerPooler implements MessageHandler {
 
         private final Subscription serverDataSub;
 
-        private volatile Disposable heartbeatDisposable = NO_OP;
+        private volatile Disposable heartbeatSenderDisposable = NO_OP;
 
         SessionHandler(String clientChannel, int clientSessionStreamId, int clientControlStreamId,
                        UUID connectRequestId, long sessionId, int serverSessionStreamId) {
@@ -179,9 +184,8 @@ final class ServerPooler implements MessageHandler {
                             },
                                 ignore -> inbound.getLastSignalTimeNs());
 
-                        heartbeatDisposable = heartbeatSender.scheduleHeartbeats(clientControlPub, sessionId)
-                                .doOnError(th -> heartbeatDisposable.dispose())
-                                .subscribe();
+                        heartbeatSenderDisposable = heartbeatSender.scheduleHeartbeats(clientControlPub, sessionId)
+                                .subscribe(ignore -> {}, th -> {});
 
                         sessionHandlerById.put(sessionId, this);
 
@@ -207,6 +211,11 @@ final class ServerPooler implements MessageHandler {
         }
 
         @Override
+        public long requested() {
+            return inbound.requested();
+        }
+
+        @Override
         public void onNext(long sessionId, ByteBuffer buffer) {
             if (logger.isTraceEnabled()) {
                 logger.trace("Received {} for sessionId: {}, buffer: {}", MessageType.NEXT, sessionId, buffer);
@@ -225,9 +234,10 @@ final class ServerPooler implements MessageHandler {
                 logger.trace("Received {} for sessionId: {}", MessageType.COMPLETE, sessionId);
             }
 
-            SessionHandler sessionHandler = sessionHandlerById.get(sessionId);
-            if (sessionHandler != null) {
-                sessionHandler.dispose();
+            if (this.sessionId == sessionId) {
+                dispose();
+            } else {
+                logger.error("Received {} for unexpected sessionId: {}", MessageType.COMPLETE, sessionId);
             }
         }
 
@@ -238,7 +248,7 @@ final class ServerPooler implements MessageHandler {
             pooler.removeSubscription(serverDataSub);
             serverDataSub.close();
 
-            heartbeatDisposable.dispose();
+            heartbeatSenderDisposable.dispose();
             heartbeatWatchdog.remove(sessionId);
 
             clientControlPub.close();

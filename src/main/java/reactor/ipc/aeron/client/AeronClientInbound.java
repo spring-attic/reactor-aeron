@@ -43,7 +43,7 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
     private volatile ClientMessageHandler messageHandler;
 
-    public AeronClientInbound(Pooler pooler, AeronWrapper wrapper, String channel, int streamId, long sessionId) {
+    AeronClientInbound(Pooler pooler, AeronWrapper wrapper, String channel, int streamId, long sessionId) {
         this.pooler = Objects.requireNonNull(pooler);
         this.subscription = wrapper.addSubscription(channel, streamId, "to receive data from server on", sessionId);
 
@@ -78,8 +78,13 @@ final class AeronClientInbound implements AeronInbound, Disposable {
         private volatile long lastSignalTimeNs = 0;
 
         ClientMessageHandler(long sessionId, FluxSink<ByteBuffer> emitter) {
-            this.sessionId = Objects.requireNonNull(sessionId, "sessionId");
+            this.sessionId = sessionId;
             this.emitter = emitter;
+        }
+
+        @Override
+        public long requested() {
+            return emitter.requestedFromDownstream();
         }
 
         @Override
