@@ -15,9 +15,9 @@
  */
 package reactor.ipc.aeron.client;
 
-import io.aeron.Subscription;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
 import reactor.core.Disposable;
 import reactor.ipc.aeron.AeronFlux;
 import reactor.ipc.aeron.AeronInbound;
@@ -36,19 +36,19 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
     private final AeronFlux flux;
 
-    private final Subscription subscription;
+    private final io.aeron.Subscription serverDataSubscription;
 
     private final Pooler pooler;
 
-    private volatile ClientDataMessageProcessor processor;
+    private final ClientDataMessageProcessor processor;
 
     AeronClientInbound(Pooler pooler, AeronWrapper wrapper, String channel, int streamId, long sessionId) {
         this.pooler = Objects.requireNonNull(pooler);
-        this.subscription = wrapper.addSubscription(channel, streamId, "to receive data from server on", sessionId);
+        this.serverDataSubscription = wrapper.addSubscription(channel, streamId, "to receive data from server on", sessionId);
         this.processor = new ClientDataMessageProcessor(sessionId);
         this.flux = new AeronFlux(processor);
 
-        pooler.addDataSubscription(subscription, processor);
+        pooler.addDataSubscription(serverDataSubscription, processor);
     }
 
     @Override
@@ -58,13 +58,13 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
     @Override
     public void dispose() {
-        pooler.removeSubscription(subscription);
+        pooler.removeSubscription(serverDataSubscription);
 
-        subscription.close();
+        serverDataSubscription.close();
     }
 
     long getLastSignalTimeNs() {
-        return processor != null ? processor.lastSignalTimeNs: 0;
+        return processor.lastSignalTimeNs;
     }
 
     static class ClientDataMessageProcessor implements DataMessageSubscriber, Publisher<ByteBuffer> {
@@ -73,7 +73,7 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
         private volatile long lastSignalTimeNs = 0;
 
-        private volatile org.reactivestreams.Subscription subscription;
+        private volatile Subscription subscription;
 
         private volatile Subscriber<? super ByteBuffer> subscriber;
 

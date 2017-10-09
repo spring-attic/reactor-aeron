@@ -24,11 +24,13 @@ import org.agrona.concurrent.BackoffIdleStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Operators;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
 /**
  * @author Anatoly Kadyshev
@@ -134,6 +136,9 @@ public class Pooler implements Runnable {
 
         volatile long requested = 0;
 
+        private static final AtomicLongFieldUpdater<InnerPooler> REQUESTED =
+                AtomicLongFieldUpdater.newUpdater(InnerPooler.class, "requested");
+
         InnerPooler(Subscription subscription, ControlMessageSubscriber subscriber) {
             this(subscription, subscriber, new ControlPoolerFragmentHandler(subscriber));
         }
@@ -151,20 +156,19 @@ public class Pooler implements Runnable {
 
         int poll() {
             int r = (int) Math.min(requested, 8);
+            int nPolled = 0;
             if (r > 0) {
-                int nPolled = subscription.poll(handler, r);
-
-                requested -= nPolled;
-
-                return nPolled;
+                nPolled = subscription.poll(handler, r);
+                if (nPolled > 0) {
+                    Operators.produced(REQUESTED, this, nPolled);
+                }
             }
-            return 0;
+            return nPolled;
         }
 
         @Override
         public void request(long n) {
-            //FIXME: fix
-            requested += n;
+            Operators.addCap(REQUESTED, this, n);
         }
 
         @Override

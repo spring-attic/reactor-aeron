@@ -97,7 +97,7 @@ public class ServerConnector implements Disposable {
                 sink.success();
                 return true;
             } else if (result == Publication.CLOSED) {
-                throw new RuntimeException("Publication " + AeronUtils.format(clientControlPub) + " has been closed");
+                throw new RuntimeException(String.format("Publication %s has been closed", AeronUtils.format(clientControlPub)));
             }
 
             return false;
