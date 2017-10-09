@@ -15,8 +15,8 @@
  */
 package reactor.ipc.aeron.server;
 
+import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
-import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.TopicProcessor;
 import reactor.ipc.aeron.AeronFlux;
 import reactor.ipc.aeron.AeronInbound;
@@ -30,13 +30,10 @@ final class AeronServerInbound implements AeronInbound, Disposable {
 
     private final AeronFlux flux;
 
-    private final FluxSink<ByteBuffer> sink;
-
-    private volatile long lastSignalTimeNs;
+    private final TopicProcessor<ByteBuffer> processor;
 
     AeronServerInbound(String name) {
-        TopicProcessor<ByteBuffer> processor = TopicProcessor.<ByteBuffer>builder().name(name).build();
-        this.sink = processor.sink();
+        this.processor = TopicProcessor.<ByteBuffer>builder().name(name).build();
         this.flux = new AeronFlux(processor);
     }
 
@@ -45,23 +42,13 @@ final class AeronServerInbound implements AeronInbound, Disposable {
         return flux;
     }
 
-    void onNext(ByteBuffer buffer) {
-        //FIXME: Could affect performance
-        lastSignalTimeNs = System.nanoTime();
-        sink.next(buffer);
-    }
-
     @Override
     public void dispose() {
-        sink.complete();
+        processor.onComplete();
     }
 
-    long getLastSignalTimeNs() {
-        return lastSignalTimeNs;
-    }
-
-    long requested() {
-        return sink.requestedFromDownstream();
+    void subscribeRecieveTo(Publisher<ByteBuffer> publisher) {
+        publisher.subscribe(processor);
     }
 
 }

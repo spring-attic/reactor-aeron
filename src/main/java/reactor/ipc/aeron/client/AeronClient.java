@@ -26,9 +26,9 @@ import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOutbound;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.AeronWrapper;
+import reactor.ipc.aeron.ControlMessageSubscriber;
 import reactor.ipc.aeron.HeartbeatSender;
 import reactor.ipc.aeron.HeartbeatWatchdog;
-import reactor.ipc.aeron.MessageHandler;
 import reactor.ipc.aeron.MessagePublisher;
 import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.Pooler;
@@ -91,7 +91,7 @@ public final class AeronClient implements AeronConnector, Disposable {
                 options.clientChannel(), controlStreamId, "to receive control requests on", 0);
 
         Pooler pooler = new Pooler(this.name);
-        pooler.addSubscription(controlSubscription, controlMessageHandler);
+        pooler.addControlSubscription(controlSubscription, controlMessageHandler);
         pooler.initialise();
 
         this.pooler = pooler;
@@ -171,7 +171,7 @@ public final class AeronClient implements AeronConnector, Disposable {
                                 .subscribe(avoid -> {}, th -> {});
 
                         this.sessionId = connectAckResponse.sessionId;
-                        heartbeatWatchdog.add(connectAckResponse.sessionId, this::dispose, ignore -> inbound.getLastSignalTimeNs());
+                        heartbeatWatchdog.add(connectAckResponse.sessionId, this::dispose, () -> inbound.getLastSignalTimeNs());
 
                         return outbound.initialise(connectAckResponse.sessionId, connectAckResponse.serverSessionStreamId);
                     })
@@ -262,13 +262,13 @@ public final class AeronClient implements AeronConnector, Disposable {
 
     }
 
-    class ControlMessageHandler implements MessageHandler {
+    class ControlMessageHandler implements ControlMessageSubscriber {
 
         private final Map<UUID, MonoProcessor<ConnectAckResponse>> sinkByConnectRequestId = new ConcurrentHashMap<>();
 
         @Override
-        public long requested() {
-            return 1;
+        public void onSubscribe(org.reactivestreams.Subscription subscription) {
+            subscription.request(Long.MAX_VALUE);
         }
 
         @Override
@@ -288,6 +288,12 @@ public final class AeronClient implements AeronConnector, Disposable {
         @Override
         public void onHeartbeat(long sessionId) {
             heartbeatWatchdog.heartbeatReceived(sessionId);
+        }
+
+        @Override
+        public void onConnect(UUID connectRequestId, String clientChannel, int clientControlStreamId, int clientSessionStreamId) {
+            logger.error("Unsupported {} request for a client, clientChannel: {}, clientControlStreamId: {}, clientSessionStreamId: {}",
+                    MessageType.CONNECT, clientChannel, clientControlStreamId, clientSessionStreamId);
         }
 
         Mono<ConnectAckResponse> awaitConnectAck(UUID connectRequestId) {

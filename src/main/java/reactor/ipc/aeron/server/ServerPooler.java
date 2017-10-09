@@ -18,6 +18,7 @@ package reactor.ipc.aeron.server;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
@@ -27,9 +28,10 @@ import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.AeronWrapper;
+import reactor.ipc.aeron.ControlMessageSubscriber;
+import reactor.ipc.aeron.DataMessageSubscriber;
 import reactor.ipc.aeron.HeartbeatSender;
 import reactor.ipc.aeron.HeartbeatWatchdog;
-import reactor.ipc.aeron.MessageHandler;
 import reactor.ipc.aeron.MessagePublisher;
 import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.Pooler;
@@ -50,7 +52,7 @@ import java.util.function.BiFunction;
 /**
  * @author Anatoly Kadyshev
  */
-final class ServerPooler implements MessageHandler {
+final class ServerPooler implements ControlMessageSubscriber {
 
     private static final Logger logger = Loggers.getLogger(ServerPooler.class);
 
@@ -86,7 +88,7 @@ final class ServerPooler implements MessageHandler {
         this.ioHandler = ioHandler;
         this.options = options;
         Pooler pooler = new Pooler(category);
-        pooler.addSubscription(subscription, this);
+        pooler.addControlSubscription(subscription, this);
         this.pooler = pooler;
         this.heartbeatWatchdog = new HeartbeatWatchdog(options.heartbeatTimeoutMillis(), category);
         this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), category);
@@ -103,8 +105,8 @@ final class ServerPooler implements MessageHandler {
     }
 
     @Override
-    public long requested() {
-        return 1;
+    public void onSubscribe(org.reactivestreams.Subscription subscription) {
+        subscription.request(Long.MAX_VALUE);
     }
 
     @Override
@@ -133,7 +135,7 @@ final class ServerPooler implements MessageHandler {
         heartbeatWatchdog.heartbeatReceived(sessionId);
     }
 
-    class SessionHandler implements Disposable, MessageHandler {
+    class SessionHandler implements Disposable, DataMessageSubscriber, Publisher<ByteBuffer> {
 
         private final Logger logger = Loggers.getLogger(SessionHandler.class);
 
@@ -155,6 +157,12 @@ final class ServerPooler implements MessageHandler {
 
         private volatile Disposable heartbeatSenderDisposable = NO_OP;
 
+        private volatile org.reactivestreams.Subscription subscription;
+
+        private volatile Subscriber<? super ByteBuffer> subscriber;
+
+        private long lastSignalTimeNs = 0;
+
         SessionHandler(String clientChannel, int clientSessionStreamId, int clientControlStreamId,
                        UUID connectRequestId, long sessionId, int serverSessionStreamId) {
             this.clientSessionStreamId = clientSessionStreamId;
@@ -170,7 +178,8 @@ final class ServerPooler implements MessageHandler {
         }
 
         Mono<Void> initialise() {
-            pooler.addSubscription(serverDataSub, this);
+            pooler.addDataSubscription(serverDataSub, this);
+            inbound.subscribeRecieveTo(this);
 
             Mono<Void> initialiseOutbound = outbound.initialise(sessionId, clientSessionStreamId);
 
@@ -182,7 +191,7 @@ final class ServerPooler implements MessageHandler {
                                 heartbeatWatchdog.remove(sessionId);
                                 dispose();
                             },
-                                ignore -> inbound.getLastSignalTimeNs());
+                                () -> lastSignalTimeNs);
 
                         heartbeatSenderDisposable = heartbeatSender.scheduleHeartbeats(clientControlPub, sessionId)
                                 .subscribe(ignore -> {}, th -> {});
@@ -211,8 +220,8 @@ final class ServerPooler implements MessageHandler {
         }
 
         @Override
-        public long requested() {
-            return inbound.requested();
+        public void onSubscribe(org.reactivestreams.Subscription subscription) {
+            this.subscription = subscription;
         }
 
         @Override
@@ -221,8 +230,10 @@ final class ServerPooler implements MessageHandler {
                 logger.trace("Received {} for sessionId: {}, buffer: {}", MessageType.NEXT, sessionId, buffer);
             }
 
+            lastSignalTimeNs = System.nanoTime();
+
             if (this.sessionId == sessionId) {
-                inbound.onNext(buffer);
+                subscriber.onNext(buffer);
             } else {
                 logger.error("Received {} for unexpected sessionId: {}", MessageType.NEXT, sessionId);
             }
@@ -239,6 +250,13 @@ final class ServerPooler implements MessageHandler {
             } else {
                 logger.error("Received {} for unexpected sessionId: {}", MessageType.COMPLETE, sessionId);
             }
+        }
+
+        @Override
+        public void subscribe(Subscriber<? super ByteBuffer> subscriber) {
+            this.subscriber = subscriber;
+
+            subscriber.onSubscribe(subscription);
         }
 
         @Override
