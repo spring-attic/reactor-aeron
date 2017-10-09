@@ -15,13 +15,10 @@
  */
 package reactor.ipc.aeron.server;
 
-import io.aeron.Publication;
 import io.aeron.Subscription;
 import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.MonoSink;
 import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
@@ -29,21 +26,15 @@ import reactor.ipc.aeron.AeronOutbound;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.ControlMessageSubscriber;
-import reactor.ipc.aeron.DataMessageSubscriber;
 import reactor.ipc.aeron.HeartbeatSender;
 import reactor.ipc.aeron.HeartbeatWatchdog;
-import reactor.ipc.aeron.MessagePublisher;
 import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.Pooler;
-import reactor.ipc.aeron.Protocol;
-import reactor.ipc.aeron.RetryTask;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -52,9 +43,9 @@ import java.util.function.BiFunction;
 /**
  * @author Anatoly Kadyshev
  */
-final class ServerPooler implements ControlMessageSubscriber {
+final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
-    private static final Logger logger = Loggers.getLogger(ServerPooler.class);
+    private static final Logger logger = Loggers.getLogger(ServerHandler.class);
 
     private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
@@ -78,30 +69,36 @@ final class ServerPooler implements ControlMessageSubscriber {
 
     private final HeartbeatSender heartbeatSender;
 
-    ServerPooler(String category,
-                 AeronWrapper wrapper,
-                 BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler,
-                 AeronOptions options,
-                 Subscription subscription) {
+    private final Subscription controlSubscription;
+
+    ServerHandler(String category,
+                  BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler,
+                  AeronOptions options) {
+        this.wrapper = new AeronWrapper(category, options);
+        this.controlSubscription = wrapper.addSubscription(options.serverChannel(), options.serverStreamId(),
+                "to receive control requests on", 0);
+
         this.category = category;
-        this.wrapper = wrapper;
         this.ioHandler = ioHandler;
         this.options = options;
-        Pooler pooler = new Pooler(category);
-        pooler.addControlSubscription(subscription, this);
-        this.pooler = pooler;
+        this.pooler = new Pooler(category);
         this.heartbeatWatchdog = new HeartbeatWatchdog(options.heartbeatTimeoutMillis(), category);
         this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), category);
     }
 
     void initialise() {
+        pooler.addControlSubscription(controlSubscription, this);
         pooler.initialise();
     }
 
-    Mono<Void> shutdown() {
-        return pooler.shutdown()
-                     .doOnTerminate(() -> sessionHandlerById.values().forEach
-                             (SessionHandler::dispose));
+    @Override
+    public void dispose() {
+        pooler.shutdown().doOnTerminate(() -> {
+                    sessionHandlerById.values().forEach(SessionHandler::dispose);
+
+                    controlSubscription.close();
+                    wrapper.dispose();
+                }).subscribe();
     }
 
     @Override
@@ -127,7 +124,7 @@ final class ServerPooler implements ControlMessageSubscriber {
 
     @Override
     public void onConnectAck(UUID connectRequestId, long sessionId, int serverSessionStreamId) {
-        throw new UnsupportedOperationException();
+        logger.error("Received unsupported server request {}, connectRequestId: {}", MessageType.CONNECT_ACK, connectRequestId);
     }
 
     @Override
@@ -135,7 +132,7 @@ final class ServerPooler implements ControlMessageSubscriber {
         heartbeatWatchdog.heartbeatReceived(sessionId);
     }
 
-    class SessionHandler implements Disposable, DataMessageSubscriber, Publisher<ByteBuffer> {
+    class SessionHandler implements Disposable {
 
         private final Logger logger = Loggers.getLogger(SessionHandler.class);
 
@@ -149,19 +146,9 @@ final class ServerPooler implements ControlMessageSubscriber {
 
         private final long sessionId;
 
-        private final int serverSessionStreamId;
-
-        private final Publication clientControlPub;
-
-        private final Subscription serverDataSub;
-
         private volatile Disposable heartbeatSenderDisposable = NO_OP;
 
-        private volatile org.reactivestreams.Subscription subscription;
-
-        private volatile Subscriber<? super ByteBuffer> subscriber;
-
-        private long lastSignalTimeNs = 0;
+        private final ServerConnector connector;
 
         SessionHandler(String clientChannel, int clientSessionStreamId, int clientControlStreamId,
                        UUID connectRequestId, long sessionId, int serverSessionStreamId) {
@@ -169,32 +156,25 @@ final class ServerPooler implements ControlMessageSubscriber {
             this.outbound = new AeronOutbound(category, wrapper, clientChannel, options);
             this.connectRequestId = connectRequestId;
             this.sessionId = sessionId;
-            this.inbound = new AeronServerInbound(category);
-            this.serverSessionStreamId = serverSessionStreamId;
-            this.clientControlPub = wrapper.addPublication(clientChannel, clientControlStreamId,
-                    "to send control requests to client", sessionId);
-            this.serverDataSub = wrapper.addSubscription(options.serverChannel(),
-                    serverSessionStreamId, "to receive client data on", sessionId);
+            this.inbound = new AeronServerInbound(category, wrapper, options, pooler, serverSessionStreamId, sessionId,
+                    () -> dispose());
+            this.connector = new ServerConnector(wrapper, clientChannel, clientControlStreamId,
+                    sessionId, serverSessionStreamId, connectRequestId, options, heartbeatSender);
         }
 
         Mono<Void> initialise() {
-            pooler.addDataSubscription(serverDataSub, this);
-            inbound.subscribeRecieveTo(this);
-
             Mono<Void> initialiseOutbound = outbound.initialise(sessionId, clientSessionStreamId);
 
-            return sendConnectAck()
+            return connector.connect()
                     .then(initialiseOutbound)
                     .doOnSuccess(avoid -> {
+                        inbound.initialise();
 
                         heartbeatWatchdog.add(sessionId, () -> {
-                                heartbeatWatchdog.remove(sessionId);
-                                dispose();
-                            },
-                                () -> lastSignalTimeNs);
-
-                        heartbeatSenderDisposable = heartbeatSender.scheduleHeartbeats(clientControlPub, sessionId)
-                                .subscribe(ignore -> {}, th -> {});
+                                    heartbeatWatchdog.remove(sessionId);
+                                    dispose();
+                                },
+                                () -> inbound.lastSignalTimeNs());
 
                         sessionHandlerById.put(sessionId, this);
 
@@ -210,98 +190,19 @@ final class ServerPooler implements ControlMessageSubscriber {
                     });
         }
 
-        private Mono<Void> sendConnectAck() {
-            return Mono.create(sink ->
-                    new RetryTask(Schedulers.single(), 100,
-                            options.connectTimeoutMillis() * 2,
-                            new SendConnectAckTask(sink),
-                            th -> sink.error(new RuntimeException("Failed to send " + MessageType.CONNECT_ACK
-                                    + " into " + AeronUtils.format(clientControlPub), th))).schedule());
-        }
-
-        @Override
-        public void onSubscribe(org.reactivestreams.Subscription subscription) {
-            this.subscription = subscription;
-        }
-
-        @Override
-        public void onNext(long sessionId, ByteBuffer buffer) {
-            if (logger.isTraceEnabled()) {
-                logger.trace("Received {} for sessionId: {}, buffer: {}", MessageType.NEXT, sessionId, buffer);
-            }
-
-            lastSignalTimeNs = System.nanoTime();
-
-            if (this.sessionId == sessionId) {
-                subscriber.onNext(buffer);
-            } else {
-                logger.error("Received {} for unexpected sessionId: {}", MessageType.NEXT, sessionId);
-            }
-        }
-
-        @Override
-        public void onComplete(long sessionId) {
-            if (logger.isTraceEnabled()) {
-                logger.trace("Received {} for sessionId: {}", MessageType.COMPLETE, sessionId);
-            }
-
-            if (this.sessionId == sessionId) {
-                dispose();
-            } else {
-                logger.error("Received {} for unexpected sessionId: {}", MessageType.COMPLETE, sessionId);
-            }
-        }
-
-        @Override
-        public void subscribe(Subscriber<? super ByteBuffer> subscriber) {
-            this.subscriber = subscriber;
-
-            subscriber.onSubscribe(subscription);
-        }
-
         @Override
         public void dispose() {
             sessionHandlerById.remove(this);
 
-            pooler.removeSubscription(serverDataSub);
-            serverDataSub.close();
-
             heartbeatSenderDisposable.dispose();
             heartbeatWatchdog.remove(sessionId);
 
-            clientControlPub.close();
+            connector.dispose();
 
             outbound.dispose();
             inbound.dispose();
 
             logger.debug("Closed session with sessionId: {}", sessionId);
-        }
-
-        class SendConnectAckTask implements Callable<Boolean> {
-
-            private final MessagePublisher publisher;
-
-            private final MonoSink<?> sink;
-
-            SendConnectAckTask(MonoSink<?> sink) {
-                this.sink = sink;
-                this.publisher = new MessagePublisher(logger, 0, 0);
-            }
-
-            @Override
-            public Boolean call() throws Exception{
-                long result = publisher.publish(clientControlPub, MessageType.CONNECT_ACK,
-                        Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId), sessionId);
-                if (result > 0) {
-                    logger.debug("Sent {} to {}", MessageType.CONNECT_ACK, AeronUtils.format(clientControlPub));
-                    sink.success();
-                    return true;
-                } else if (result == Publication.CLOSED) {
-                    throw new RuntimeException("Publication " + AeronUtils.format(clientControlPub) + " has been closed");
-                }
-
-                return false;
-            }
         }
 
     }
