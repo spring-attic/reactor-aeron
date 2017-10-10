@@ -15,8 +15,8 @@
  */
 package reactor.ipc.aeron.server;
 
-import io.aeron.Subscription;
 import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscription;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -49,8 +49,6 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
     private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
-    private static final Disposable NO_OP = () -> {};
-
     private final String category;
 
     private final AeronWrapper wrapper;
@@ -69,7 +67,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
     private final HeartbeatSender heartbeatSender;
 
-    private final Subscription controlSubscription;
+    private final io.aeron.Subscription controlSubscription;
 
     ServerHandler(String category,
                   BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler,
@@ -102,7 +100,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
     }
 
     @Override
-    public void onSubscribe(org.reactivestreams.Subscription subscription) {
+    public void onSubscribe(Subscription subscription) {
         subscription.request(Long.MAX_VALUE);
     }
 
@@ -145,8 +143,6 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
         private final UUID connectRequestId;
 
         private final long sessionId;
-
-        private volatile Disposable heartbeatSenderDisposable = NO_OP;
 
         private final ServerConnector connector;
 
@@ -194,7 +190,6 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
         public void dispose() {
             sessionHandlerById.remove(this);
 
-            heartbeatSenderDisposable.dispose();
             heartbeatWatchdog.remove(sessionId);
 
             connector.dispose();
