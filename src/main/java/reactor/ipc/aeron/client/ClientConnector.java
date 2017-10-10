@@ -76,12 +76,13 @@ final class ClientConnector implements Disposable {
                 "to send control requests to server", 0);
     }
 
-    Mono<ConnectAckResponse> connect() {
-        Mono<ConnectAckResponse> awaitConnectAckMono = controlMessageSubscriber.awaitConnectAck(connectRequestId)
-                .timeout(options.ackTimeout());
+    Mono<ClientControlMessageSubscriber.ConnectAckResponse> connect() {
+        ClientControlMessageSubscriber.ConnectAckSubscription connectAckSubscription =
+                controlMessageSubscriber.subscribeForConnectAck(connectRequestId);
 
         return sendConnectRequest()
-                .then(awaitConnectAckMono)
+                .then(connectAckSubscription.connectAck()
+                        .timeout(options.ackTimeout()))
                 .doOnSuccess(response -> {
                     this.sessionId = response.sessionId;
 
@@ -92,7 +93,8 @@ final class ClientConnector implements Disposable {
                         logger.debug("Successfully connected to server at {}, sessionId: {}",
                                 AeronUtils.format(serverControlPublication), sessionId);
                     }
-                });
+                })
+                .doOnTerminate(connectAckSubscription::dispose);
     }
 
     private Mono<Void> sendConnectRequest() {
@@ -141,16 +143,4 @@ final class ClientConnector implements Disposable {
         serverControlPublication.close();
     }
 
-    static class ConnectAckResponse {
-
-        final long sessionId;
-
-        final int serverSessionStreamId;
-
-        ConnectAckResponse(long sessionId, int serverSessionStreamId) {
-            this.sessionId = sessionId;
-            this.serverSessionStreamId = serverSessionStreamId;
-        }
-
-    }
 }

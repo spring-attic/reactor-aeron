@@ -15,6 +15,7 @@
  */
 package reactor.ipc.aeron.client;
 
+import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.ipc.aeron.ControlMessageSubscriber;
@@ -36,7 +37,7 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
 
     private final HeartbeatWatchdog heartbeatWatchdog;
 
-    private final Map<UUID, MonoProcessor<ClientConnector.ConnectAckResponse>> sinkByConnectRequestId = new ConcurrentHashMap<>();
+    private final Map<UUID, MonoProcessor<ConnectAckResponse>> sinkByConnectRequestId = new ConcurrentHashMap<>();
 
     ClientControlMessageSubscriber(HeartbeatWatchdog heartbeatWatchdog) {
         this.heartbeatWatchdog = heartbeatWatchdog;
@@ -52,9 +53,9 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
         logger.debug("Received {} for connectRequestId: {}, serverSessionStreamId: {}", MessageType.CONNECT_ACK,
                 connectRequestId, serverSessionStreamId);
 
-        MonoProcessor<ClientConnector.ConnectAckResponse> processor = sinkByConnectRequestId.remove(connectRequestId);
+        MonoProcessor<ConnectAckResponse> processor = sinkByConnectRequestId.remove(connectRequestId);
         if (processor != null) {
-            processor.onNext(new ClientConnector.ConnectAckResponse(sessionId, serverSessionStreamId));
+            processor.onNext(new ConnectAckResponse(sessionId, serverSessionStreamId));
             processor.onComplete();
         }
     }
@@ -70,11 +71,44 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
                 MessageType.CONNECT, clientChannel, clientControlStreamId, clientSessionStreamId);
     }
 
-    //FIXME: leaks processor in case no connect ack received
-    Mono<ClientConnector.ConnectAckResponse> awaitConnectAck(UUID connectRequestId) {
-        MonoProcessor<ClientConnector.ConnectAckResponse> processor = MonoProcessor.create();
+    ConnectAckSubscription subscribeForConnectAck(UUID connectRequestId) {
+        MonoProcessor<ConnectAckResponse> processor = MonoProcessor.create();
         sinkByConnectRequestId.put(connectRequestId, processor);
-        return processor;
+        return new ConnectAckSubscription(processor, connectRequestId);
     }
 
+    class ConnectAckSubscription implements Disposable {
+
+        private final MonoProcessor<ConnectAckResponse> processor;
+
+        private final UUID connectRequestId;
+
+        ConnectAckSubscription(MonoProcessor<ConnectAckResponse> processor, UUID connectRequestId) {
+            this.processor = processor;
+            this.connectRequestId = connectRequestId;
+        }
+
+        Mono<ConnectAckResponse> connectAck() {
+            return processor;
+        }
+
+        @Override
+        public void dispose() {
+            sinkByConnectRequestId.remove(connectRequestId);
+            processor.cancel();
+        }
+    }
+
+    static class ConnectAckResponse {
+
+        final long sessionId;
+
+        final int serverSessionStreamId;
+
+        ConnectAckResponse(long sessionId, int serverSessionStreamId) {
+            this.sessionId = sessionId;
+            this.serverSessionStreamId = serverSessionStreamId;
+        }
+
+    }
 }
