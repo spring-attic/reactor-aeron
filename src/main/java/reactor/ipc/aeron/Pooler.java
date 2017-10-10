@@ -24,11 +24,13 @@ import org.agrona.concurrent.BackoffIdleStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Operators;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
 /**
  * @author Anatoly Kadyshev
@@ -64,11 +66,18 @@ public class Pooler implements Runnable {
         }
     }
 
-    public synchronized void addSubscription(Subscription subscription, MessageHandler messageHandler) {
-        FragmentAssembler handler = new FragmentAssembler(new PoolerFragmentHandler(messageHandler));
-        InnerPooler data = new InnerPooler(subscription, handler, messageHandler);
+    public void addControlSubscription(Subscription subscription, ControlMessageSubscriber subscriber) {
+        InnerPooler pooler = new InnerPooler(subscription, subscriber);
+        addPooler(pooler);
+    }
 
-        this.poolers = ArrayUtil.add(poolers, data);
+    public void addDataSubscription(Subscription subscription, DataMessageSubscriber subscriber) {
+        InnerPooler pooler = new InnerPooler(subscription, subscriber);
+        addPooler(pooler);
+    }
+
+    private synchronized void addPooler(InnerPooler pooler) {
+        this.poolers = ArrayUtil.add(poolers, pooler);
     }
 
     public Mono<Void> shutdown() {
@@ -119,28 +128,52 @@ public class Pooler implements Runnable {
         }
     }
 
-    static class InnerPooler {
+    static class InnerPooler implements org.reactivestreams.Subscription {
 
         final Subscription subscription;
 
         final FragmentHandler handler;
 
-        final MessageHandler messageHandler;
+        volatile long requested = 0;
 
-        InnerPooler(Subscription subscription, FragmentHandler handler, MessageHandler messageHandler) {
+        private static final AtomicLongFieldUpdater<InnerPooler> REQUESTED =
+                AtomicLongFieldUpdater.newUpdater(InnerPooler.class, "requested");
+
+        InnerPooler(Subscription subscription, ControlMessageSubscriber subscriber) {
+            this(subscription, subscriber, new ControlPoolerFragmentHandler(subscriber));
+        }
+
+        InnerPooler(Subscription subscription, DataMessageSubscriber subscriber) {
+            this(subscription, subscriber, new DataPoolerFragmentHandler(subscriber));
+        }
+
+        private InnerPooler(Subscription subscription, PoolerSubscriber subscriber, FragmentHandler handler) {
             this.subscription = subscription;
-            this.handler = handler;
-            this.messageHandler = messageHandler;
+            this.handler = new FragmentAssembler(handler);
+
+            subscriber.onSubscribe(this);
         }
 
         int poll() {
-            int requested = (int) Math.max(messageHandler.requested(), 8);
-            if (requested > 0) {
-                return subscription.poll(handler, requested);
+            int r = (int) Math.min(requested, 8);
+            int nPolled = 0;
+            if (r > 0) {
+                nPolled = subscription.poll(handler, r);
+                if (nPolled > 0) {
+                    Operators.produced(REQUESTED, this, nPolled);
+                }
             }
-            return 0;
+            return nPolled;
         }
 
+        @Override
+        public void request(long n) {
+            Operators.addCap(REQUESTED, this, n);
+        }
+
+        @Override
+        public void cancel() {
+        }
     }
 
 }

@@ -15,7 +15,6 @@
  */
 package reactor.ipc.aeron.server;
 
-import io.aeron.Subscription;
 import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
@@ -23,7 +22,6 @@ import reactor.ipc.aeron.AeronConnector;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
-import reactor.ipc.aeron.AeronWrapper;
 
 import java.util.Objects;
 import java.util.function.BiFunction;
@@ -60,20 +58,13 @@ public final class AeronServer implements AeronConnector {
     @Override
     public Mono<? extends Disposable> newHandler(
             BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler) {
-        Objects.requireNonNull(ioHandler, "ioHandler");
+        Objects.requireNonNull(ioHandler, "ioHandler shouldn't be null");
 
         return Mono.create(sink -> {
-            AeronWrapper wrapper = new AeronWrapper(name, options);
-            Subscription subscription = wrapper.addSubscription(options.serverChannel(), options.serverStreamId(),
-                    "to receive control requests on", 0);
-            ServerPooler pooler = new ServerPooler(name, wrapper, ioHandler, options, subscription);
-            pooler.initialise();
+            ServerHandler handler = new ServerHandler(name, ioHandler, options);
+            handler.initialise();
 
-            sink.success(() -> {
-                pooler.shutdown().block();
-                subscription.close();
-                wrapper.dispose();
-            });
+            sink.success(handler);
         });
     }
 

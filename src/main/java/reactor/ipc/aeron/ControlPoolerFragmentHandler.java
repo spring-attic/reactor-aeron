@@ -22,20 +22,19 @@ import org.agrona.DirectBuffer;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-import java.nio.ByteBuffer;
 import java.util.UUID;
 
 /**
  * @author Anatoly Kadyshev
  */
-public class PoolerFragmentHandler implements FragmentHandler {
+public class ControlPoolerFragmentHandler implements FragmentHandler {
 
-    private Logger logger = Loggers.getLogger(PoolerFragmentHandler.class);
+    private final Logger logger = Loggers.getLogger(ControlPoolerFragmentHandler.class);
 
-    private final MessageHandler handler;
+    private final ControlMessageSubscriber subscriber;
 
-    public PoolerFragmentHandler(MessageHandler handler) {
-        this.handler = handler;
+    public ControlPoolerFragmentHandler(ControlMessageSubscriber subscriber) {
+        this.subscriber = subscriber;
     }
 
     @Override
@@ -46,14 +45,7 @@ public class PoolerFragmentHandler implements FragmentHandler {
         long sessionId = buffer.getLong(index);
         index += BitUtil.SIZE_OF_LONG;
 
-        if (type == MessageType.NEXT.ordinal()) {
-            int bytesLength = length - (index - offset);
-            ByteBuffer dst = ByteBuffer.allocate(bytesLength);
-            buffer.getBytes(index, dst, bytesLength);
-            dst.rewind();
-
-            handler.onNext(sessionId, dst);
-        } else if (type == MessageType.CONNECT.ordinal()) {
+        if (type == MessageType.CONNECT.ordinal()) {
             long mostSigBits = buffer.getLong(index);
             index += BitUtil.SIZE_OF_LONG;
             long leastSigBits = buffer.getLong(index);
@@ -69,7 +61,7 @@ public class PoolerFragmentHandler implements FragmentHandler {
 
             int clientSessionStreamId = buffer.getInt(index);
 
-            handler.onConnect(connectRequestId, channel, clientControlStreamId, clientSessionStreamId);
+            subscriber.onConnect(connectRequestId, channel, clientControlStreamId, clientSessionStreamId);
         } else if (type == MessageType.CONNECT_ACK.ordinal()) {
             int serverSessionStreamId = buffer.getInt(index);
             index += BitUtil.SIZE_OF_INT;
@@ -79,11 +71,9 @@ public class PoolerFragmentHandler implements FragmentHandler {
             long leastSigBits = buffer.getLong(index);
             UUID connectRequestId = new UUID(mostSigBits, leastSigBits);
 
-            handler.onConnectAck(connectRequestId, sessionId, serverSessionStreamId);
+            subscriber.onConnectAck(connectRequestId, sessionId, serverSessionStreamId);
         } else if (type == MessageType.HEARTBEAT.ordinal()) {
-            handler.onHeartbeat(sessionId);
-        } else if (type == MessageType.COMPLETE.ordinal()) {
-            handler.onComplete(sessionId);
+            subscriber.onHeartbeat(sessionId);
         } else {
             logger.error("Unknown message type id: {}", type);
         }

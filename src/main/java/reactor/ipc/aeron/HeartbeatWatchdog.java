@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.ToLongFunction;
+import java.util.function.LongSupplier;
 
 /**
  * @author Anatoly Kadyshev
@@ -32,7 +32,7 @@ public final class HeartbeatWatchdog {
         this.timeoutNs = TimeUnit.MILLISECONDS.toNanos(heartbeatTimeoutMillis * 3 / 2);
     }
 
-    public void add(long sessionId, Runnable onHeartbeatLostTask, ToLongFunction<Void> lastSignalTimeNsProvider) {
+    public void add(long sessionId, Runnable onHeartbeatLostTask, LongSupplier lastSignalTimeNsProvider) {
         lastTimeNsBySessionId.put(sessionId, now());
 
         AtomicReference<Runnable> taskRef = new AtomicReference<>(() -> {});
@@ -42,7 +42,7 @@ public final class HeartbeatWatchdog {
         taskRef.set(() -> {
             long lastHeartbeatTimeNs = lastTimeNsBySessionId.get(sessionId);
             long now = now();
-            long lastSignalTimeNs = lastSignalTimeNsProvider.applyAsLong(null);
+            long lastSignalTimeNs = lastSignalTimeNsProvider.getAsLong();
             if ( (now - lastHeartbeatTimeNs > timeoutNs)
                     && (lastSignalTimeNs == 0 || lastSignalTimeNs > 0 && now - lastSignalTimeNs > timeoutNs) ) {
                 logger.debug("Lost heartbeat for sessionId: {}", sessionId);

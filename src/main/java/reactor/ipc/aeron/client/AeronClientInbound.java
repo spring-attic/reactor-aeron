@@ -15,20 +15,19 @@
  */
 package reactor.ipc.aeron.client;
 
-import io.aeron.Subscription;
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
 import reactor.core.Disposable;
-import reactor.core.publisher.FluxProcessor;
-import reactor.core.publisher.FluxSink;
 import reactor.ipc.aeron.AeronFlux;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronWrapper;
-import reactor.ipc.aeron.MessageHandler;
+import reactor.ipc.aeron.DataMessageSubscriber;
 import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.Pooler;
 
 import java.nio.ByteBuffer;
 import java.util.Objects;
-import java.util.UUID;
 
 /**
  * @author Anatoly Kadyshev
@@ -37,20 +36,19 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
     private final AeronFlux flux;
 
-    private final Subscription subscription;
+    private final io.aeron.Subscription serverDataSubscription;
 
     private final Pooler pooler;
 
-    private volatile ClientMessageHandler messageHandler;
+    private final ClientDataMessageProcessor processor;
 
     AeronClientInbound(Pooler pooler, AeronWrapper wrapper, String channel, int streamId, long sessionId) {
         this.pooler = Objects.requireNonNull(pooler);
-        this.subscription = wrapper.addSubscription(channel, streamId, "to receive data from server on", sessionId);
+        this.serverDataSubscription = wrapper.addSubscription(channel, streamId, "to receive data from server on", sessionId);
+        this.processor = new ClientDataMessageProcessor(sessionId);
+        this.flux = new AeronFlux(processor);
 
-        this.flux = new AeronFlux(FluxProcessor.create(emitter -> {
-            messageHandler = new ClientMessageHandler(sessionId, emitter);
-            pooler.addSubscription(subscription, messageHandler);
-        }));
+        pooler.addDataSubscription(serverDataSubscription, processor);
     }
 
     @Override
@@ -60,36 +58,32 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
     @Override
     public void dispose() {
-        pooler.removeSubscription(subscription);
+        pooler.removeSubscription(serverDataSubscription);
 
-        subscription.close();
+        serverDataSubscription.close();
     }
 
     long getLastSignalTimeNs() {
-        return messageHandler != null ? messageHandler.lastSignalTimeNs: 0;
+        return processor.lastSignalTimeNs;
     }
 
-    static class ClientMessageHandler implements MessageHandler {
+    static class ClientDataMessageProcessor implements DataMessageSubscriber, Publisher<ByteBuffer> {
 
         private final long sessionId;
 
-        private final FluxSink<ByteBuffer> emitter;
-
         private volatile long lastSignalTimeNs = 0;
 
-        ClientMessageHandler(long sessionId, FluxSink<ByteBuffer> emitter) {
+        private volatile Subscription subscription;
+
+        private volatile Subscriber<? super ByteBuffer> subscriber;
+
+        ClientDataMessageProcessor(long sessionId) {
             this.sessionId = sessionId;
-            this.emitter = emitter;
         }
 
         @Override
-        public long requested() {
-            return emitter.requestedFromDownstream();
-        }
-
-        @Override
-        public void onConnect(UUID connectRequestId, String clientChannel, int clientControlStreamId, int clientSessionStreamId) {
-            throw new UnsupportedOperationException("Client doesn't support " + MessageType.CONNECT + " requests");
+        public void onSubscribe(org.reactivestreams.Subscription subscription) {
+            this.subscription = subscription;
         }
 
         @Override
@@ -98,7 +92,18 @@ final class AeronClientInbound implements AeronInbound, Disposable {
             if (sessionId != this.sessionId) {
                 throw new RuntimeException("Received " + MessageType.NEXT + " for unknown sessionId: " + sessionId);
             }
-            emitter.next(buffer);
+            subscriber.onNext(buffer);
+        }
+
+        @Override
+        public void onComplete(long sessionId) {
+        }
+
+        @Override
+        public void subscribe(Subscriber<? super ByteBuffer> subscriber) {
+            this.subscriber = subscriber;
+
+            subscriber.onSubscribe(subscription);
         }
 
     }
