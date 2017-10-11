@@ -35,11 +35,14 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
 
     private final Logger logger = Loggers.getLogger(ClientControlMessageSubscriber.class);
 
+    private final String category;
+
     private final HeartbeatWatchdog heartbeatWatchdog;
 
     private final Map<UUID, MonoProcessor<ConnectAckResponse>> sinkByConnectRequestId = new ConcurrentHashMap<>();
 
-    ClientControlMessageSubscriber(HeartbeatWatchdog heartbeatWatchdog) {
+    ClientControlMessageSubscriber(String category, HeartbeatWatchdog heartbeatWatchdog) {
+        this.category = category;
         this.heartbeatWatchdog = heartbeatWatchdog;
     }
 
@@ -50,7 +53,7 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
 
     @Override
     public void onConnectAck(UUID connectRequestId, long sessionId, int serverSessionStreamId) {
-        logger.debug("Received {} for connectRequestId: {}, serverSessionStreamId: {}", MessageType.CONNECT_ACK,
+        logger.debug("[{}] Received {} for connectRequestId: {}, serverSessionStreamId: {}", category, MessageType.CONNECT_ACK,
                 connectRequestId, serverSessionStreamId);
 
         MonoProcessor<ConnectAckResponse> processor = sinkByConnectRequestId.remove(connectRequestId);
@@ -67,8 +70,8 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
 
     @Override
     public void onConnect(UUID connectRequestId, String clientChannel, int clientControlStreamId, int clientSessionStreamId) {
-        logger.error("Unsupported {} request for a client, clientChannel: {}, clientControlStreamId: {}, clientSessionStreamId: {}",
-                MessageType.CONNECT, clientChannel, clientControlStreamId, clientSessionStreamId);
+        logger.error("[{}] Unsupported {} request for a client, clientChannel: {}, clientControlStreamId: {}, clientSessionStreamId: {}",
+                category, MessageType.CONNECT, clientChannel, clientControlStreamId, clientSessionStreamId);
     }
 
     ConnectAckSubscription subscribeForConnectAck(UUID connectRequestId) {

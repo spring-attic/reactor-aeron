@@ -40,6 +40,8 @@ import java.util.function.Consumer;
  */
 public final class AeronClient implements AeronConnector, Disposable {
 
+    private static final Logger logger = Loggers.getLogger(AeronClient.class);
+
     private final AeronClientOptions options;
 
     private final String name;
@@ -47,8 +49,6 @@ public final class AeronClient implements AeronConnector, Disposable {
     private static final AtomicInteger streamIdCounter = new AtomicInteger();
 
     private final Pooler pooler;
-
-    private final Logger logger;
 
     private final AeronWrapper wrapper;
 
@@ -69,9 +69,8 @@ public final class AeronClient implements AeronConnector, Disposable {
         optionsConfigurer.accept(options);
         this.options = options;
         this.name = name == null ? "client" : name;
-        this.logger = Loggers.getLogger(AeronClient.class + "." + this.name);
         this.heartbeatWatchdog = new HeartbeatWatchdog(options.heartbeatTimeoutMillis(), this.name);
-        this.controlMessageSubscriber = new ClientControlMessageSubscriber(heartbeatWatchdog);
+        this.controlMessageSubscriber = new ClientControlMessageSubscriber(name, heartbeatWatchdog);
         this.clientControlStreamId = streamIdCounter.incrementAndGet();
         this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), this.name);
 
@@ -135,7 +134,7 @@ public final class AeronClient implements AeronConnector, Disposable {
             this.ioHandler = ioHandler;
             this.clientSessionStreamId = streamIdCounter.incrementAndGet();
             this.outbound = new AeronOutbound(name, wrapper, options.serverChannel(), options);
-            this.connector = new ClientConnector(wrapper, options, controlMessageSubscriber,
+            this.connector = new ClientConnector(name, wrapper, options, controlMessageSubscriber,
                     heartbeatSender, outbound, clientControlStreamId, clientSessionStreamId);
         }
 
@@ -152,13 +151,12 @@ public final class AeronClient implements AeronConnector, Disposable {
 
                         return outbound.initialise(connectAckResponse.sessionId, connectAckResponse.serverSessionStreamId);
                     })
-                    .doOnSuccess(avoid -> Mono.from(ioHandler.apply(inbound, outbound))
-                            .doOnTerminate(this::dispose)
-                            .subscribe())
-                    .doOnError(th -> {
-                        logger.error("Unexpected exception", th);
-                        dispose();
-                    })
+                    .doOnSuccess(avoid ->
+                            Mono.from(ioHandler.apply(inbound, outbound))
+                                    .doOnTerminate(this::dispose)
+                                    .subscribe()
+                    )
+                    .doOnError(th -> dispose())
                     .then(Mono.just(this));
         }
 
@@ -175,7 +173,9 @@ public final class AeronClient implements AeronConnector, Disposable {
             }
             outbound.dispose();
 
-            logger.debug("Closed session with Id: {}", sessionId);
+            if (sessionId > 0) {
+                logger.debug("[{}] Closed session with Id: {}", name, sessionId);
+            }
         }
     }
 

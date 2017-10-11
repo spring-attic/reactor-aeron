@@ -17,7 +17,9 @@ import java.util.concurrent.TimeUnit;
  */
 public class HeartbeatSender {
 
-    private final Logger logger;
+    private final Logger logger = Loggers.getLogger(HeartbeatSender.class);
+
+    private final String category;
 
     private final long heartbeatIntervalMillis;
 
@@ -25,7 +27,7 @@ public class HeartbeatSender {
 
     public HeartbeatSender(long heartbeatIntervalMillis, String category) {
         this.heartbeatIntervalMillis = heartbeatIntervalMillis;
-        this.logger = Loggers.getLogger(HeartbeatSender.class + "." + category);
+        this.category = category;
         this.scheduler = Schedulers.single();
     }
 
@@ -62,14 +64,14 @@ public class HeartbeatSender {
             }
 
             ByteBuffer buffer = Protocol.createHeartbeatBody();
-            MessagePublisher publisher = new MessagePublisher(logger, 0, 0);
+            MessagePublisher publisher = new MessagePublisher(category, 0, 0);
             Exception cause = null;
             long result = 0;
             try {
                 result = publisher.publish(controlPub, MessageType.HEARTBEAT, buffer, sessionId);
                 if (result > 0) {
                     failCounter = 0;
-                    logger.debug("Sent heartbeat for session with Id: {}", sessionId);
+                    logger.debug("[{}] Sent heartbeat for session with Id: {}", category, sessionId);
                     return;
                 } else if (result == Publication.BACK_PRESSURED || result == Publication.ADMIN_ACTION) {
                     failCounter++;
@@ -81,7 +83,7 @@ public class HeartbeatSender {
                 cause = ex;
             }
             isFailed = true;
-            logger.debug("Failed to send heartbeat for session with Id: {}, result: {}", sessionId, result, cause);
+            logger.debug("[{}] Failed to send heartbeat for session with Id: {}, result: {}", category, sessionId, result, cause);
             sink.error(new HeartbeatSendFailedException(sessionId));
         }
 

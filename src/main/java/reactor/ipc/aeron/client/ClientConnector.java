@@ -30,6 +30,7 @@ import reactor.util.Loggers;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 
 /**
  * @author Anatoly Kadyshev
@@ -37,6 +38,8 @@ import java.util.UUID;
 final class ClientConnector implements Disposable {
 
     private static final Logger logger = Loggers.getLogger(ClientConnector.class);
+
+    private final String category;
 
     private final AeronClientOptions options;
 
@@ -58,13 +61,15 @@ final class ClientConnector implements Disposable {
 
     private volatile Disposable heartbeatSenderDisposable = () -> {};
 
-    ClientConnector(AeronWrapper wrapper,
+    ClientConnector(String category,
+                    AeronWrapper wrapper,
                     AeronClientOptions options,
                     ClientControlMessageSubscriber controlMessageSubscriber,
                     HeartbeatSender heartbeatSender,
                     AeronOutbound outbound,
                     int clientControlStreamId,
                     int clientSessionStreamId) {
+        this.category = category;
         this.options = options;
         this.controlMessageSubscriber = controlMessageSubscriber;
         this.clientControlStreamId = clientControlStreamId;
@@ -82,7 +87,13 @@ final class ClientConnector implements Disposable {
 
         return sendConnectRequest()
                 .then(connectAckSubscription.connectAck()
-                        .timeout(options.ackTimeout()))
+                        .timeout(options.ackTimeout())
+                        .onErrorMap(TimeoutException.class, th -> {
+                            throw new RuntimeException(
+                                    String.format("Failed to receive %s during %d millis",
+                                            MessageType.CONNECT_ACK, options.ackTimeout().toMillis()), th);
+                        })
+                )
                 .doOnSuccess(response -> {
                     this.sessionId = response.sessionId;
 
@@ -90,11 +101,15 @@ final class ClientConnector implements Disposable {
                             .subscribe(avoid -> {}, th -> {});
 
                     if (logger.isDebugEnabled()) {
-                        logger.debug("Successfully connected to server at {}, sessionId: {}",
+                        logger.debug("[{}] Successfully connected to server at {}, sessionId: {}", category,
                                 AeronUtils.format(serverControlPublication), sessionId);
                     }
                 })
-                .doOnTerminate(connectAckSubscription::dispose);
+                .doOnTerminate(connectAckSubscription::dispose)
+                .onErrorMap(th -> {
+                    throw new RuntimeException(String.format("Failed to connect to server at %s",
+                                AeronUtils.format(serverControlPublication)));
+                });
     }
 
     private Mono<Void> sendConnectRequest() {
@@ -102,7 +117,7 @@ final class ClientConnector implements Disposable {
                 clientControlStreamId, clientSessionStreamId);
         return Mono.fromRunnable(() -> {
             if (logger.isDebugEnabled()) {
-                logger.debug("Connecting to server at {}", AeronUtils.format(serverControlPublication));
+                logger.debug("[{}] Connecting to server at {}", category, AeronUtils.format(serverControlPublication));
             }
         }).then(send(buffer, MessageType.CONNECT, serverControlPublication, options.connectTimeoutMillis()));
     }
@@ -111,19 +126,19 @@ final class ClientConnector implements Disposable {
         ByteBuffer buffer = Protocol.createDisconnectBody(sessionId);
         return Mono.fromRunnable(() -> {
             if (logger.isDebugEnabled()) {
-                logger.debug("Disconnecting from server at {}", AeronUtils.format(serverControlPublication));
+                logger.debug("[{}] Disconnecting from server at {}", category, AeronUtils.format(serverControlPublication));
             }
         }).then(send(buffer, MessageType.COMPLETE, outbound.getPublication(), options.connectTimeoutMillis()));
     }
 
     private Mono<Void> send(ByteBuffer buffer, MessageType messageType, Publication publication, long timeoutMillis) {
         return Mono.create(sink -> {
-            MessagePublisher publisher = new MessagePublisher(logger, timeoutMillis, timeoutMillis);
+            MessagePublisher publisher = new MessagePublisher(category, timeoutMillis, timeoutMillis);
             Exception cause = null;
             try {
                 long result = publisher.publish(publication, messageType, buffer, sessionId);
                 if (result > 0) {
-                    logger.debug("Sent {} to {}", messageType, AeronUtils.format(publication));
+                    logger.debug("[{}] Sent {} to {}", category, messageType, AeronUtils.format(publication));
                     sink.success();
                     return;
                 }

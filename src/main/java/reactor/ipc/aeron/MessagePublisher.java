@@ -20,16 +20,16 @@ import io.aeron.logbuffer.BufferClaim;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.IdleStrategy;
 import reactor.util.Logger;
+import reactor.util.Loggers;
 
 import java.nio.ByteBuffer;
-import java.util.Objects;
 
 /**
  * @author Anatoly Kadyshev
  */
 public class MessagePublisher {
 
-    private final Logger logger;
+    private static final Logger logger = Loggers.getLogger(MessagePublisher.class);
 
     private final IdleStrategy idleStrategy;
 
@@ -37,10 +37,10 @@ public class MessagePublisher {
 
     private final long waitBackpressuredMillis;
 
-    public MessagePublisher(Logger logger, long waitConnectedMillis, long waitBackpressuredMillis) {
-        Objects.requireNonNull(logger, "logger shouldn't be null");
+    private final String category;
 
-        this.logger = logger;
+    public MessagePublisher(String category, long waitConnectedMillis, long waitBackpressuredMillis) {
+        this.category = category;
         this.idleStrategy = AeronUtils.newBackoffIdleStrategy();
         this.waitConnectedMillis = waitConnectedMillis;
         this.waitBackpressuredMillis = waitBackpressuredMillis;
@@ -82,22 +82,22 @@ public class MessagePublisher {
                 break;
             } else if (result == Publication.NOT_CONNECTED) {
                 if (System.currentTimeMillis() - start > waitConnectedMillis) {
-                    logger.debug("Publication NOT_CONNECTED: {} during {} millis", AeronUtils.format(publication),
+                    logger.debug("[{}] Publication NOT_CONNECTED: {} during {} millis", category, AeronUtils.format(publication),
                             waitConnectedMillis);
                     break;
                 }
             } else if (result == Publication.BACK_PRESSURED) {
                 if (System.currentTimeMillis() - start > waitBackpressuredMillis) {
-                    logger.debug("Publication BACK_PRESSURED during {} millis: {}", AeronUtils.format(publication),
+                    logger.debug("[{}] Publication BACK_PRESSURED during {} millis: {}", category, AeronUtils.format(publication),
                             waitBackpressuredMillis);
                     break;
                 }
             } else if (result == Publication.CLOSED) {
-                logger.debug("Publication CLOSED: {}", AeronUtils.format(publication));
+                logger.debug("[{}] Publication CLOSED: {}", category, AeronUtils.format(publication));
                 break;
             } else if (result == Publication.ADMIN_ACTION) {
                 if (System.currentTimeMillis() - start > waitConnectedMillis) {
-                    logger.debug("Publication ADMIN_ACTION: {} during {} millis", AeronUtils.format(publication),
+                    logger.debug("[{}] Publication ADMIN_ACTION: {} during {} millis", category, AeronUtils.format(publication),
                             waitConnectedMillis);
                     break;
                 }

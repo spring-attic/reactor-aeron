@@ -27,7 +27,9 @@ import reactor.util.Loggers;
  */
 public final class AeronWrapper implements Disposable {
 
-    private final Logger logger;
+    private static final Logger logger = Loggers.getLogger(AeronWrapper.class);
+
+    private final String category;
 
     private final static DriverManager driverManager = new DriverManager();
 
@@ -36,8 +38,7 @@ public final class AeronWrapper implements Disposable {
     private final boolean isDriverLaunched;
 
     public AeronWrapper(String category, AeronOptions options) {
-        this.logger = Loggers.getLogger(AeronWrapper.class + "." + category);
-
+        this.category = category;
         if (options.getAeron() == null) {
             driverManager.launchDriver();
             aeron = driverManager.getAeron();
@@ -58,7 +59,7 @@ public final class AeronWrapper implements Disposable {
     public Publication addPublication(String channel, int streamId, String purpose, long sessionId) {
         Publication publication = aeron.addPublication(channel, streamId);
         if (logger.isDebugEnabled()) {
-            logger.debug("Added publication{} {} {}", formatSessionId(sessionId),
+            logger.debug("[{}] Added publication{} {} {}", category, formatSessionId(sessionId),
                     purpose, AeronUtils.format(channel, streamId));
         }
         return publication;
@@ -67,7 +68,7 @@ public final class AeronWrapper implements Disposable {
     public Subscription addSubscription(String channel, int streamId, String purpose, long sessionId) {
         Subscription subscription = aeron.addSubscription(channel, streamId);
         if (logger.isDebugEnabled()) {
-            logger.debug("Added subscription{} {} {}", formatSessionId(sessionId),
+            logger.debug("[{}] Added subscription{} {} {}", category, formatSessionId(sessionId),
                     purpose, AeronUtils.format(channel, streamId));
         }
         return subscription;

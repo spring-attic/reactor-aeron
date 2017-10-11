@@ -21,10 +21,10 @@ import io.aeron.Subscription;
 import io.aeron.logbuffer.FragmentHandler;
 import org.agrona.collections.ArrayUtil;
 import org.agrona.concurrent.BackoffIdleStrategy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Operators;
+import reactor.util.Logger;
+import reactor.util.Loggers;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -37,7 +37,9 @@ import java.util.concurrent.atomic.AtomicLongFieldUpdater;
  */
 public class Pooler implements Runnable {
 
-    private final Logger logger;
+    private static final Logger logger = Loggers.getLogger(Pooler.class);
+
+    private final String name;
 
     private final ExecutorService executor;
 
@@ -46,7 +48,7 @@ public class Pooler implements Runnable {
     private volatile InnerPooler[] poolers = new InnerPooler[0];
 
     public Pooler(String name) {
-        this.logger = LoggerFactory.getLogger(this.getClass() + "." + name);
+        this.name = name;
         this.executor = createExecutor(name);
     }
 
@@ -104,7 +106,7 @@ public class Pooler implements Runnable {
 
     @Override
     public void run() {
-        logger.debug("Started");
+        logger.debug("[{}] Started", name);
 
         BackoffIdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
         while (isRunning) {
@@ -115,6 +117,8 @@ public class Pooler implements Runnable {
             }
             idleStrategy.idle(nReceived);
         }
+
+        logger.debug("[{}] Terminated", name);
     }
 
     public synchronized void removeSubscription(Subscription subscription) {

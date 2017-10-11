@@ -39,7 +39,7 @@ import reactor.util.concurrent.Queues;
 
 abstract class WriteSequencer<T> {
 
-    private static final Logger log = Loggers.getLogger(WriteSequencer.class);
+    private static final Logger logger = Loggers.getLogger(WriteSequencer.class);
     /**
      * Cast the supplied queue (SpscLinkedArrayQueue) to use its atomic dual-insert
      * backed by {@link BiPredicate#test)
@@ -190,8 +190,8 @@ abstract class WriteSequencer<T> {
                 return;
             }
             v = pendingWrites.poll();
-            if (log.isDebugEnabled()) {
-                log.debug("Terminated. Dropping: {}", v);
+            if (logger.isDebugEnabled()) {
+                logger.debug("Terminated. Dropping: {}", v);
             }
 
             discardedHandler.accept(v);

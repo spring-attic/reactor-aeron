@@ -75,6 +75,7 @@ public class ControlPoolerFragmentHandler implements FragmentHandler {
         } else if (type == MessageType.HEARTBEAT.ordinal()) {
             subscriber.onHeartbeat(sessionId);
         } else {
+            //TODO: Add publication channel into the message
             logger.error("Unknown message type id: {}", type);
         }
     }

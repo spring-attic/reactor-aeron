@@ -49,7 +49,7 @@ public final class AeronUtils {
     }
 
     public static String format(String channel, int streamId) {
-        return minifyChannel(channel) + ", streamId: " + streamId;
+        return '(' + minifyChannel(channel) + ", streamId: " + streamId + ')';
     }
 
     public static String byteBufferToString(ByteBuffer buffer) {

@@ -16,7 +16,7 @@ import java.util.function.LongSupplier;
  */
 public final class HeartbeatWatchdog {
 
-    private final Logger logger;
+    private final Logger logger = Loggers.getLogger(HeartbeatWatchdog.class);
 
     private final Map<Long, Disposable> disposableBySessionId = new ConcurrentHashMap<>();
 
@@ -26,10 +26,12 @@ public final class HeartbeatWatchdog {
 
     private final long timeoutNs;
 
+    private final String category;
+
     public HeartbeatWatchdog(long heartbeatTimeoutMillis, String category) {
         this.heartbeatTimeoutMillis = heartbeatTimeoutMillis;
-        this.logger = Loggers.getLogger(HeartbeatWatchdog.class.getName() + "." + category);
         this.timeoutNs = TimeUnit.MILLISECONDS.toNanos(heartbeatTimeoutMillis * 3 / 2);
+        this.category = category;
     }
 
     public void add(long sessionId, Runnable onHeartbeatLostTask, LongSupplier lastSignalTimeNsProvider) {
@@ -45,7 +47,7 @@ public final class HeartbeatWatchdog {
             long lastSignalTimeNs = lastSignalTimeNsProvider.getAsLong();
             if ( (now - lastHeartbeatTimeNs > timeoutNs)
                     && (lastSignalTimeNs == 0 || lastSignalTimeNs > 0 && now - lastSignalTimeNs > timeoutNs) ) {
-                logger.debug("Lost heartbeat for sessionId: {}", sessionId);
+                logger.debug("[{}] Lost heartbeat for sessionId: {}",  category, sessionId);
                 onHeartbeatLostTask.run();
             }
         });

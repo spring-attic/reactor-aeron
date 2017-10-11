@@ -41,6 +41,8 @@ public class ServerConnector implements Disposable {
 
     private static final Logger logger = Loggers.getLogger(ServerConnector.class);
 
+    private final String category;
+
     private final Publication clientControlPub;
 
     private final int serverSessionStreamId;
@@ -55,7 +57,8 @@ public class ServerConnector implements Disposable {
 
     private volatile Disposable heartbeatSenderDisposable = () -> {};
 
-    ServerConnector(AeronWrapper wrapper,
+    ServerConnector(String category,
+                    AeronWrapper wrapper,
                     String clientChannel,
                     int clientControlStreamId,
                     long sessionId,
@@ -63,6 +66,7 @@ public class ServerConnector implements Disposable {
                     UUID connectRequestId,
                     AeronOptions options,
                     HeartbeatSender heartbeatSender) {
+        this.category = category;
         this.serverSessionStreamId = serverSessionStreamId;
         this.connectRequestId = connectRequestId;
         this.options = options;
@@ -100,7 +104,7 @@ public class ServerConnector implements Disposable {
 
         SendConnectAckTask(MonoSink<?> sink) {
             this.sink = sink;
-            this.publisher = new MessagePublisher(logger, 0, 0);
+            this.publisher = new MessagePublisher(category, 0, 0);
         }
 
         @Override
@@ -108,7 +112,7 @@ public class ServerConnector implements Disposable {
             long result = publisher.publish(clientControlPub, MessageType.CONNECT_ACK,
                     Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId), sessionId);
             if (result > 0) {
-                logger.debug("Sent {} to {}", MessageType.CONNECT_ACK, AeronUtils.format(clientControlPub));
+                logger.debug("[{}] Sent {} to {}", category, MessageType.CONNECT_ACK, category, AeronUtils.format(clientControlPub));
                 sink.success();
                 return true;
             } else if (result == Publication.CLOSED) {

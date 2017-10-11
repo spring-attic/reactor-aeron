@@ -47,9 +47,9 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
     private static final Logger logger = Loggers.getLogger(ServerHandler.class);
 
-    private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
-
     private final String category;
+
+    private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
     private final AeronWrapper wrapper;
 
@@ -106,8 +106,8 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
     @Override
     public void onConnect(UUID connectRequestId, String clientChannel, int clientControlStreamId, int clientSessionStreamId) {
-        logger.debug("Received {} for connectRequestId: {}, channel={}, clientControlStreamId={}, clientSessionStreamId={}",
-                MessageType.CONNECT, connectRequestId, AeronUtils.minifyChannel(clientChannel),
+        logger.debug("[{}] Received {} for connectRequestId: {}, channel={}, clientControlStreamId={}, clientSessionStreamId={}",
+                category, MessageType.CONNECT, connectRequestId, AeronUtils.minifyChannel(clientChannel),
                 clientControlStreamId, clientSessionStreamId);
 
         int serverSessionStreamId = streamIdCounter.incrementAndGet();
@@ -122,7 +122,8 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
     @Override
     public void onConnectAck(UUID connectRequestId, long sessionId, int serverSessionStreamId) {
-        logger.error("Received unsupported server request {}, connectRequestId: {}", MessageType.CONNECT_ACK, connectRequestId);
+        logger.error("[{}] Received unsupported server request {}, connectRequestId: {}", category,
+                MessageType.CONNECT_ACK, connectRequestId);
     }
 
     @Override
@@ -154,7 +155,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
             this.sessionId = sessionId;
             this.inbound = new AeronServerInbound(category, wrapper, options, pooler, serverSessionStreamId, sessionId,
                     () -> dispose());
-            this.connector = new ServerConnector(wrapper, clientChannel, clientControlStreamId,
+            this.connector = new ServerConnector(category, wrapper, clientChannel, clientControlStreamId,
                     sessionId, serverSessionStreamId, connectRequestId, options, heartbeatSender);
         }
 
@@ -174,15 +175,16 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
                         sessionHandlerById.put(sessionId, this);
 
-                        logger.debug("Client with connectRequestId: {} successfully connected, sessionId: {}",
+                        logger.debug("[{}] Client with connectRequestId: {} successfully connected, sessionId: {}", category,
                                 connectRequestId, sessionId);
 
                         Publisher<Void> publisher = ioHandler.apply(inbound, outbound);
                         Mono.from(publisher).doOnTerminate(this::dispose).subscribe();
                     })
                     .doOnError(th -> {
+                        logger.debug("[{}] Failed to connect to the client for sessionId: {}", category, sessionId, th);
+
                         dispose();
-                        logger.debug("Failed to connect to the client for sessionId: {}", sessionId, th);
                     });
         }
 
@@ -197,7 +199,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
             outbound.dispose();
             inbound.dispose();
 
-            logger.debug("Closed session with sessionId: {}", sessionId);
+            logger.debug("[{}] Closed session with sessionId: {}", category, sessionId);
         }
 
     }

@@ -9,7 +9,9 @@ import java.util.function.Consumer;
 
 final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
 
-    private final Logger logger;
+    private static final Logger logger = Loggers.getLogger(AeronWriteSequencer.class);
+
+    private final String category;
 
     private final Publication publication;
 
@@ -23,12 +25,12 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
 
     AeronWriteSequencer(String category, Publication publication, AeronOptions options, long sessionId) {
         super(publisher -> {}, avoid -> false,null);
+        this.category = category;
         this.publication = publication;
         this.options = options;
         this.sessionId = sessionId;
-        this.logger = Loggers.getLogger(AeronWriteSequencer.class + "." + category);
-        this.errorHandler = th -> logger.error("Unexpected exception", th);
-        this.inner = new SignalSender(this, this.publication, this.sessionId, this.options, logger);
+        this.errorHandler = th -> logger.error("[{}] Unexpected exception", category, th);
+        this.inner = new SignalSender(this, this.publication, this.sessionId, this.options);
     }
 
     @Override
@@ -49,12 +51,12 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
 
         private final MessagePublisher publisher;
 
-        SignalSender(AeronWriteSequencer sequencer, Publication publication, long sessionId, AeronOptions options, Logger logger) {
+        SignalSender(AeronWriteSequencer sequencer, Publication publication, long sessionId, AeronOptions options) {
             super(sequencer);
 
             this.publication = publication;
             this.sessionId = sessionId;
-            this.publisher = new MessagePublisher(logger, options.connectTimeoutMillis(), options.backpressureTimeoutMillis());
+            this.publisher = new MessagePublisher(category, options.connectTimeoutMillis(), options.backpressureTimeoutMillis());
 
             request(1);
         }

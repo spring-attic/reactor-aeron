@@ -61,7 +61,7 @@ final class AeronServerInbound implements AeronInbound, Disposable {
         this.serverDataSubscription = wrapper.addSubscription(options.serverChannel(),
                 serverSessionStreamId, "to receive client data on", sessionId);
 
-        this.messageProcessor = new ServerDataMessageProcessor(sessionId, onCompleteHandler);
+        this.messageProcessor = new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
     }
 
     void initialise() {
@@ -91,6 +91,8 @@ final class AeronServerInbound implements AeronInbound, Disposable {
 
         private static final Logger logger = Loggers.getLogger(ServerDataMessageProcessor.class);
 
+        private final String category;
+
         private volatile org.reactivestreams.Subscription subscription;
 
         private volatile long lastSignalTimeNs;
@@ -101,7 +103,8 @@ final class AeronServerInbound implements AeronInbound, Disposable {
 
         private final Runnable onCompleteHandler;
 
-        ServerDataMessageProcessor(long sessionId, Runnable onCompleteHandler) {
+        ServerDataMessageProcessor(String category, long sessionId, Runnable onCompleteHandler) {
+            this.category = category;
             this.sessionId = sessionId;
             this.onCompleteHandler = onCompleteHandler;
         }
@@ -114,7 +117,7 @@ final class AeronServerInbound implements AeronInbound, Disposable {
         @Override
         public void onNext(long sessionId, ByteBuffer buffer) {
             if (logger.isTraceEnabled()) {
-                logger.trace("Received {} for sessionId: {}, buffer: {}", MessageType.NEXT, sessionId, buffer);
+                logger.trace("[{}] Received {} for sessionId: {}, buffer: {}", category, MessageType.NEXT, sessionId, buffer);
             }
 
             lastSignalTimeNs = System.nanoTime();
@@ -122,20 +125,20 @@ final class AeronServerInbound implements AeronInbound, Disposable {
             if (this.sessionId == sessionId) {
                 subscriber.onNext(buffer);
             } else {
-                logger.error("Received {} for unexpected sessionId: {}", MessageType.NEXT, sessionId);
+                logger.error("[{}] Received {} for unexpected sessionId: {}", category, MessageType.NEXT, sessionId);
             }
         }
 
         @Override
         public void onComplete(long sessionId) {
             if (logger.isTraceEnabled()) {
-                logger.trace("Received {} for sessionId: {}", MessageType.COMPLETE, sessionId);
+                logger.trace("[{}] Received {} for sessionId: {}", category, MessageType.COMPLETE, sessionId);
             }
 
             if (this.sessionId == sessionId) {
                 onCompleteHandler.run();
             } else {
-                logger.error("Received {} for unexpected sessionId: {}", MessageType.COMPLETE, sessionId);
+                logger.error("[{}] Received {} for unexpected sessionId: {}", category, MessageType.COMPLETE, sessionId);
             }
         }
 

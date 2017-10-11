@@ -55,6 +55,7 @@ public class DataPoolerFragmentHandler implements FragmentHandler {
         } else if (type == MessageType.COMPLETE.ordinal()) {
             subscriber.onComplete(sessionId);
         } else {
+            //TODO: Add publication channel into the message
             logger.error("Unknown message type id: {}", type);
         }
     }

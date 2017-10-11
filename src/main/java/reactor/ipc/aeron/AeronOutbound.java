@@ -73,13 +73,17 @@ public final class AeronOutbound implements Outbound<ByteBuffer>, Disposable {
         return Mono.create(sink -> {
             this.publication = wrapper.addPublication(channel, streamId, "to send data to", sessionId);
             this.sequencer = new AeronWriteSequencer(category, publication, options, sessionId);
-            new RetryTask(Schedulers.single(), 100, options.connectTimeoutMillis(), () -> {
+            int timeoutMillis = options.connectTimeoutMillis();
+            new RetryTask(Schedulers.single(), 100, timeoutMillis, () -> {
                 if (publication.isConnected()) {
                     sink.success();
                     return true;
                 }
                 return false;
-            }, th -> sink.error(new Exception("Failed to connect to client for sessionId: " + sessionId, th))).schedule();
+            }, th -> sink.error(
+                    new Exception(String.format("Publication %s for sending data in not connected during %d millis",
+                            AeronUtils.format(publication), timeoutMillis), th))
+            ).schedule();
         });
     }
 
