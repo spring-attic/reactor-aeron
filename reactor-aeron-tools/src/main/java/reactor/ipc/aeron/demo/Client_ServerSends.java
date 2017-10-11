@@ -1,7 +1,6 @@
 package reactor.ipc.aeron.demo;
 
 import reactor.core.publisher.Mono;
-import reactor.ipc.aeron.AeronTestUtils;
 import reactor.ipc.aeron.client.AeronClient;
 
 /**

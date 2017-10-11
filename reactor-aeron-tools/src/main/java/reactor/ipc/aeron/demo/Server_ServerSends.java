@@ -2,7 +2,7 @@ package reactor.ipc.aeron.demo;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.ipc.aeron.AeronTestUtils;
+import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.server.AeronServer;
 
 import java.time.Duration;
@@ -19,7 +19,7 @@ public class Server_ServerSends {
         server.newHandler((inbound, outbound) -> {
             outbound.send(Flux.range(1, 10000)
                     .delayElements(Duration.ofMillis(250))
-                    .map(i -> AeronTestUtils.stringToByteBuffer("" + i))
+                    .map(i -> AeronUtils.stringToByteBuffer("" + i))
                     .log("send")).then().subscribe();
             return Mono.never();
         }).block();

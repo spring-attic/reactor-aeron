@@ -19,7 +19,7 @@ import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import reactor.core.Disposable;
-import reactor.ipc.aeron.AeronFlux;
+import reactor.ipc.aeron.ByteBufferFlux;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.DataMessageSubscriber;
@@ -34,7 +34,7 @@ import java.util.Objects;
  */
 final class AeronClientInbound implements AeronInbound, Disposable {
 
-    private final AeronFlux flux;
+    private final ByteBufferFlux flux;
 
     private final io.aeron.Subscription serverDataSubscription;
 
@@ -46,13 +46,13 @@ final class AeronClientInbound implements AeronInbound, Disposable {
         this.pooler = Objects.requireNonNull(pooler);
         this.serverDataSubscription = wrapper.addSubscription(channel, streamId, "to receive data from server on", sessionId);
         this.processor = new ClientDataMessageProcessor(sessionId);
-        this.flux = new AeronFlux(processor);
+        this.flux = new ByteBufferFlux(processor);
 
         pooler.addDataSubscription(serverDataSubscription, processor);
     }
 
     @Override
-    public AeronFlux receive() {
+    public ByteBufferFlux receive() {
         return flux;
     }
 

@@ -35,7 +35,7 @@ public class AeronServerTest extends BaseAeronTest {
         AeronClient client = AeronClient.create();
         try {
             client.newHandler((inbound, outbound) -> {
-                outbound.send(AeronTestUtils.newByteBufferFlux("Hello", "world!").log("send")).then().subscribe();
+                outbound.send(ByteBufferFlux.from("Hello", "world!").log("send")).then().subscribe();
                 return Mono.never();
             }).block(TIMEOUT);
 
@@ -64,7 +64,7 @@ public class AeronServerTest extends BaseAeronTest {
         client.newHandler((inbound, outbound) ->
                 outbound.send(Flux.range(1, 100)
                     .delayElements(Duration.ofSeconds(1))
-                    .map(i -> AeronTestUtils.stringToByteBuffer("" + i)))).block();
+                    .map(i -> AeronUtils.stringToByteBuffer("" + i)))).block();
 
         processor.blockFirst();
 
@@ -87,7 +87,7 @@ public class AeronServerTest extends BaseAeronTest {
         client.newHandler((inbound, outbound) ->
                 outbound.send(Flux.range(1, 100)
                         .delayElements(Duration.ofSeconds(1))
-                        .map(i -> AeronTestUtils.stringToByteBuffer("" + i)))).block();
+                        .map(i -> AeronUtils.stringToByteBuffer("" + i)))).block();
 
         processor.blockFirst();
 

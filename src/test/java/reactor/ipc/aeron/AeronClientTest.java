@@ -31,18 +31,18 @@ public class AeronClientTest extends BaseAeronTest {
     }
 
     @Test
-    public void testClientReceivesSignalsFromServer() throws InterruptedException {
+    public void testClientReceivesDataFromServer() {
         AeronServer server = createAeronServer("server");
 
         server.newHandler((inbound, outbound) ->
-                Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("hello1", "2", "3")
+                Mono.from(outbound.send(ByteBufferFlux.from("hello1", "2", "3")
                         .log("server")))).block(TIMEOUT);
 
         ReplayProcessor<String> processor = ReplayProcessor.create();
         AeronClient client = createAeronClient(null);
         try {
             client.newHandler((inbound, outbound) -> {
-                inbound.receive().map(AeronUtils::byteBufferToString).log("client").subscribe(processor);
+                inbound.receive().asString().log("client").subscribe(processor);
                 return Mono.never();
             }).block(TIMEOUT);
 
@@ -61,14 +61,14 @@ public class AeronClientTest extends BaseAeronTest {
     public void testTwoClientsReceiveDataFromServer() throws InterruptedException {
         AeronServer server = createAeronServer("server");
         blockAndAddDisposable(server.newHandler((inbound, outbound) -> {
-            Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("1", "2", "3").log())).subscribe();
+            Mono.from(outbound.send(ByteBufferFlux.from("1", "2", "3").log())).subscribe();
             return Mono.never();
         }));
 
         ReplayProcessor<String> processor1 = ReplayProcessor.create();
         AeronClient client1 = createAeronClient("client-1");
         blockAndAddDisposable(client1.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client-1").subscribe(processor1);
+            inbound.receive().asString().log("client-1").subscribe(processor1);
             return Mono.never();
         }));
         addDisposable(client1);
@@ -76,7 +76,7 @@ public class AeronClientTest extends BaseAeronTest {
         ReplayProcessor<String> processor2 = ReplayProcessor.create();
         AeronClient client2 = createAeronClient("client-2");
         blockAndAddDisposable(client2.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client-2").subscribe(processor2);
+            inbound.receive().asString().log("client-2").subscribe(processor2);
             return Mono.never();
         }));
         addDisposable(client2);
@@ -99,20 +99,20 @@ public class AeronClientTest extends BaseAeronTest {
         AeronServer server = createAeronServer("server-1");
 
         blockAndAddDisposable(server.newHandler((inbound, outbound) -> {
-            Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("1", "2", "3").log("server"))).subscribe();
+            Mono.from(outbound.send(ByteBufferFlux.from("1", "2", "3").log("server"))).subscribe();
             return Mono.never();
         }));
 
         ReplayProcessor<String> processor1 = ReplayProcessor.create();
         AeronClient client = createAeronClient(null);
         blockAndAddDisposable(client.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client-1").subscribe(processor1);
+            inbound.receive().asString().log("client-1").subscribe(processor1);
             return Mono.never();
         }));
 
         ReplayProcessor<String> processor2 = ReplayProcessor.create();
         blockAndAddDisposable(client.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client-2").subscribe(processor2);
+            inbound.receive().asString().log("client-2").subscribe(processor2);
             return Mono.never();
         }));
         addDisposable(client);
@@ -138,7 +138,7 @@ public class AeronClientTest extends BaseAeronTest {
         });
 
         Disposable serverHandlerDisposable = server.newHandler((inbound, outbound) ->
-                Mono.from(outbound.send(AeronTestUtils.newByteBufferFlux("hello1", "2", "3")
+                Mono.from(outbound.send(ByteBufferFlux.from("hello1", "2", "3")
                         .delayElements(Duration.ofSeconds(1))
                         .log("server")))).block(TIMEOUT);
 
@@ -150,7 +150,7 @@ public class AeronClientTest extends BaseAeronTest {
         });
         addDisposable(client);
         client.newHandler((inbound, outbound) -> {
-            inbound.receive().map(AeronUtils::byteBufferToString).log("client").subscribe(processor);
+            inbound.receive().asString().log("client").subscribe(processor);
             return Mono.never();
         }).block(TIMEOUT);
 

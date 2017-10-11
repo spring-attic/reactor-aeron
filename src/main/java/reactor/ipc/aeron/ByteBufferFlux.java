@@ -24,11 +24,15 @@ import java.nio.ByteBuffer;
 /**
  * @author Anatoly Kadyshev
  */
-public final class AeronFlux extends Flux<ByteBuffer> {
+public final class ByteBufferFlux extends Flux<ByteBuffer> {
 
     private final Publisher<ByteBuffer> source;
 
-    public AeronFlux(Publisher<ByteBuffer> source) {
+    public static ByteBufferFlux from(String... data) {
+        return new ByteBufferFlux(Flux.fromArray(data).map(AeronUtils::stringToByteBuffer));
+    }
+
+    public ByteBufferFlux(Publisher<ByteBuffer> source) {
         this.source = source;
     }
 

@@ -19,6 +19,7 @@ import io.aeron.Publication;
 import org.agrona.concurrent.BackoffIdleStrategy;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -55,4 +56,9 @@ public final class AeronUtils {
     public static String byteBufferToString(ByteBuffer buffer) {
         return new String(buffer.array(), buffer.position(), buffer.limit());
     }
+
+    public static ByteBuffer stringToByteBuffer(String str) {
+        return ByteBuffer.wrap(str.getBytes(StandardCharsets.UTF_8));
+    }
+
 }

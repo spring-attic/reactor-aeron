@@ -25,6 +25,6 @@ import java.nio.ByteBuffer;
 public interface AeronInbound extends Inbound<ByteBuffer> {
 
     @Override
-    AeronFlux receive();
+    ByteBufferFlux receive();
 
 }

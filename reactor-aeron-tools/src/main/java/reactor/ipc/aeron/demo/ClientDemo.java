@@ -1,7 +1,7 @@
 package reactor.ipc.aeron.demo;
 
 import reactor.core.publisher.Mono;
-import reactor.ipc.aeron.AeronTestUtils;
+import reactor.ipc.aeron.ByteBufferFlux;
 import reactor.ipc.aeron.client.AeronClient;
 
 /**
@@ -17,7 +17,7 @@ public class ClientDemo {
         });
         client.newHandler((inbound, outbound) -> {
             System.out.println("Handler invoked");
-            outbound.send(AeronTestUtils.newByteBufferFlux("Hello", "world!").log("send"))
+            outbound.send(ByteBufferFlux.from("Hello", "world!").log("send"))
                     .then().subscribe(avoid -> {}, Throwable::printStackTrace);
             return Mono.never();
         }).block();
