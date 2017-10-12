@@ -15,16 +15,11 @@
  */
 package reactor.ipc.aeron;
 
-import reactor.ipc.connector.Inbound;
-
-import java.nio.ByteBuffer;
-
 /**
  * @author Anatoly Kadyshev
  */
-public interface AeronInbound extends Inbound<ByteBuffer> {
+public interface AeronInbound {
 
-    @Override
     ByteBufferFlux receive();
 
 }

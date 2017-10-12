@@ -23,6 +23,7 @@ import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
+import reactor.ipc.aeron.DefaultAeronOutbound;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.ControlMessageSubscriber;
@@ -135,7 +136,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
         private final Logger logger = Loggers.getLogger(SessionHandler.class);
 
-        private final AeronOutbound outbound;
+        private final DefaultAeronOutbound outbound;
 
         private final AeronServerInbound inbound;
 
@@ -150,7 +151,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
         SessionHandler(String clientChannel, int clientSessionStreamId, int clientControlStreamId,
                        UUID connectRequestId, long sessionId, int serverSessionStreamId) {
             this.clientSessionStreamId = clientSessionStreamId;
-            this.outbound = new AeronOutbound(category, wrapper, clientChannel, options);
+            this.outbound = new DefaultAeronOutbound(category, wrapper, clientChannel, options);
             this.connectRequestId = connectRequestId;
             this.sessionId = sessionId;
             this.inbound = new AeronServerInbound(category, wrapper, options, pooler, serverSessionStreamId, sessionId,

@@ -1,94 +1,53 @@
-/*
- * Copyright (c) 2011-2017 Pivotal Software Inc, All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *       http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package reactor.ipc.aeron;
 
-import io.aeron.Publication;
 import org.reactivestreams.Publisher;
-import reactor.core.Disposable;
+import org.reactivestreams.Subscriber;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
-import reactor.ipc.connector.Outbound;
 
 import java.nio.ByteBuffer;
 
-/**
- * @author Anatoly Kadyshev
- */
-public final class AeronOutbound implements Outbound<ByteBuffer>, Disposable {
+public interface AeronOutbound extends Publisher<Void> {
 
-    private final Scheduler scheduler;
+    /**
+     * Send data to the peer, listen for any error on write and close on terminal signal
+     * (complete|error).
+     *
+     * @param dataStream the dataStream publishing items to send
+     *
+     * @return A new {@link AeronOutbound} to append further send. It will emit a complete
+     * signal upon successful sequence write or an error during write.
+     */
+    AeronOutbound send(Publisher<? extends ByteBuffer> dataStream);
 
-    private final String category;
+    /**
+     * Obtain a {@link Mono} of pending outbound(s) write completion.
+     *
+     * @return a {@link Mono} of pending outbound(s) write completion
+     */
+    Mono<Void> then();
 
-    private final AeronWrapper wrapper;
-
-    private final String channel;
-
-    private final AeronOptions options;
-
-    private volatile WriteSequencer<ByteBuffer> sequencer;
-
-    private volatile Publication publication;
-
-    public AeronOutbound(String category,
-                         AeronWrapper wrapper,
-                         String channel,
-                         AeronOptions options) {
-        this.category = category;
-        this.wrapper = wrapper;
-        this.channel = channel;
-        this.options = options;
-        this.scheduler = Schedulers.newSingle(category + "-[sender]", false);
-    }
-
+    /**
+     * Subscribe a {@code Void} subscriber to this outbound and trigger all eventual
+     * parent outbound send.
+     *
+     * @param s the {@link Subscriber} to listen for send sequence completion/failure
+     */
     @Override
-    public Outbound<ByteBuffer> send(Publisher<? extends ByteBuffer> dataStream) {
-        return then(sequencer.add(dataStream, scheduler));
+    default void subscribe(Subscriber<? super Void> s) {
+        then().subscribe(s);
     }
 
-    @Override
-    public void dispose() {
-        scheduler.dispose();
-
-        if (publication != null) {
-            publication.close();
-        }
-    }
-
-    public Mono<Void> initialise(long sessionId, int streamId) {
-        return Mono.create(sink -> {
-            this.publication = wrapper.addPublication(channel, streamId, "to send data to", sessionId);
-            this.sequencer = new AeronWriteSequencer(category, publication, options, sessionId);
-            int timeoutMillis = options.connectTimeoutMillis();
-            new RetryTask(Schedulers.single(), 100, timeoutMillis, () -> {
-                if (publication.isConnected()) {
-                    sink.success();
-                    return true;
-                }
-                return false;
-            }, th -> sink.error(
-                    new Exception(String.format("Publication %s for sending data in not connected during %d millis",
-                            AeronUtils.format(publication), timeoutMillis), th))
-            ).schedule();
-        });
-    }
-
-    public Publication getPublication() {
-        return publication;
+    /**
+     * Append a {@link Publisher} task such as a Mono and return a new
+     * {@link AeronOutbound} to sequence further send.
+     *
+     * @param other the {@link Publisher} to subscribe to when this pending outbound
+     * {@link #then} is complete;
+     *
+     * @return a new {@link AeronOutbound}
+     */
+    default AeronOutbound then(Publisher<Void> other) {
+        return new AeronOutboundThen(this, other);
     }
 
 }
