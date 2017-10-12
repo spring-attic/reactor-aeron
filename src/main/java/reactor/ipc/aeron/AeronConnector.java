@@ -37,6 +37,6 @@ public interface AeronConnector {
      * the active handler (server, client connection...) or failing with the connection
      * error.
      */
-    Mono<? extends Disposable> newHandler(BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler);
+    Mono<? extends Disposable> newHandler(BiFunction<AeronInbound, AeronOutbound, ? extends Publisher<Void>> ioHandler);
 
 }

@@ -56,8 +56,7 @@ public final class AeronServer implements AeronConnector {
     }
 
     @Override
-    public Mono<? extends Disposable> newHandler(
-            BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler) {
+    public Mono<? extends Disposable> newHandler(BiFunction<AeronInbound, AeronOutbound, ? extends Publisher<Void>> ioHandler) {
         Objects.requireNonNull(ioHandler, "ioHandler shouldn't be null");
 
         return Mono.create(sink -> {
