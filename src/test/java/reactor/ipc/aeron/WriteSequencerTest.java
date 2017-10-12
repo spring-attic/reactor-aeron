@@ -83,6 +83,10 @@ public class WriteSequencerTest {
             }
 
             @Override
+            void doOnSubscribe() {
+            }
+
+            @Override
             public void doOnError(Throwable t) {
                 log("onError: " + t);
                 promise.success();

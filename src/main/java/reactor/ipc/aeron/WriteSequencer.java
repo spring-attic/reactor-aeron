@@ -293,6 +293,8 @@ abstract class WriteSequencer<T> {
             if (wip == 0 && WIP.compareAndSet(this, 0, 1)) {
                 actual = s;
 
+                doOnSubscribe();
+
                 long r = requested;
 
                 if (WIP.decrementAndGet(this) != 0) {
@@ -309,6 +311,8 @@ abstract class WriteSequencer<T> {
             MISSED_SUBSCRIPTION.set(this, s);
             drain();
         }
+
+        abstract void doOnSubscribe();
 
         @Override
         public final void request(long n) {

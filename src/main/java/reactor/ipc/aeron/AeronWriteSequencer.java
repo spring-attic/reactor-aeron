@@ -57,8 +57,11 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
             this.publication = publication;
             this.sessionId = sessionId;
             this.publisher = new MessagePublisher(category, options.connectTimeoutMillis(), options.backpressureTimeoutMillis());
+        }
 
-            request(1);
+        @Override
+        void doOnSubscribe() {
+            request(Long.MAX_VALUE);
         }
 
         @Override
@@ -68,16 +71,16 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
             try {
                 result = publisher.publish(publication, MessageType.NEXT, byteBuffer, sessionId);
                 if (result > 0) {
-                    request(1);
                     return;
                 }
             } catch (Exception ex) {
-                cancel();
-
                 cause = ex;
             }
+
+            cancel();
+
             promise.error(new Exception("Failed to publish signal into session with Id: " + sessionId
-                    + ", result=" + result, cause));
+                    + ", result: " + result, cause));
         }
 
         @Override
