@@ -133,11 +133,11 @@ configure(allprojects) { project ->
 
 	compile "io.aeron:aeron-driver:$aeronVersion",
 			"io.aeron:aeron-client:$aeronVersion"
-	compile "io.projectreactor.ipc:reactor-ipc:$reactorIpcVersion"
-    compile "io.projectreactor:reactor-core:$reactorCoreVersion"
 
-    testCompile 'junit:junit:4.12'
-    testCompile "io.projectreactor:reactor-test:$reactorCoreVersion"
+	compile "io.projectreactor:reactor-core:$reactorCoreVersion"
+
+	testCompile 'junit:junit:4.12'
+	testCompile "io.projectreactor:reactor-test:$reactorCoreVersion"
 
 	testRuntime "ch.qos.logback:logback-classic:$logbackVersion"
 	// Testing

@@ -18,7 +18,7 @@ package reactor.ipc.aeron.client;
 import io.aeron.Publication;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
-import reactor.ipc.aeron.AeronOutbound;
+import reactor.ipc.aeron.DefaultAeronOutbound;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.HeartbeatSender;
@@ -55,7 +55,7 @@ final class ClientConnector implements Disposable {
 
     private final HeartbeatSender heartbeatSender;
 
-    private final AeronOutbound outbound;
+    private final DefaultAeronOutbound outbound;
 
     private volatile long sessionId;
 
@@ -66,7 +66,7 @@ final class ClientConnector implements Disposable {
                     AeronClientOptions options,
                     ClientControlMessageSubscriber controlMessageSubscriber,
                     HeartbeatSender heartbeatSender,
-                    AeronOutbound outbound,
+                    DefaultAeronOutbound outbound,
                     int clientControlStreamId,
                     int clientSessionStreamId) {
         this.category = category;

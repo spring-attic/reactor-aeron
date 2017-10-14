@@ -22,6 +22,7 @@ import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.AeronConnector;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOutbound;
+import reactor.ipc.aeron.DefaultAeronOutbound;
 import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.HeartbeatSender;
 import reactor.ipc.aeron.HeartbeatWatchdog;
@@ -98,8 +99,7 @@ public final class AeronClient implements AeronConnector, Disposable {
     }
 
     @Override
-    public Mono<? extends Disposable> newHandler(
-            BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler) {
+    public Mono<? extends Disposable> newHandler(BiFunction<AeronInbound, AeronOutbound, ? extends Publisher<Void>> ioHandler) {
         ClientHandler handler = new ClientHandler(ioHandler);
         return handler.initialise();
     }
@@ -120,7 +120,7 @@ public final class AeronClient implements AeronConnector, Disposable {
 
         private final BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler;
 
-        private final AeronOutbound outbound;
+        private final DefaultAeronOutbound outbound;
 
         private final int clientSessionStreamId;
 
@@ -133,7 +133,7 @@ public final class AeronClient implements AeronConnector, Disposable {
         ClientHandler(BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler) {
             this.ioHandler = ioHandler;
             this.clientSessionStreamId = streamIdCounter.incrementAndGet();
-            this.outbound = new AeronOutbound(name, wrapper, options.serverChannel(), options);
+            this.outbound = new DefaultAeronOutbound(name, wrapper, options.serverChannel(), options);
             this.connector = new ClientConnector(name, wrapper, options, controlMessageSubscriber,
                     heartbeatSender, outbound, clientControlStreamId, clientSessionStreamId);
         }
