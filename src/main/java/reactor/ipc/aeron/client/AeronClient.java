@@ -22,8 +22,8 @@ import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.AeronConnector;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOutbound;
-import reactor.ipc.aeron.DefaultAeronOutbound;
 import reactor.ipc.aeron.AeronWrapper;
+import reactor.ipc.aeron.DefaultAeronOutbound;
 import reactor.ipc.aeron.HeartbeatSender;
 import reactor.ipc.aeron.HeartbeatWatchdog;
 import reactor.ipc.aeron.Pooler;
@@ -135,7 +135,7 @@ public final class AeronClient implements AeronConnector, Disposable {
             this.clientSessionStreamId = streamIdCounter.incrementAndGet();
             this.outbound = new DefaultAeronOutbound(name, wrapper, options.serverChannel(), options);
             this.connector = new ClientConnector(name, wrapper, options, controlMessageSubscriber,
-                    heartbeatSender, outbound, clientControlStreamId, clientSessionStreamId);
+                    heartbeatSender, clientControlStreamId, clientSessionStreamId);
         }
 
         Mono<Disposable> initialise() {

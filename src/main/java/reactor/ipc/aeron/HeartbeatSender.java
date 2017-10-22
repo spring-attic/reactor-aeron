@@ -43,17 +43,17 @@ public class HeartbeatSender {
 
         private final MonoSink<Void> sink;
 
-        private final Publication controlPub;
-
         private final long sessionId;
+
+        private final MessagePublication publication;
 
         private boolean isFailed = false;
 
         private int failCounter = 0;
 
-        SendHeartbeatTask(MonoSink<Void> sink, Publication controlPub, long sessionId) {
+        SendHeartbeatTask(MonoSink<Void> sink, Publication controlPublication, long sessionId) {
             this.sink = sink;
-            this.controlPub = controlPub;
+            this.publication = new DefaultMessagePublication(controlPublication, category, 0, 0);
             this.sessionId = sessionId;
         }
 
@@ -64,11 +64,10 @@ public class HeartbeatSender {
             }
 
             ByteBuffer buffer = Protocol.createHeartbeatBody();
-            MessagePublisher publisher = new MessagePublisher(category, 0, 0);
             Exception cause = null;
             long result = 0;
             try {
-                result = publisher.publish(controlPub, MessageType.HEARTBEAT, buffer, sessionId);
+                result = publication.publish(MessageType.HEARTBEAT, buffer, sessionId);
                 if (result > 0) {
                     failCounter = 0;
                     logger.debug("[{}] Sent heartbeat for session with Id: {}", category, sessionId);

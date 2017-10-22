@@ -18,11 +18,11 @@ package reactor.ipc.aeron.client;
 import io.aeron.Publication;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
-import reactor.ipc.aeron.DefaultAeronOutbound;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.AeronWrapper;
+import reactor.ipc.aeron.DefaultMessagePublication;
 import reactor.ipc.aeron.HeartbeatSender;
-import reactor.ipc.aeron.MessagePublisher;
+import reactor.ipc.aeron.MessagePublication;
 import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.Protocol;
 import reactor.util.Logger;
@@ -55,8 +55,6 @@ final class ClientConnector implements Disposable {
 
     private final HeartbeatSender heartbeatSender;
 
-    private final DefaultAeronOutbound outbound;
-
     private volatile long sessionId;
 
     private volatile Disposable heartbeatSenderDisposable = () -> {};
@@ -66,7 +64,6 @@ final class ClientConnector implements Disposable {
                     AeronClientOptions options,
                     ClientControlMessageSubscriber controlMessageSubscriber,
                     HeartbeatSender heartbeatSender,
-                    DefaultAeronOutbound outbound,
                     int clientControlStreamId,
                     int clientSessionStreamId) {
         this.category = category;
@@ -75,7 +72,6 @@ final class ClientConnector implements Disposable {
         this.clientControlStreamId = clientControlStreamId;
         this.clientSessionStreamId = clientSessionStreamId;
         this.heartbeatSender = heartbeatSender;
-        this.outbound = outbound;
         this.connectRequestId = UUIDUtils.create();
         this.serverControlPublication = wrapper.addPublication(options.serverChannel(), options.serverStreamId(),
                 "to send control requests to server", 0);
@@ -119,7 +115,7 @@ final class ClientConnector implements Disposable {
             if (logger.isDebugEnabled()) {
                 logger.debug("[{}] Connecting to server at {}", category, AeronUtils.format(serverControlPublication));
             }
-        }).then(send(buffer, MessageType.CONNECT, serverControlPublication, options.connectTimeoutMillis()));
+        }).then(send(buffer, MessageType.CONNECT));
     }
 
     private Mono<Void> sendDisconnectRequest() {
@@ -128,17 +124,19 @@ final class ClientConnector implements Disposable {
             if (logger.isDebugEnabled()) {
                 logger.debug("[{}] Disconnecting from server at {}", category, AeronUtils.format(serverControlPublication));
             }
-        }).then(send(buffer, MessageType.COMPLETE, outbound.getPublication(), options.connectTimeoutMillis()));
+        }).then(send(buffer, MessageType.COMPLETE));
     }
 
-    private Mono<Void> send(ByteBuffer buffer, MessageType messageType, Publication publication, long timeoutMillis) {
+    private Mono<Void> send(ByteBuffer buffer, MessageType messageType) {
         return Mono.create(sink -> {
-            MessagePublisher publisher = new MessagePublisher(category, timeoutMillis, timeoutMillis);
             Exception cause = null;
             try {
-                long result = publisher.publish(publication, messageType, buffer, sessionId);
+                MessagePublication messagePublication = new DefaultMessagePublication(serverControlPublication, category,
+                        options.connectTimeoutMillis(), options.backpressureTimeoutMillis());
+
+                long result = messagePublication.publish(messageType, buffer, sessionId);
                 if (result > 0) {
-                    logger.debug("[{}] Sent {} to {}", category, messageType, AeronUtils.format(publication));
+                    logger.debug("[{}] Sent {} to {}", category, messageType, messagePublication.asString());
                     sink.success();
                     return;
                 }

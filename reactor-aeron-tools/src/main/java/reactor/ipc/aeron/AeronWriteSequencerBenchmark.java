@@ -40,13 +40,16 @@ public class AeronWriteSequencerBenchmark {
         pooler.schedulePoll();
 
         Publication publication = aeron.addPublication(channel, 1, "benchmark", 0);
-        AeronWriteSequencer sequencer = new AeronWriteSequencer("test", publication, options, 1);
+        MessagePublication messagePublication = new DefaultMessagePublication(publication, "benchmark",
+                options.connectTimeoutMillis(), options.backpressureTimeoutMillis());
+        Scheduler scheduler = Schedulers.single();
+        AeronWriteSequencer sequencer = new AeronWriteSequencer(scheduler, "test", messagePublication, 1);
 
         for (int i = 1; i <= nRuns; i++) {
             Publisher<ByteBuffer> publisher = new BenchmarkPublisher(1_000_000, 512);
 
             long start = System.nanoTime();
-            Mono<Void> result = sequencer.add(publisher, Schedulers.single());
+            Mono<Void> result = sequencer.add(publisher);
             result.block();
             long end = System.nanoTime();
 

@@ -1,6 +1,6 @@
 package reactor.ipc.aeron;
 
-import io.aeron.Publication;
+import reactor.core.scheduler.Scheduler;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -11,26 +11,17 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
 
     private static final Logger logger = Loggers.getLogger(AeronWriteSequencer.class);
 
-    private final String category;
-
-    private final Publication publication;
-
-    private final AeronOptions options;
-
     private final long sessionId;
 
     private final InnerSubscriber<ByteBuffer> inner;
 
     private final Consumer<Throwable> errorHandler;
 
-    AeronWriteSequencer(String category, Publication publication, AeronOptions options, long sessionId) {
-        super(publisher -> {}, avoid -> false,null);
-        this.category = category;
-        this.publication = publication;
-        this.options = options;
+    AeronWriteSequencer(Scheduler scheduler, String category, MessagePublication publication, long sessionId) {
+        super(scheduler, discardedPublisher -> {});
         this.sessionId = sessionId;
         this.errorHandler = th -> logger.error("[{}] Unexpected exception", category, th);
-        this.inner = new SignalSender(this, this.publication, this.sessionId, this.options);
+        this.inner = new SignalSender(this, publication, this.sessionId);
     }
 
     @Override
@@ -43,20 +34,17 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
         return inner;
     }
 
-    class SignalSender extends InnerSubscriber<ByteBuffer> {
-
-        private final Publication publication;
+    static class SignalSender extends InnerSubscriber<ByteBuffer> {
 
         private final long sessionId;
 
-        private final MessagePublisher publisher;
+        private final MessagePublication publication;
 
-        SignalSender(AeronWriteSequencer sequencer, Publication publication, long sessionId, AeronOptions options) {
+        SignalSender(AeronWriteSequencer sequencer, MessagePublication publication, long sessionId) {
             super(sequencer);
 
-            this.publication = publication;
             this.sessionId = sessionId;
-            this.publisher = new MessagePublisher(category, options.connectTimeoutMillis(), options.backpressureTimeoutMillis());
+            this.publication = publication;
         }
 
         @Override
@@ -69,7 +57,7 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
             Exception cause = null;
             long result = 0;
             try {
-                result = publisher.publish(publication, MessageType.NEXT, byteBuffer, sessionId);
+                result = publication.publish(MessageType.NEXT, byteBuffer, sessionId);
                 if (result > 0) {
                     return;
                 }
@@ -81,16 +69,22 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
 
             promise.error(new Exception("Failed to publish signal into session with Id: " + sessionId
                     + ", result: " + result, cause));
+
+            scheduleNextPublisherDrain();
         }
 
         @Override
         void doOnError(Throwable t) {
             promise.error(t);
+
+            scheduleNextPublisherDrain();
         }
 
         @Override
         void doOnComplete() {
             promise.success();
+
+            scheduleNextPublisherDrain();
         }
 
     }
