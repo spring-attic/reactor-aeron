@@ -15,17 +15,6 @@
  */
 package reactor.ipc.aeron;
 
-import java.util.Objects;
-import java.util.Queue;
-import java.util.concurrent.Callable;
-import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
-import java.util.concurrent.atomic.AtomicLongFieldUpdater;
-import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
-import java.util.function.BiConsumer;
-import java.util.function.BiPredicate;
-import java.util.function.Consumer;
-import java.util.function.Predicate;
-
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
 import reactor.core.CoreSubscriber;
@@ -36,6 +25,15 @@ import reactor.core.scheduler.Scheduler;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 import reactor.util.concurrent.Queues;
+
+import java.util.Objects;
+import java.util.Queue;
+import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
+import java.util.function.BiPredicate;
+import java.util.function.Consumer;
 
 abstract class WriteSequencer<T> {
 
@@ -55,44 +53,38 @@ abstract class WriteSequencer<T> {
 
     private final Consumer<Object> discardedHandler;
 
-    private final Predicate<Void> backpressureChecker;
-
-    private final BiConsumer<Object, MonoSink<?>> messageConsumer;
+    private final Scheduler scheduler;
 
     @SuppressWarnings("unchecked")
-    public WriteSequencer(Consumer<Object> discardedHandler,
-                          Predicate<Void> backpressureChecker,
-                          BiConsumer<Object, MonoSink<?>> messageConsumer) {
+    public WriteSequencer(Scheduler scheduler, Consumer<Object> discardedHandler) {
         this.discardedHandler = discardedHandler;
-        this.backpressureChecker = backpressureChecker;
+        this.scheduler = scheduler;
         this.pendingWrites = Queues.unbounded()
                                    .get();
         this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
-        this.messageConsumer = messageConsumer;
     }
 
     abstract InnerSubscriber<T> getInner();
 
     abstract Consumer<Throwable> getErrorHandler();
 
-    public Mono<Void> add(Object msg, Scheduler scheduler) {
-        if (!(msg instanceof Publisher) && messageConsumer == null) {
-            return Mono.error(new IllegalArgumentException("Cannot add msg of class " + msg.getClass()));
-        }
-        else {
-            return Mono.create(sink -> {
-                boolean success = pendingWriteOffer.test(sink, msg);
-                if (!success) {
-                    sink.error(new Exception("Failed to enqueue publisher"));
-                }
+    public Mono<Void> add(Publisher<?> publisher) {
+        return Mono.create(sink -> {
+            boolean success = pendingWriteOffer.test(sink, publisher);
+            if (!success) {
+                sink.error(new Exception("Failed to enqueue publisher"));
+            }
 
-                scheduler.schedule(this::drain);
-            });
-        }
+            scheduleDrain();
+        });
     }
 
     public boolean isEmpty() {
         return pendingWrites.isEmpty();
+    }
+
+    boolean isReady() {
+        return !getInner().isCancelled;
     }
 
     @SuppressWarnings("unchecked")
@@ -103,10 +95,16 @@ abstract class WriteSequencer<T> {
             for ( ; ; ) {
                 if (inner.isCancelled) {
                     discard();
-                    return;
+
+                    inner.isCancelled = false;
+
+                    if (WIP.decrementAndGet(this) == 0) {
+                        break;
+                    }
+                    continue;
                 }
 
-                if (innerActive || backpressureChecker.test(null)) {
+                if (innerActive) {
                     if (WIP.decrementAndGet(this) == 0) {
                         break;
                     }
@@ -134,45 +132,34 @@ abstract class WriteSequencer<T> {
                 }
 
                 v = pendingWrites.poll();
+                Publisher<T> p = (Publisher<T>) v;
 
-                if (v instanceof Publisher) {
-                    Publisher<T> p = (Publisher<T>) v;
+                if (p instanceof Callable) {
+                    @SuppressWarnings("unchecked") Callable<?> supplier = (Callable<?>) p;
 
-                    if (p instanceof Callable) {
-                        @SuppressWarnings("unchecked") Callable<?> supplier = (Callable<?>) p;
+                    Object vr;
 
-                        Object vr;
-
-                        try {
-                            vr = supplier.call();
-                        }
-                        catch (Throwable e) {
-                            promise.error(e);
-                            continue;
-                        }
-
-                        if (vr == null) {
-                            promise.success();
-                            continue;
-                        }
-
-                        if (inner.unbounded && messageConsumer != null) {
-                            messageConsumer.accept(vr, promise);
-                        }
-                        else {
-                            innerActive = true;
-                            inner.setResultSink(promise);
-                            inner.onSubscribe(Operators.scalarSubscription(inner, (T)vr));
-                        }
+                    try {
+                        vr = supplier.call();
                     }
-                    else {
-                        innerActive = true;
-                        inner.setResultSink(promise);
-                        p.subscribe(inner);
+                    catch (Throwable e) {
+                        promise.error(e);
+                        continue;
                     }
+
+                    if (vr == null) {
+                        promise.success();
+                        continue;
+                    }
+
+                    innerActive = true;
+                    inner.setResultSink(promise);
+                    inner.onSubscribe(Operators.scalarSubscription(inner, (T)vr));
                 }
                 else {
-                    messageConsumer.accept(v, promise);
+                    innerActive = true;
+                    inner.setResultSink(promise);
+                    p.subscribe(inner);
                 }
             }
         }
@@ -198,6 +185,10 @@ abstract class WriteSequencer<T> {
 
             promise.error(new AbortedException());
         }
+    }
+
+    void scheduleDrain() {
+        scheduler.schedule(this::drain);
     }
 
     abstract static class InnerSubscriber<T> implements CoreSubscriber<T>, Subscription {
@@ -390,6 +381,8 @@ abstract class WriteSequencer<T> {
                     if (ms != null) {
                         ms.cancel();
                     }
+
+                    parent.innerActive = false;
                 }
                 else {
                     long r = requested;
@@ -466,8 +459,8 @@ abstract class WriteSequencer<T> {
             drain();
         }
 
-        protected void drainNextPublisher() {
-            parent.drain();
+        protected void scheduleNextPublisherDrain() {
+            parent.scheduleDrain();
         }
 
         @SuppressWarnings("rawtypes")

@@ -1,5 +1,7 @@
 package reactor.ipc.aeron;
 
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -16,22 +18,41 @@ import static reactor.ipc.aeron.TestUtils.log;
 
 public class WriteSequencerTest {
 
+    private Scheduler scheduler;
+
+    private Scheduler scheduler1;
+
+    private Scheduler scheduler2;
+
+    @Before
+    public void doSetup() {
+        scheduler = Schedulers.newSingle("sequencer", false);
+        scheduler1 = Schedulers.newSingle("scheduler-A");
+        scheduler2 = Schedulers.newSingle("scheduler-B");
+    }
+
+    @After
+    public void doTeardown() {
+        scheduler.dispose();
+        scheduler1.dispose();
+        scheduler2.dispose();
+    }
+
     @Test
     public void itProvidesSignalsFromAddedPublishers() throws Exception {
-        WriteSequencerForTest sequencer = new WriteSequencerForTest();
-        Scheduler scheduler = Schedulers.newSingle("sequencer", false);
+        WriteSequencerForTest sequencer = new WriteSequencerForTest(scheduler);
 
-        Flux<String> flux = Flux.just("Hello", "world");
-        Flux<String> publishOn = flux.publishOn(Schedulers.newSingle("scheduler-1"));
-        Mono result = sequencer.add(publishOn, scheduler);
+        Flux<String> flux1 = Flux.just("Hello", "world")
+                .publishOn(scheduler1);
+        Mono result1 = sequencer.add(flux1);
 
-        Flux<String> flux2 = Flux.just("Everybody", "happy");
-        Flux<String> publishOn2 = flux2.publishOn(Schedulers.newSingle("scheduler-2"));
-        Mono result2 = sequencer.add(publishOn2, scheduler);
+        Flux<String> flux2 = Flux.just("Everybody", "happy")
+                .publishOn(scheduler2);
+        Mono result2 = sequencer.add(flux2);
 
 
         sequencer.request(4);
-        result.block();
+        result1.block();
         result2.block();
 
 
@@ -44,8 +65,8 @@ public class WriteSequencerTest {
 
         private final SubscriberForTest inner;
 
-        public WriteSequencerForTest() {
-            super(o -> {}, avoid -> false, null);
+        WriteSequencerForTest(Scheduler scheduler) {
+            super(scheduler, discardedValue -> {});
             this.inner = new SubscriberForTest(this);
         }
 
@@ -97,7 +118,7 @@ public class WriteSequencerTest {
                 log("onComplete");
                 promise.success();
 
-                drainNextPublisher();
+                scheduleNextPublisherDrain();
             }
 
         }

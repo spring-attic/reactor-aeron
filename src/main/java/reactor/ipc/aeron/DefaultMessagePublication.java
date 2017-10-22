@@ -19,6 +19,7 @@ import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.IdleStrategy;
+import reactor.core.Disposable;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -27,9 +28,9 @@ import java.nio.ByteBuffer;
 /**
  * @author Anatoly Kadyshev
  */
-public class MessagePublisher {
+public final class DefaultMessagePublication implements Disposable, MessagePublication {
 
-    private static final Logger logger = Loggers.getLogger(MessagePublisher.class);
+    private static final Logger logger = Loggers.getLogger(DefaultMessagePublication.class);
 
     private final IdleStrategy idleStrategy;
 
@@ -37,26 +38,24 @@ public class MessagePublisher {
 
     private final long waitBackpressuredMillis;
 
+    private final Publication publication;
+
     private final String category;
 
-    public MessagePublisher(String category, long waitConnectedMillis, long waitBackpressuredMillis) {
+    public DefaultMessagePublication(Publication publication, String category, long waitConnectedMillis, long waitBackpressuredMillis) {
+        this.publication = publication;
         this.category = category;
         this.idleStrategy = AeronUtils.newBackoffIdleStrategy();
         this.waitConnectedMillis = waitConnectedMillis;
         this.waitBackpressuredMillis = waitBackpressuredMillis;
     }
 
-    /**
-     * Publishes a message into <code>publication</code>
-     *
-     * @throws IllegalArgumentException as specified for {@link Publication#tryClaim(int, BufferClaim)}
-     * @throws RuntimeException when unexpected exception occurs
-     */
-    public long publish(Publication publication, MessageType msgType, ByteBuffer msgBody, long sessionId) {
+    @Override
+    public long publish(MessageType msgType, ByteBuffer msgBody, long sessionId) {
         BufferClaim bufferClaim = new BufferClaim();
         int headerSize = Protocol.HEADER_SIZE;
         int size = headerSize + msgBody.remaining();
-        long result = tryClaim(bufferClaim, publication, size);
+        long result = tryClaim(bufferClaim, size);
         if (result > 0) {
             try {
                 MutableDirectBuffer buffer = bufferClaim.buffer();
@@ -72,7 +71,7 @@ public class MessagePublisher {
         return result;
     }
 
-    private long tryClaim(BufferClaim bufferClaim, Publication publication, int size) {
+    private long tryClaim(BufferClaim bufferClaim, int size) {
         long start = System.currentTimeMillis();
         long result;
         for ( ; ; ) {
@@ -82,13 +81,13 @@ public class MessagePublisher {
                 break;
             } else if (result == Publication.NOT_CONNECTED) {
                 if (System.currentTimeMillis() - start > waitConnectedMillis) {
-                    logger.debug("[{}] Publication NOT_CONNECTED: {} during {} millis", category, AeronUtils.format(publication),
+                    logger.debug("[{}] Publication NOT_CONNECTED: {} during {} millis", category, asString(),
                             waitConnectedMillis);
                     break;
                 }
             } else if (result == Publication.BACK_PRESSURED) {
                 if (System.currentTimeMillis() - start > waitBackpressuredMillis) {
-                    logger.debug("[{}] Publication BACK_PRESSURED during {} millis: {}", category, AeronUtils.format(publication),
+                    logger.debug("[{}] Publication BACK_PRESSURED during {} millis: {}", category, asString(),
                             waitBackpressuredMillis);
                     break;
                 }
@@ -97,7 +96,7 @@ public class MessagePublisher {
                 break;
             } else if (result == Publication.ADMIN_ACTION) {
                 if (System.currentTimeMillis() - start > waitConnectedMillis) {
-                    logger.debug("[{}] Publication ADMIN_ACTION: {} during {} millis", category, AeronUtils.format(publication),
+                    logger.debug("[{}] Publication ADMIN_ACTION: {} during {} millis", category, asString(),
                             waitConnectedMillis);
                     break;
                 }
@@ -107,6 +106,21 @@ public class MessagePublisher {
         }
         idleStrategy.reset();
         return result;
+    }
+
+    @Override
+    public String asString() {
+        return AeronUtils.format(publication);
+    }
+
+    @Override
+    public void dispose() {
+        publication.close();
+    }
+
+    @Override
+    public boolean isDisposed() {
+        return publication.isClosed();
     }
 
 }

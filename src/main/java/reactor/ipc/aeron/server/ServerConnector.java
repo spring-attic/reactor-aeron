@@ -23,8 +23,9 @@ import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.AeronWrapper;
+import reactor.ipc.aeron.DefaultMessagePublication;
 import reactor.ipc.aeron.HeartbeatSender;
-import reactor.ipc.aeron.MessagePublisher;
+import reactor.ipc.aeron.MessagePublication;
 import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.Protocol;
 import reactor.ipc.aeron.RetryTask;
@@ -43,7 +44,7 @@ public class ServerConnector implements Disposable {
 
     private final String category;
 
-    private final Publication clientControlPub;
+    private final Publication clientControlPublication;
 
     private final int serverSessionStreamId;
 
@@ -72,7 +73,7 @@ public class ServerConnector implements Disposable {
         this.options = options;
         this.sessionId = sessionId;
         this.heartbeatSender = heartbeatSender;
-        this.clientControlPub = wrapper.addPublication(clientChannel, clientControlStreamId,
+        this.clientControlPublication = wrapper.addPublication(clientChannel, clientControlStreamId,
                 "to send control requests to client", sessionId);
     }
 
@@ -81,10 +82,10 @@ public class ServerConnector implements Disposable {
                 Schedulers.single(),100,options.connectTimeoutMillis() * 2,
                 new SendConnectAckTask(sink), th -> sink.error(
                         new RuntimeException(String.format("Failed to send %s into %s",
-                                MessageType.CONNECT_ACK, AeronUtils.format(clientControlPub)), th))).schedule())
+                                MessageType.CONNECT_ACK, AeronUtils.format(clientControlPublication)), th))).schedule())
 
                 .then(Mono.fromRunnable(() -> {
-                    this.heartbeatSenderDisposable = heartbeatSender.scheduleHeartbeats(clientControlPub, sessionId)
+                    this.heartbeatSenderDisposable = heartbeatSender.scheduleHeartbeats(clientControlPublication, sessionId)
                             .subscribe(ignore -> { }, th -> { });
                 }));
     }
@@ -93,30 +94,30 @@ public class ServerConnector implements Disposable {
     public void dispose() {
         heartbeatSenderDisposable.dispose();
 
-        clientControlPub.close();
+        clientControlPublication.close();
     }
 
     class SendConnectAckTask implements Callable<Boolean> {
 
-        private final MessagePublisher publisher;
+        private final MessagePublication publication;
 
         private final MonoSink<?> sink;
 
         SendConnectAckTask(MonoSink<?> sink) {
             this.sink = sink;
-            this.publisher = new MessagePublisher(category, 0, 0);
+            this.publication = new DefaultMessagePublication(clientControlPublication, category, 0, 0);
         }
 
         @Override
         public Boolean call() throws Exception{
-            long result = publisher.publish(clientControlPub, MessageType.CONNECT_ACK,
+            long result = publication.publish(MessageType.CONNECT_ACK,
                     Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId), sessionId);
             if (result > 0) {
-                logger.debug("[{}] Sent {} to {}", category, MessageType.CONNECT_ACK, category, AeronUtils.format(clientControlPub));
+                logger.debug("[{}] Sent {} to {}", category, MessageType.CONNECT_ACK, category, publication.asString());
                 sink.success();
                 return true;
             } else if (result == Publication.CLOSED) {
-                throw new RuntimeException(String.format("Publication %s has been closed", AeronUtils.format(clientControlPub)));
+                throw new RuntimeException(String.format("Publication %s has been closed", publication.asString()));
             }
 
             return false;

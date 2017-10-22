@@ -41,7 +41,7 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
 
     private volatile WriteSequencer<ByteBuffer> sequencer;
 
-    private volatile Publication publication;
+    private volatile DefaultMessagePublication publication;
 
     public DefaultAeronOutbound(String category,
                                 AeronWrapper wrapper,
@@ -56,7 +56,7 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
 
     @Override
     public AeronOutbound send(Publisher<? extends ByteBuffer> dataStream) {
-        return then(sequencer.add(dataStream, scheduler));
+        return then(sequencer.add(dataStream));
     }
 
     @Override
@@ -69,29 +69,31 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
         scheduler.dispose();
 
         if (publication != null) {
-            publication.close();
+            publication.dispose();
         }
     }
 
     public Mono<Void> initialise(long sessionId, int streamId) {
         return Mono.create(sink -> {
-            this.publication = wrapper.addPublication(channel, streamId, "to send data to", sessionId);
-            this.sequencer = new AeronWriteSequencer(category, publication, options, sessionId);
+            Publication aeronPublication = wrapper.addPublication(channel, streamId, "to send data to", sessionId);
+            this.publication = new DefaultMessagePublication(aeronPublication, category,
+                    options.connectTimeoutMillis(), options.backpressureTimeoutMillis());
+            this.sequencer = new AeronWriteSequencer(scheduler, category, publication, sessionId);
             int timeoutMillis = options.connectTimeoutMillis();
             new RetryTask(Schedulers.single(), 100, timeoutMillis, () -> {
-                if (publication.isConnected()) {
+                if (aeronPublication.isConnected()) {
                     sink.success();
                     return true;
                 }
                 return false;
             }, th -> sink.error(
                     new Exception(String.format("Publication %s for sending data in not connected during %d millis",
-                            AeronUtils.format(publication), timeoutMillis), th))
+                            publication.asString(), timeoutMillis), th))
             ).schedule();
         });
     }
 
-    public Publication getPublication() {
+    public MessagePublication getPublication() {
         return publication;
     }
 
