@@ -50,8 +50,6 @@ public class WriteSequencerTest {
                 .publishOn(scheduler2);
         Mono result2 = sequencer.add(flux2);
 
-
-        sequencer.request(4);
         result1.block();
         result2.block();
 
@@ -80,10 +78,6 @@ public class WriteSequencerTest {
             return ERROR_HANDLER;
         }
 
-        void request(int n) {
-            inner.request(n);
-        }
-
         List<String> getSignals() {
             return inner.signals;
         }
@@ -93,7 +87,7 @@ public class WriteSequencerTest {
             final List<String> signals = new CopyOnWriteArrayList<>();
 
             SubscriberForTest(WriteSequencerForTest parent) {
-                super(parent);
+                super(parent, 1);
             }
 
             @Override
@@ -105,6 +99,7 @@ public class WriteSequencerTest {
 
             @Override
             void doOnSubscribe() {
+                request(Long.MAX_VALUE);
             }
 
             @Override

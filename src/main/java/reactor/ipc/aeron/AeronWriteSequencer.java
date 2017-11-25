@@ -41,7 +41,7 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
         private final MessagePublication publication;
 
         SignalSender(AeronWriteSequencer sequencer, MessagePublication publication, long sessionId) {
-            super(sequencer);
+            super(sequencer, 16);
 
             this.sessionId = sessionId;
             this.publication = publication;

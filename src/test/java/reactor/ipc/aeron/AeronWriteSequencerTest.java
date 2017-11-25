@@ -136,6 +136,22 @@ public class AeronWriteSequencerTest {
                 .verify(TIMEOUT);
     }
 
+    @Test
+    public void testItRequestsDataByBatches() {
+        FakeMessagePublication publication = new FakeMessagePublication();
+        publication.publishSuccessfully(32);
+
+        AeronWriteSequencer writeSequencer = new AeronWriteSequencer(
+                scheduler, "test", publication, 1);
+
+        Mono<Void> result = writeSequencer.add(
+                Flux.range(1, 32)
+                        .map(i -> AeronUtils.stringToByteBuffer(String.valueOf(i)))
+                        .log());
+
+        result.block();
+    }
+
     static class FakeMessagePublication implements MessagePublication {
 
         private final Queue<Command> commands = new ConcurrentLinkedQueue<>();

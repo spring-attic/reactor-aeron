@@ -215,9 +215,12 @@ abstract class WriteSequencer<T> {
         Subscription   actual;
         long           produced;
         MonoSink<?>    promise;
+        long           upstreamRequested;
+        final int      batchSize;
 
-        InnerSubscriber(WriteSequencer<T> parent) {
+        InnerSubscriber(WriteSequencer<T> parent, int batchSize) {
             this.parent = parent;
+            this.batchSize = batchSize;
         }
 
         public void setResultSink(MonoSink<?> promise) {
@@ -268,6 +271,10 @@ abstract class WriteSequencer<T> {
             produced++;
 
             doOnNext(t);
+
+            if (upstreamRequested - produced == 0 && requested - produced > 0) {
+                requestFromUpstream(actual);
+            }
         }
 
         abstract void doOnNext(T t);
@@ -283,6 +290,7 @@ abstract class WriteSequencer<T> {
 
             if (wip == 0 && WIP.compareAndSet(this, 0, 1)) {
                 actual = s;
+                upstreamRequested = 0;
 
                 doOnSubscribe();
 
@@ -293,7 +301,7 @@ abstract class WriteSequencer<T> {
                 }
 
                 if (r != 0L) {
-                    s.request(r);
+                    requestFromUpstream(s);
                 }
 
                 return;
@@ -328,7 +336,7 @@ abstract class WriteSequencer<T> {
                     }
 
                     if (a != null) {
-                        a.request(n);
+                        requestFromUpstream(a);
                     }
 
                     return;
@@ -337,6 +345,14 @@ abstract class WriteSequencer<T> {
                 Operators.addCap(MISSED_REQUESTED, this, n);
 
                 drain();
+            }
+        }
+
+        final void requestFromUpstream(Subscription s) {
+            if (upstreamRequested < requested) {
+                upstreamRequested += batchSize;
+
+                s.request(batchSize);
             }
         }
 
@@ -377,6 +393,7 @@ abstract class WriteSequencer<T> {
                     if (a != null) {
                         a.cancel();
                         actual = null;
+                        upstreamRequested = 0;
                     }
                     if (ms != null) {
                         ms.cancel();
@@ -405,6 +422,7 @@ abstract class WriteSequencer<T> {
 
                     if (ms != null) {
                         actual = ms;
+                        upstreamRequested = 0;
                         if (r != 0L) {
                             requestAmount = Operators.addCap(requestAmount, r);
                             requestTarget = ms;
@@ -419,7 +437,7 @@ abstract class WriteSequencer<T> {
                 missed = WIP.addAndGet(this, -missed);
                 if (missed == 0) {
                     if (requestAmount != 0L) {
-                        requestTarget.request(requestAmount);
+                        requestFromUpstream(requestTarget);
                     }
                     return;
                 }
