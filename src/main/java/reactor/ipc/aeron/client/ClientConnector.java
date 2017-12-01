@@ -132,7 +132,7 @@ final class ClientConnector implements Disposable {
             Exception cause = null;
             try {
                 MessagePublication messagePublication = new DefaultMessagePublication(serverControlPublication, category,
-                        options.connectTimeoutMillis(), options.backpressureTimeoutMillis());
+                        options.connectTimeoutMillis(), options.controlBackpressureTimeoutMillis());
 
                 long result = messagePublication.publish(messageType, buffer, sessionId);
                 if (result > 0) {

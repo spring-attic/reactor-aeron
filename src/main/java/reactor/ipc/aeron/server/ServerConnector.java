@@ -79,7 +79,8 @@ public class ServerConnector implements Disposable {
 
     Mono<Void> connect() {
         return Mono.create(sink -> new RetryTask(
-                Schedulers.single(),100,options.connectTimeoutMillis() * 2,
+                Schedulers.single(),100,
+                options.connectTimeoutMillis() + options.controlBackpressureTimeoutMillis(),
                 new SendConnectAckTask(sink), th -> sink.error(
                         new RuntimeException(String.format("Failed to send %s into %s",
                                 MessageType.CONNECT_ACK, AeronUtils.format(clientControlPublication)), th))).schedule())

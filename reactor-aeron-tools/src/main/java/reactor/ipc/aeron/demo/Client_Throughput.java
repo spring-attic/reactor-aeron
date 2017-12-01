@@ -17,7 +17,6 @@ public class Client_Throughput {
         AeronClient client = AeronClient.create("client", options -> {
             options.serverChannel("aeron:udp?endpoint=" + HOST + ":13000");
             options.clientChannel("aeron:udp?endpoint=" + HOST + ":12001");
-            options.connectTimeoutMillis(5000);
         });
 
         ByteBuffer buffer = ByteBuffer.allocate(1024 * 3);

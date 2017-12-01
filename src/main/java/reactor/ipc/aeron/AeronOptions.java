@@ -28,6 +28,8 @@ public class AeronOptions {
 
     private static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = (int) Duration.ofSeconds(5).toMillis();
 
+    private static final int DEFAULT_CONTROL_BACKPRESSURE_TIMEOUT_MILLIS = (int) Duration.ofSeconds(5).toMillis();
+
     private static final int DEFAULT_BACKPRESSURE_TIMEOUT_MILLIS = (int) Duration.ofSeconds(5).toMillis();
 
     private static final int DEFAULT_HEARTBEAT_TIMEOUT_MILLIS = (int) Duration.ofSeconds(5).toMillis();
@@ -36,9 +38,11 @@ public class AeronOptions {
 
     private int serverStreamId = 1;
 
+    private Aeron aeron;
+
     private int connectTimeoutMillis = DEFAULT_CONNECT_TIMEOUT_MILLIS;
 
-    private Aeron aeron;
+    private int controlBackpressureTimeoutMillis = DEFAULT_CONTROL_BACKPRESSURE_TIMEOUT_MILLIS;
 
     private int backpressureTimeoutMillis = DEFAULT_BACKPRESSURE_TIMEOUT_MILLIS;
 
@@ -54,6 +58,19 @@ public class AeronOptions {
         }
 
         this.connectTimeoutMillis = connectTimeoutMillis;
+    }
+
+    public int controlBackpressureTimeoutMillis() {
+        return controlBackpressureTimeoutMillis;
+    }
+
+    public void controlBackpressureTimeoutMillis(int controlBackpressureTimeoutMillis) {
+        if (controlBackpressureTimeoutMillis <= 0) {
+            throw new IllegalArgumentException("controlBackpressureTimeoutMillis > 0 expected, but got: "
+                    + controlBackpressureTimeoutMillis);
+        }
+
+        this.controlBackpressureTimeoutMillis = controlBackpressureTimeoutMillis;
     }
 
     public void serverChannel(String serverChannel) {

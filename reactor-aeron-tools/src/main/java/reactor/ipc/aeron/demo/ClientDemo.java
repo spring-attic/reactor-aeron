@@ -13,7 +13,6 @@ public class ClientDemo {
         AeronClient client = AeronClient.create("client", options -> {
             options.serverChannel("aeron:udp?endpoint=localhost:13000");
             options.clientChannel("aeron:udp?endpoint=localhost:12001");
-            options.connectTimeoutMillis(5000);
         });
         client.newHandler((inbound, outbound) -> {
             System.out.println("Handler invoked");

@@ -110,32 +110,43 @@ public class AeronWriteSequencerBenchmark {
 
                 ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
 
-                long total = 0;
+                long nPublished = 0;
 
                 volatile boolean cancelled = false;
 
+                long requested = 0;
+
+                boolean publishing = false;
+
                 @Override
                 public void request(long n) {
-                    if (total < nSignals) {
-                        for (int i = 0; i < n; i++) {
-                            if (cancelled) {
-                                return;
-                            }
+                    requested += n;
 
-                            total += 1;
+                    if (publishing) {
+                        return;
+                    }
 
-                            if (total % (nSignals / 10) == 0) {
-                                DebugUtil.log("Signals published: " + total);
-                            }
+                    publishing = true;
+                    while (nPublished < nSignals && requested > 0) {
+                        if (cancelled) {
+                            break;
+                        }
 
-                            if (total >= nSignals) {
-                                s.onComplete();
-                                break;
-                            }
+                        s.onNext(buffer);
 
-                            s.onNext(buffer);
+                        nPublished += 1;
+                        requested--;
+
+                        if (nPublished % (nSignals / 10) == 0) {
+                            DebugUtil.log("Signals published: " + nPublished);
+                        }
+
+                        if (nPublished == nSignals) {
+                            s.onComplete();
+                            break;
                         }
                     }
+                    publishing = false;
                 }
 
                 @Override
