@@ -43,7 +43,7 @@ ext {
   logbackVersion = '1.1.5'
 
   // Libraries
-  aeronVersion = '1.4.0'
+  aeronVersion = '1.10.4'
 
   // Testing
   assertJVersion = '3.6.1'
