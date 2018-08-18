@@ -18,8 +18,6 @@ package reactor.ipc.aeron;
 import io.aeron.Aeron;
 import io.aeron.Publication;
 import io.aeron.Subscription;
-import io.aeron.driver.MediaDriver;
-import java.util.UUID;
 import reactor.core.Disposable;
 import reactor.util.Logger;
 import reactor.util.Loggers;
@@ -33,11 +31,12 @@ public final class AeronWrapper implements Disposable {
 
     private final String category;
 
+    private final static DriverManager driverManager = new DriverManager();
+
     private final Aeron aeron;
 
     private final boolean isDriverLaunched;
 
-    private final static DriverManager driverManager = new DriverManager();
 
     public AeronWrapper(String category, AeronOptions options) {
     	this.category = category;
