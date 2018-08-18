@@ -37,25 +37,24 @@ public final class AeronWrapper implements Disposable {
 
     private final boolean isDriverLaunched;
 
-	private Aeron.Context aeronContext;
-
-	private MediaDriver.Context mediaContext;
+    private final static DriverManager driverManager = new DriverManager();
 
     public AeronWrapper(String category, AeronOptions options) {
-    	String dirName = "/dev/aeron/" + UUID.randomUUID();
-		this.mediaContext = new MediaDriver.Context().aeronDirectoryName(dirName).dirDeleteOnStart(true);
-		MediaDriver.launch(this.mediaContext);
-		
-		this.aeronContext = new Aeron.Context().aeronDirectoryName(dirName);
-		this.aeron = Aeron.connect(this.aeronContext);
-		isDriverLaunched = true;
-        this.category = category;
+    	this.category = category;
+    	if (options.getAeron() == null) {	
+            driverManager.launchDriver();	
+            aeron = driverManager.getAeron();	
+            isDriverLaunched = true;	
+        } else {	
+            aeron = options.getAeron();	
+            isDriverLaunched = false;	
+        }
     }
 
     @Override
     public void dispose() {
         if (isDriverLaunched) {
-            //driverManager.shutdownDriver().block();
+            driverManager.shutdownDriver().block();
         }
     }
 
