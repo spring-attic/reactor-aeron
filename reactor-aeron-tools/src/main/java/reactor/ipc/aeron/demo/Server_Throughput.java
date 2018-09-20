@@ -9,7 +9,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.server.AeronServer;
 
-/** @author Anatoly Kadyshev */
 public class Server_Throughput {
 
   static final String HOST = "localhost";

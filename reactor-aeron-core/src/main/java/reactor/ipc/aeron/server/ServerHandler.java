@@ -40,7 +40,6 @@ import reactor.ipc.aeron.Pooler;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-/** @author Anatoly Kadyshev */
 final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
   private static final Logger logger = Loggers.getLogger(ServerHandler.class);

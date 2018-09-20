@@ -24,7 +24,6 @@ import reactor.core.Disposable;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-/** @author Anatoly Kadyshev */
 public final class DefaultMessagePublication implements Disposable, MessagePublication {
 
   private static final Logger logger = Loggers.getLogger(DefaultMessagePublication.class);

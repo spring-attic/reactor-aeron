@@ -26,7 +26,6 @@ import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
 
-/** @author Anatoly Kadyshev */
 public final class AeronServer implements AeronConnector {
 
   private final AeronOptions options;

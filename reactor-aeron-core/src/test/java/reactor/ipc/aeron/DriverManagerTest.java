@@ -3,7 +3,6 @@ package reactor.ipc.aeron;
 import java.time.Duration;
 import org.junit.Test;
 
-/** @author Anatoly Kadyshev */
 public class DriverManagerTest {
 
   @Test

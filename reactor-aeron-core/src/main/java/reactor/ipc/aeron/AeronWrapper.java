@@ -22,7 +22,6 @@ import reactor.core.Disposable;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-/** @author Anatoly Kadyshev */
 public final class AeronWrapper implements Disposable {
 
   private static final Logger logger = Loggers.getLogger(AeronWrapper.class);

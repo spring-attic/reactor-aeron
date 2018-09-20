@@ -3,7 +3,6 @@ package reactor.ipc.aeron;
 import io.aeron.driver.Configuration;
 import java.util.concurrent.TimeUnit;
 
-/** @author Anatoly Kadyshev */
 class AeronTestUtils {
 
   static void setAeronEnvProps() {

@@ -23,7 +23,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
-/** @author Anatoly Kadyshev */
 public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
 
   private final Scheduler scheduler;

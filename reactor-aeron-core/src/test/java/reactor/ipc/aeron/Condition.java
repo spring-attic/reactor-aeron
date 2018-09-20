@@ -5,7 +5,6 @@ import java.util.Objects;
 import java.util.function.BooleanSupplier;
 import org.agrona.concurrent.IdleStrategy;
 
-/** @author Anatoly Kadyshev */
 public class Condition {
 
   private final BooleanSupplier predicate;

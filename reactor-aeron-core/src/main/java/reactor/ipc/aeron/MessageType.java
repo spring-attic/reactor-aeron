@@ -15,7 +15,6 @@
  */
 package reactor.ipc.aeron;
 
-/** @author Anatoly Kadyshev */
 public enum MessageType {
   CONNECT,
   CONNECT_ACK,

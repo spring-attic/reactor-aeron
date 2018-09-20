@@ -27,7 +27,6 @@ import reactor.ipc.aeron.MessageType;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-/** @author Anatoly Kadyshev */
 class ClientControlMessageSubscriber implements ControlMessageSubscriber {
 
   private final Logger logger = Loggers.getLogger(ClientControlMessageSubscriber.class);

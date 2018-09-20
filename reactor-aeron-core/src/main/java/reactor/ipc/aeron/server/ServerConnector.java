@@ -34,7 +34,6 @@ import reactor.ipc.aeron.RetryTask;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-/** @author Anatoly Kadyshev */
 public class ServerConnector implements Disposable {
 
   private static final Logger logger = Loggers.getLogger(ServerConnector.class);

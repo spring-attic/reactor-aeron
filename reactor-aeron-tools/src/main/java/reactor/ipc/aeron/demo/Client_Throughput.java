@@ -5,7 +5,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.client.AeronClient;
 
-/** @author Anatoly Kadyshev */
 public class Client_Throughput {
 
   private static final String HOST = "localhost";

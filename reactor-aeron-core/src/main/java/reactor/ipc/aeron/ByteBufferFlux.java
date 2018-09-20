@@ -20,7 +20,6 @@ import org.reactivestreams.Publisher;
 import reactor.core.CoreSubscriber;
 import reactor.core.publisher.Flux;
 
-/** @author Anatoly Kadyshev */
 public final class ByteBufferFlux extends Flux<ByteBuffer> {
 
   private final Publisher<ByteBuffer> source;

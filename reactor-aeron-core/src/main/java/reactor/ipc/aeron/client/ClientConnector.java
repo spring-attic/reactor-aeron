@@ -31,7 +31,6 @@ import reactor.ipc.aeron.Protocol;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-/** @author Anatoly Kadyshev */
 final class ClientConnector implements Disposable {
 
   private static final Logger logger = Loggers.getLogger(ClientConnector.class);

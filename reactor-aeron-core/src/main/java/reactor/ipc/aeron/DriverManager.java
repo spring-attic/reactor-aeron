@@ -32,7 +32,6 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-/** @author Anatoly Kadyshev */
 public final class DriverManager {
 
   private static final Logger logger = Loggers.getLogger(DriverManager.class);

@@ -30,7 +30,6 @@ import reactor.core.publisher.Operators;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-/** @author Anatoly Kadyshev */
 public class Pooler implements Runnable {
 
   private static final Logger logger = Loggers.getLogger(Pooler.class);

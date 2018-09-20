@@ -13,7 +13,6 @@ import reactor.ipc.aeron.client.AeronClient;
 import reactor.ipc.aeron.server.AeronServer;
 import reactor.test.StepVerifier;
 
-/** @author Anatoly Kadyshev */
 public class AeronServerTest extends BaseAeronTest {
 
   private String serverChannel =

@@ -4,7 +4,6 @@ import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.ByteBufferFlux;
 import reactor.ipc.aeron.client.AeronClient;
 
-/** @author Anatoly Kadyshev */
 public class ClientDemo {
 
   public static void main(String[] args) {

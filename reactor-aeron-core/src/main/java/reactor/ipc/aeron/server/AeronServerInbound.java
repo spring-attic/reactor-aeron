@@ -31,7 +31,6 @@ import reactor.ipc.aeron.Pooler;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-/** @author Anatoly Kadyshev */
 final class AeronServerInbound implements AeronInbound, Disposable {
 
   private final ByteBufferFlux flux;

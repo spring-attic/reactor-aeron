@@ -16,7 +16,6 @@ import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 
-/** @author Anatoly Kadyshev */
 public class AeronWriteSequencerTest {
 
   private Scheduler scheduler;

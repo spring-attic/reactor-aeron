@@ -3,7 +3,6 @@ package reactor.ipc.aeron.demo;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.server.AeronServer;
 
-/** @author Anatoly Kadyshev */
 public class ServerDemo {
 
   public static void main(String[] args) {

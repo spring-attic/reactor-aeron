@@ -6,7 +6,6 @@ import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.server.AeronServer;
 
-/** @author Anatoly Kadyshev */
 public class Server_ServerSends {
 
   public static void main(String[] args) {

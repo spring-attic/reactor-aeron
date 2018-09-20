@@ -11,7 +11,6 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-/** @author Anatoly Kadyshev */
 public class HeartbeatSender {
 
   private final Logger logger = Loggers.getLogger(HeartbeatSender.class);

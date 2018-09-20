@@ -21,7 +21,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 import org.agrona.concurrent.BackoffIdleStrategy;
 
-/** @author Anatoly Kadyshev */
 public final class AeronUtils {
 
   public static final String LABEL_PREFIX_SENDER_POS = "sender pos";

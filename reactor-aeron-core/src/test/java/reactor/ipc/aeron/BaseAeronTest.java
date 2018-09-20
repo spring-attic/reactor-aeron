@@ -8,7 +8,6 @@ import org.junit.BeforeClass;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 
-/** @author Anatoly Kadyshev */
 public class BaseAeronTest {
 
   public static final Duration TIMEOUT = Duration.ofSeconds(10);

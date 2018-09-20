@@ -4,7 +4,6 @@ import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
 import java.nio.ByteBuffer;
 
-/** @author Anatoly Kadyshev */
 public interface MessagePublication {
 
   /**

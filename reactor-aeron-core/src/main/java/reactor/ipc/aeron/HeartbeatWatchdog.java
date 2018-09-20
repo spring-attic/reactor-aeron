@@ -10,7 +10,6 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-/** @author Anatoly Kadyshev */
 public final class HeartbeatWatchdog {
 
   private final Logger logger = Loggers.getLogger(HeartbeatWatchdog.class);

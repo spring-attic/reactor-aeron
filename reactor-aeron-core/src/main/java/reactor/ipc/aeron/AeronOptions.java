@@ -18,7 +18,6 @@ package reactor.ipc.aeron;
 import io.aeron.Aeron;
 import java.time.Duration;
 
-/** @author Anatoly Kadyshev */
 public class AeronOptions {
 
   private static final String DEFAULT_SERVER_CHANNEL = "aeron:udp?endpoint=localhost:12000";
