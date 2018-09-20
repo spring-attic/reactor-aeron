@@ -1,5 +1,12 @@
 package reactor.ipc.aeron;
 
+import static org.hamcrest.Matchers.hasItems;
+import static org.junit.Assert.assertThat;
+import static reactor.ipc.aeron.TestUtils.log;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -8,116 +15,103 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.function.Consumer;
-
-import static org.hamcrest.Matchers.hasItems;
-import static org.junit.Assert.assertThat;
-import static reactor.ipc.aeron.TestUtils.log;
-
 public class WriteSequencerTest {
 
-    private Scheduler scheduler;
+  private Scheduler scheduler;
 
-    private Scheduler scheduler1;
+  private Scheduler scheduler1;
 
-    private Scheduler scheduler2;
+  private Scheduler scheduler2;
 
-    @Before
-    public void doSetup() {
-        scheduler = Schedulers.newSingle("sequencer", false);
-        scheduler1 = Schedulers.newSingle("scheduler-A");
-        scheduler2 = Schedulers.newSingle("scheduler-B");
+  @Before
+  public void doSetup() {
+    scheduler = Schedulers.newSingle("sequencer", false);
+    scheduler1 = Schedulers.newSingle("scheduler-A");
+    scheduler2 = Schedulers.newSingle("scheduler-B");
+  }
+
+  @After
+  public void doTeardown() {
+    scheduler.dispose();
+    scheduler1.dispose();
+    scheduler2.dispose();
+  }
+
+  @Test
+  public void itProvidesSignalsFromAddedPublishers() throws Exception {
+    WriteSequencerForTest sequencer = new WriteSequencerForTest(scheduler);
+
+    Flux<String> flux1 = Flux.just("Hello", "world").publishOn(scheduler1);
+    Mono result1 = sequencer.add(flux1);
+
+    Flux<String> flux2 = Flux.just("Everybody", "happy").publishOn(scheduler2);
+    Mono result2 = sequencer.add(flux2);
+
+    result1.block();
+    result2.block();
+
+    assertThat(sequencer.getSignals(), hasItems("Hello", "world", "Everybody", "happy"));
+  }
+
+  static class WriteSequencerForTest extends WriteSequencer<String> {
+
+    static final Consumer<Throwable> ERROR_HANDLER =
+        th -> System.err.println("Unexpected exception: " + th);
+
+    private final SubscriberForTest inner;
+
+    WriteSequencerForTest(Scheduler scheduler) {
+      super(scheduler, discardedValue -> {});
+      this.inner = new SubscriberForTest(this);
     }
 
-    @After
-    public void doTeardown() {
-        scheduler.dispose();
-        scheduler1.dispose();
-        scheduler2.dispose();
+    @Override
+    InnerSubscriber<String> getInner() {
+      return inner;
     }
 
-    @Test
-    public void itProvidesSignalsFromAddedPublishers() throws Exception {
-        WriteSequencerForTest sequencer = new WriteSequencerForTest(scheduler);
-
-        Flux<String> flux1 = Flux.just("Hello", "world")
-                .publishOn(scheduler1);
-        Mono result1 = sequencer.add(flux1);
-
-        Flux<String> flux2 = Flux.just("Everybody", "happy")
-                .publishOn(scheduler2);
-        Mono result2 = sequencer.add(flux2);
-
-        result1.block();
-        result2.block();
-
-
-        assertThat(sequencer.getSignals(), hasItems("Hello", "world", "Everybody", "happy"));
+    @Override
+    Consumer<Throwable> getErrorHandler() {
+      return ERROR_HANDLER;
     }
 
-    static class WriteSequencerForTest extends WriteSequencer<String> {
-
-        static final Consumer<Throwable> ERROR_HANDLER = th -> System.err.println("Unexpected exception: " + th);
-
-        private final SubscriberForTest inner;
-
-        WriteSequencerForTest(Scheduler scheduler) {
-            super(scheduler, discardedValue -> {});
-            this.inner = new SubscriberForTest(this);
-        }
-
-        @Override
-        InnerSubscriber<String> getInner() {
-            return inner;
-        }
-
-        @Override
-        Consumer<Throwable> getErrorHandler() {
-            return ERROR_HANDLER;
-        }
-
-        List<String> getSignals() {
-            return inner.signals;
-        }
-
-        static class SubscriberForTest extends InnerSubscriber<String> {
-
-            final List<String> signals = new CopyOnWriteArrayList<>();
-
-            SubscriberForTest(WriteSequencerForTest parent) {
-                super(parent, 1);
-            }
-
-            @Override
-            public void doOnNext(String o) {
-                log("onNext: " + o);
-
-                signals.add(o);
-            }
-
-            @Override
-            void doOnSubscribe() {
-                request(Long.MAX_VALUE);
-            }
-
-            @Override
-            public void doOnError(Throwable t) {
-                log("onError: " + t);
-                promise.success();
-            }
-
-            @Override
-            public void doOnComplete() {
-                log("onComplete");
-                promise.success();
-
-                scheduleNextPublisherDrain();
-            }
-
-        }
-
+    List<String> getSignals() {
+      return inner.signals;
     }
 
+    static class SubscriberForTest extends InnerSubscriber<String> {
+
+      final List<String> signals = new CopyOnWriteArrayList<>();
+
+      SubscriberForTest(WriteSequencerForTest parent) {
+        super(parent, 1);
+      }
+
+      @Override
+      public void doOnNext(String o) {
+        log("onNext: " + o);
+
+        signals.add(o);
+      }
+
+      @Override
+      void doOnSubscribe() {
+        request(Long.MAX_VALUE);
+      }
+
+      @Override
+      public void doOnError(Throwable t) {
+        log("onError: " + t);
+        promise.success();
+      }
+
+      @Override
+      public void doOnComplete() {
+        log("onComplete");
+        promise.success();
+
+        scheduleNextPublisherDrain();
+      }
+    }
+  }
 }

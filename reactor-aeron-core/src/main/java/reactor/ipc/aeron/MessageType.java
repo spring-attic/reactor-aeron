@@ -15,13 +15,11 @@
  */
 package reactor.ipc.aeron;
 
-/**
- * @author Anatoly Kadyshev
- */
+/** @author Anatoly Kadyshev */
 public enum MessageType {
-    CONNECT,
-    CONNECT_ACK,
-    HEARTBEAT,
-    NEXT,
-    COMPLETE
+  CONNECT,
+  CONNECT_ACK,
+  HEARTBEAT,
+  NEXT,
+  COMPLETE
 }

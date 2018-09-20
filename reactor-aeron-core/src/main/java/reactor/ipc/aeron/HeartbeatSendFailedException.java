@@ -1,14 +1,11 @@
 package reactor.ipc.aeron;
 
-/**
- * @author Anatoly Kadyshev
- */
+/** @author Anatoly Kadyshev */
 public class HeartbeatSendFailedException extends RuntimeException {
 
-    private final long sessionId;
+  private final long sessionId;
 
-    public HeartbeatSendFailedException(long sessionId) {
-        this.sessionId = sessionId;
-    }
-
+  public HeartbeatSendFailedException(long sessionId) {
+    this.sessionId = sessionId;
+  }
 }

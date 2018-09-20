@@ -16,6 +16,9 @@
 package reactor.ipc.aeron.client;
 
 import io.aeron.Publication;
+import java.nio.ByteBuffer;
+import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.AeronUtils;
@@ -28,132 +31,164 @@ import reactor.ipc.aeron.Protocol;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-import java.nio.ByteBuffer;
-import java.util.UUID;
-import java.util.concurrent.TimeoutException;
-
-/**
- * @author Anatoly Kadyshev
- */
+/** @author Anatoly Kadyshev */
 final class ClientConnector implements Disposable {
 
-    private static final Logger logger = Loggers.getLogger(ClientConnector.class);
+  private static final Logger logger = Loggers.getLogger(ClientConnector.class);
 
-    private final String category;
+  private final String category;
 
-    private final AeronClientOptions options;
+  private final AeronClientOptions options;
 
-    private final UUID connectRequestId;
+  private final UUID connectRequestId;
 
-    private final ClientControlMessageSubscriber controlMessageSubscriber;
+  private final ClientControlMessageSubscriber controlMessageSubscriber;
 
-    private final int clientControlStreamId;
+  private final int clientControlStreamId;
 
-    private final int clientSessionStreamId;
+  private final int clientSessionStreamId;
 
-    private final Publication serverControlPublication;
+  private final Publication serverControlPublication;
 
-    private final HeartbeatSender heartbeatSender;
+  private final HeartbeatSender heartbeatSender;
 
-    private volatile long sessionId;
+  private volatile long sessionId;
 
-    private volatile Disposable heartbeatSenderDisposable = () -> {};
+  private volatile Disposable heartbeatSenderDisposable = () -> {};
 
-    ClientConnector(String category,
-                    AeronWrapper wrapper,
-                    AeronClientOptions options,
-                    ClientControlMessageSubscriber controlMessageSubscriber,
-                    HeartbeatSender heartbeatSender,
-                    int clientControlStreamId,
-                    int clientSessionStreamId) {
-        this.category = category;
-        this.options = options;
-        this.controlMessageSubscriber = controlMessageSubscriber;
-        this.clientControlStreamId = clientControlStreamId;
-        this.clientSessionStreamId = clientSessionStreamId;
-        this.heartbeatSender = heartbeatSender;
-        this.connectRequestId = UUIDUtils.create();
-        this.serverControlPublication = wrapper.addPublication(options.serverChannel(), options.serverStreamId(),
-                "to send control requests to server", 0);
-    }
+  ClientConnector(
+      String category,
+      AeronWrapper wrapper,
+      AeronClientOptions options,
+      ClientControlMessageSubscriber controlMessageSubscriber,
+      HeartbeatSender heartbeatSender,
+      int clientControlStreamId,
+      int clientSessionStreamId) {
+    this.category = category;
+    this.options = options;
+    this.controlMessageSubscriber = controlMessageSubscriber;
+    this.clientControlStreamId = clientControlStreamId;
+    this.clientSessionStreamId = clientSessionStreamId;
+    this.heartbeatSender = heartbeatSender;
+    this.connectRequestId = UUIDUtils.create();
+    this.serverControlPublication =
+        wrapper.addPublication(
+            options.serverChannel(),
+            options.serverStreamId(),
+            "to send control requests to server",
+            0);
+  }
 
-    Mono<ClientControlMessageSubscriber.ConnectAckResponse> connect() {
-        ClientControlMessageSubscriber.ConnectAckSubscription connectAckSubscription =
-                controlMessageSubscriber.subscribeForConnectAck(connectRequestId);
+  Mono<ClientControlMessageSubscriber.ConnectAckResponse> connect() {
+    ClientControlMessageSubscriber.ConnectAckSubscription connectAckSubscription =
+        controlMessageSubscriber.subscribeForConnectAck(connectRequestId);
 
-        return sendConnectRequest()
-                .then(connectAckSubscription.connectAck()
-                        .timeout(options.ackTimeout())
-                        .onErrorMap(TimeoutException.class, th -> {
-                            throw new RuntimeException(
-                                    String.format("Failed to receive %s during %d millis",
-                                            MessageType.CONNECT_ACK, options.ackTimeout().toMillis()), th);
-                        })
-                )
-                .doOnSuccess(response -> {
-                    this.sessionId = response.sessionId;
+    return sendConnectRequest()
+        .then(
+            connectAckSubscription
+                .connectAck()
+                .timeout(options.ackTimeout())
+                .onErrorMap(
+                    TimeoutException.class,
+                    th -> {
+                      throw new RuntimeException(
+                          String.format(
+                              "Failed to receive %s during %d millis",
+                              MessageType.CONNECT_ACK, options.ackTimeout().toMillis()),
+                          th);
+                    }))
+        .doOnSuccess(
+            response -> {
+              this.sessionId = response.sessionId;
 
-                    heartbeatSenderDisposable = heartbeatSender.scheduleHeartbeats(serverControlPublication, sessionId)
-                            .subscribe(avoid -> {}, th -> {});
+              heartbeatSenderDisposable =
+                  heartbeatSender
+                      .scheduleHeartbeats(serverControlPublication, sessionId)
+                      .subscribe(avoid -> {}, th -> {});
 
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("[{}] Successfully connected to server at {}, sessionId: {}", category,
-                                AeronUtils.format(serverControlPublication), sessionId);
-                    }
-                })
-                .doOnTerminate(connectAckSubscription::dispose)
-                .onErrorMap(th -> {
-                    throw new RuntimeException(String.format("Failed to connect to server at %s",
-                                AeronUtils.format(serverControlPublication)));
-                });
-    }
+              if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "[{}] Successfully connected to server at {}, sessionId: {}",
+                    category,
+                    AeronUtils.format(serverControlPublication),
+                    sessionId);
+              }
+            })
+        .doOnTerminate(connectAckSubscription::dispose)
+        .onErrorMap(
+            th -> {
+              throw new RuntimeException(
+                  String.format(
+                      "Failed to connect to server at %s",
+                      AeronUtils.format(serverControlPublication)));
+            });
+  }
 
-    private Mono<Void> sendConnectRequest() {
-        ByteBuffer buffer = Protocol.createConnectBody(connectRequestId, options.clientChannel(),
-                clientControlStreamId, clientSessionStreamId);
-        return Mono.fromRunnable(() -> {
-            if (logger.isDebugEnabled()) {
-                logger.debug("[{}] Connecting to server at {}", category, AeronUtils.format(serverControlPublication));
+  private Mono<Void> sendConnectRequest() {
+    ByteBuffer buffer =
+        Protocol.createConnectBody(
+            connectRequestId,
+            options.clientChannel(),
+            clientControlStreamId,
+            clientSessionStreamId);
+    return Mono.fromRunnable(
+            () -> {
+              if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "[{}] Connecting to server at {}",
+                    category,
+                    AeronUtils.format(serverControlPublication));
+              }
+            })
+        .then(send(buffer, MessageType.CONNECT));
+  }
+
+  private Mono<Void> sendDisconnectRequest() {
+    ByteBuffer buffer = Protocol.createDisconnectBody(sessionId);
+    return Mono.fromRunnable(
+            () -> {
+              if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "[{}] Disconnecting from server at {}",
+                    category,
+                    AeronUtils.format(serverControlPublication));
+              }
+            })
+        .then(send(buffer, MessageType.COMPLETE));
+  }
+
+  private Mono<Void> send(ByteBuffer buffer, MessageType messageType) {
+    return Mono.create(
+        sink -> {
+          Exception cause = null;
+          try {
+            MessagePublication messagePublication =
+                new DefaultMessagePublication(
+                    serverControlPublication,
+                    category,
+                    options.connectTimeoutMillis(),
+                    options.controlBackpressureTimeoutMillis());
+
+            long result = messagePublication.publish(messageType, buffer, sessionId);
+            if (result > 0) {
+              logger.debug(
+                  "[{}] Sent {} to {}", category, messageType, messagePublication.asString());
+              sink.success();
+              return;
             }
-        }).then(send(buffer, MessageType.CONNECT));
-    }
-
-    private Mono<Void> sendDisconnectRequest() {
-        ByteBuffer buffer = Protocol.createDisconnectBody(sessionId);
-        return Mono.fromRunnable(() -> {
-            if (logger.isDebugEnabled()) {
-                logger.debug("[{}] Disconnecting from server at {}", category, AeronUtils.format(serverControlPublication));
-            }
-        }).then(send(buffer, MessageType.COMPLETE));
-    }
-
-    private Mono<Void> send(ByteBuffer buffer, MessageType messageType) {
-        return Mono.create(sink -> {
-            Exception cause = null;
-            try {
-                MessagePublication messagePublication = new DefaultMessagePublication(serverControlPublication, category,
-                        options.connectTimeoutMillis(), options.controlBackpressureTimeoutMillis());
-
-                long result = messagePublication.publish(messageType, buffer, sessionId);
-                if (result > 0) {
-                    logger.debug("[{}] Sent {} to {}", category, messageType, messagePublication.asString());
-                    sink.success();
-                    return;
-                }
-            } catch (Exception ex) {
-                cause = ex;
-            }
-            sink.error(new RuntimeException("Failed to send message of type: " + messageType, cause));
+          } catch (Exception ex) {
+            cause = ex;
+          }
+          sink.error(new RuntimeException("Failed to send message of type: " + messageType, cause));
         });
-    }
+  }
 
-    @Override
-    public void dispose() {
-        sendDisconnectRequest().subscribe(avoid -> {}, th -> {});
+  @Override
+  public void dispose() {
+    sendDisconnectRequest().subscribe(avoid -> {}, th -> {});
 
-        heartbeatSenderDisposable.dispose();
+    heartbeatSenderDisposable.dispose();
 
-        serverControlPublication.close();
-    }
-
+    serverControlPublication.close();
+  }
 }

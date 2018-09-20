@@ -15,33 +15,29 @@
  */
 package reactor.ipc.aeron.client;
 
-import reactor.ipc.aeron.AeronOptions;
-
 import java.time.Duration;
 import java.util.Objects;
+import reactor.ipc.aeron.AeronOptions;
 
-/**
- * @author Anatoly Kadyshev
- */
 public final class AeronClientOptions extends AeronOptions {
 
-    private String clientChannel = "aeron:udp?endpoint=localhost:12001";
+  private String clientChannel = "aeron:udp?endpoint=localhost:12001";
 
-    private Duration ackTimeout = Duration.ofSeconds(10);
+  private Duration ackTimeout = Duration.ofSeconds(10);
 
-    public String clientChannel() {
-        return clientChannel;
-    }
+  public String clientChannel() {
+    return clientChannel;
+  }
 
-    public void clientChannel(String clientChannel) {
-        this.clientChannel = Objects.requireNonNull(clientChannel, "clientChannel");
-    }
+  public void clientChannel(String clientChannel) {
+    this.clientChannel = Objects.requireNonNull(clientChannel, "clientChannel");
+  }
 
-    public Duration ackTimeout() {
-        return ackTimeout;
-    }
+  public Duration ackTimeout() {
+    return ackTimeout;
+  }
 
-    public void ackTimeout(Duration ackTimeout) {
-        this.ackTimeout = Objects.requireNonNull(ackTimeout, "ackTimeout");
-    }
+  public void ackTimeout(Duration ackTimeout) {
+    this.ackTimeout = Objects.requireNonNull(ackTimeout, "ackTimeout");
+  }
 }

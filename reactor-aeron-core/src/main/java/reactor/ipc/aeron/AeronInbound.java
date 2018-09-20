@@ -15,11 +15,8 @@
  */
 package reactor.ipc.aeron;
 
-/**
- * @author Anatoly Kadyshev
- */
+/** @author Anatoly Kadyshev */
 public interface AeronInbound {
 
-    ByteBufferFlux receive();
-
+  ByteBufferFlux receive();
 }
