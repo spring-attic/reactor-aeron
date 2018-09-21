@@ -6,8 +6,13 @@ import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.server.AeronServer;
 
-public class Server_ServerSends {
+public class ServerServerSends {
 
+  /**
+   * Main runner.
+   *
+   * @param args program arguments.
+   */
   public static void main(String[] args) {
     AeronServer server =
         AeronServer.create(

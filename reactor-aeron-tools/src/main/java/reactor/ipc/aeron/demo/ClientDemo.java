@@ -6,6 +6,11 @@ import reactor.ipc.aeron.client.AeronClient;
 
 public class ClientDemo {
 
+  /**
+   * Main runner.
+   *
+   * @param args program arguments.
+   */
   public static void main(String[] args) {
     AeronClient client =
         AeronClient.create(

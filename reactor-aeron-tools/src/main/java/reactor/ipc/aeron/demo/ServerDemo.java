@@ -5,6 +5,11 @@ import reactor.ipc.aeron.server.AeronServer;
 
 public class ServerDemo {
 
+  /**
+   * Main runner.
+   *
+   * @param args program arguments.
+   */
   public static void main(String[] args) {
     AeronServer server =
         AeronServer.create(

@@ -9,7 +9,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.server.AeronServer;
 
-public class Server_Throughput {
+public class ServerThroughput {
 
   static final String HOST = "localhost";
 
@@ -27,6 +27,11 @@ public class Server_Throughput {
     }
   }
 
+  /**
+   * Main runner.
+   *
+   * @param args program arguments.
+   */
   public static void main(String[] args) {
     AeronServer server =
         AeronServer.create(

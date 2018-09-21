@@ -5,10 +5,15 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.client.AeronClient;
 
-public class Client_Throughput {
+public class ClientThroughput {
 
   private static final String HOST = "localhost";
 
+  /**
+   * Main runner.
+   *
+   * @param args program arguments.
+   */
   public static void main(String[] args) {
     AeronClient client =
         AeronClient.create(

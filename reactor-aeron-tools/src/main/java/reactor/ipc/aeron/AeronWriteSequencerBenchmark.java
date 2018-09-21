@@ -16,18 +16,23 @@ public class AeronWriteSequencerBenchmark {
 
   private final String channel;
 
-  private final int nRuns;
+  private final int numOfRuns;
 
+  /**
+   * Main runner.
+   *
+   * @param args program arguments
+   */
   public static void main(String[] args) {
     new AeronWriteSequencerBenchmark("aeron:ipc?endpoint=benchmark", 10).run();
   }
 
-  AeronWriteSequencerBenchmark(String channel, int nRuns) {
+  AeronWriteSequencerBenchmark(String channel, int numOfRuns) {
     this.channel = channel;
-    this.nRuns = nRuns;
+    this.numOfRuns = numOfRuns;
   }
 
-  public void run() {
+  private void run() {
     AeronOptions options = new AeronOptions();
     AeronWrapper aeron = new AeronWrapper("bench", options);
     io.aeron.Subscription subscription = aeron.addSubscription(channel, 1, "benchmark", 0);
@@ -46,7 +51,7 @@ public class AeronWriteSequencerBenchmark {
     AeronWriteSequencer sequencer =
         new AeronWriteSequencer(scheduler, "test", messagePublication, 1);
 
-    for (int i = 1; i <= nRuns; i++) {
+    for (int i = 1; i <= numOfRuns; i++) {
       Publisher<ByteBuffer> publisher = new BenchmarkPublisher(1_000_000, 512);
 
       long start = System.nanoTime();
@@ -56,7 +61,7 @@ public class AeronWriteSequencerBenchmark {
 
       System.out.printf(
           "Run %d of %d - completed, took: %d millis\n",
-          i, nRuns, Duration.ofNanos(end - start).toMillis());
+          i, numOfRuns, Duration.ofNanos(end - start).toMillis());
     }
 
     pooler.dispose();
@@ -84,14 +89,14 @@ public class AeronWriteSequencerBenchmark {
                 break;
               }
 
-              int nPolled =
+              int numOfPolled =
                   subscription.poll(
                       (buffer, offset, length, header) -> {
                         // no-op
                       },
                       1000);
 
-              idleStrategy.idle(nPolled);
+              idleStrategy.idle(numOfPolled);
             }
           });
     }
@@ -104,12 +109,12 @@ public class AeronWriteSequencerBenchmark {
 
   private static class BenchmarkPublisher implements Publisher<ByteBuffer> {
 
-    final int nSignals;
+    final int numOfSignals;
 
     final int bufferSize;
 
-    private BenchmarkPublisher(int nSignals, int bufferSize) {
-      this.nSignals = nSignals;
+    private BenchmarkPublisher(int numOfSignals, int bufferSize) {
+      this.numOfSignals = numOfSignals;
       this.bufferSize = bufferSize;
     }
 
@@ -120,7 +125,7 @@ public class AeronWriteSequencerBenchmark {
 
             ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
 
-            long nPublished = 0;
+            long numOfPublished = 0;
 
             volatile boolean cancelled = false;
 
@@ -137,21 +142,21 @@ public class AeronWriteSequencerBenchmark {
               }
 
               publishing = true;
-              while (nPublished < nSignals && requested > 0) {
+              while (numOfPublished < numOfSignals && requested > 0) {
                 if (cancelled) {
                   break;
                 }
 
                 s.onNext(buffer);
 
-                nPublished += 1;
+                numOfPublished += 1;
                 requested--;
 
-                if (nPublished % (nSignals / 10) == 0) {
-                  DebugUtil.log("Signals published: " + nPublished);
+                if (numOfPublished % (numOfSignals / 10) == 0) {
+                  DebugUtil.log("Signals published: " + numOfPublished);
                 }
 
-                if (nPublished == nSignals) {
+                if (numOfPublished == numOfSignals) {
                   s.onComplete();
                   break;
                 }

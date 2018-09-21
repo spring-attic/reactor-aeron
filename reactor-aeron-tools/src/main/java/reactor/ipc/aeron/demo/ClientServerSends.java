@@ -3,8 +3,13 @@ package reactor.ipc.aeron.demo;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.client.AeronClient;
 
-public class Client_ServerSends {
+public class ClientServerSends {
 
+  /**
+   * Main runner.
+   *
+   * @param args program arguments.
+   */
   public static void main(String[] args) {
     AeronClient client =
         AeronClient.create(

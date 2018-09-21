@@ -45,11 +45,11 @@ public final class SocketUtils {
    * <code>&lt;bean id="bean1" ... p:port="#{T(org.springframework.util.SocketUtils)
    * .findAvailableTcpPort(12000)}"
    * /&gt;</code></pre>
-   * <p/>
-   * If this constructor were {@code private}, you would be required to supply the fully qualified
-   * class name to SpEL's {@code T()} function for each usage. Thus, the fact that this constructor
-   * is {@code public} allows you to reduce boilerplate configuration with SpEL as can be seen in
-   * the following example.
+   *
+   * <p>If this constructor were {@code private}, you would be required to supply the fully
+   * qualified class name to SpEL's {@code T()} function for each usage. Thus, the fact that this
+   * constructor is {@code public} allows you to reduce boilerplate configuration with SpEL as can
+   * be seen in the following example.
    *
    * <pre><code>&lt;bean id="socketUtils" class="org.springframework.util.SocketUtils" /&gt;
    *
