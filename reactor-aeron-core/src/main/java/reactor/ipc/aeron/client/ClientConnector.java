@@ -58,7 +58,7 @@ final class ClientConnector implements Disposable {
     this.clientControlStreamId = clientControlStreamId;
     this.clientSessionStreamId = clientSessionStreamId;
     this.heartbeatSender = heartbeatSender;
-    this.connectRequestId = UUIDUtils.create();
+    this.connectRequestId = UuidUtils.create();
     this.serverControlPublication =
         wrapper.addPublication(
             options.serverChannel(),
@@ -125,30 +125,28 @@ final class ClientConnector implements Disposable {
             options.clientChannel(),
             clientControlStreamId,
             clientSessionStreamId);
-    return Mono.fromRunnable(
-            () -> {
-              if (logger.isDebugEnabled()) {
-                logger.debug(
-                    "[{}] Connecting to server at {}",
-                    category,
-                    AeronUtils.format(serverControlPublication));
-              }
-            })
-        .then(send(buffer, MessageType.CONNECT));
+    return Mono.fromRunnable(this::logConnect).then(send(buffer, MessageType.CONNECT));
+  }
+
+  private void logConnect() {
+    if (logger.isDebugEnabled()) {
+      logger.debug(
+          "[{}] Connecting to server at {}", category, AeronUtils.format(serverControlPublication));
+    }
   }
 
   private Mono<Void> sendDisconnectRequest() {
     ByteBuffer buffer = Protocol.createDisconnectBody(sessionId);
-    return Mono.fromRunnable(
-            () -> {
-              if (logger.isDebugEnabled()) {
-                logger.debug(
-                    "[{}] Disconnecting from server at {}",
-                    category,
-                    AeronUtils.format(serverControlPublication));
-              }
-            })
-        .then(send(buffer, MessageType.COMPLETE));
+    return Mono.fromRunnable(this::logDisconnect).then(send(buffer, MessageType.COMPLETE));
+  }
+
+  private void logDisconnect() {
+    if (logger.isDebugEnabled()) {
+      logger.debug(
+          "[{}] Disconnecting from server at {}",
+          category,
+          AeronUtils.format(serverControlPublication));
+    }
   }
 
   private Mono<Void> send(ByteBuffer buffer, MessageType messageType) {

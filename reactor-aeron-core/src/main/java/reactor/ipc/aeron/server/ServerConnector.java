@@ -64,41 +64,36 @@ public class ServerConnector implements Disposable {
   }
 
   Mono<Void> connect() {
-    return Mono.create(
-            (MonoSink<Void> sink) -> {
-              int retryMillis = 100;
-              int timeoutMillis =
-                  options.connectTimeoutMillis() + options.controlBackpressureTimeoutMillis();
-              RetryTask retryTask =
-                  new RetryTask(
-                      Schedulers.single(),
-                      retryMillis,
-                      timeoutMillis,
-                      new SendConnectAckTask(sink),
-                      throwable -> {
-                        String errMessage =
-                            String.format(
-                                "Failed to send %s into %s",
-                                MessageType.CONNECT_ACK,
-                                AeronUtils.format(clientControlPublication));
-                        RuntimeException exception = new RuntimeException(errMessage, throwable);
-                        sink.error(exception);
-                      });
-              retryTask.schedule();
-            })
-        .then(
-            Mono.fromRunnable(
-                () ->
-                    this.heartbeatSenderDisposable =
-                        heartbeatSender
-                            .scheduleHeartbeats(clientControlPublication, sessionId)
-                            .subscribe(
-                                ignore -> {
-                                  // no-op
-                                },
-                                th -> {
-                                  // no-op
-                                })));
+    return Mono.create(sink -> createConnectRetryTask(sink).schedule())
+        .then(Mono.fromRunnable(() -> this.heartbeatSenderDisposable = scheduleHearbeats()));
+  }
+
+  private Disposable scheduleHearbeats() {
+    return heartbeatSender
+        .scheduleHeartbeats(clientControlPublication, sessionId)
+        .subscribe(
+            ignore -> {
+              // no-op
+            },
+            th -> {
+              // no-op
+            });
+  }
+
+  private RetryTask createConnectRetryTask(MonoSink<Object> sink) {
+    return new RetryTask(
+        Schedulers.single(),
+        100,
+        options.connectTimeoutMillis() + options.controlBackpressureTimeoutMillis(),
+        new SendConnectAckTask(sink),
+        throwable -> {
+          String errMessage =
+              String.format(
+                  "Failed to send %s into %s",
+                  MessageType.CONNECT_ACK, AeronUtils.format(clientControlPublication));
+          RuntimeException exception = new RuntimeException(errMessage, throwable);
+          sink.error(exception);
+        });
   }
 
   @Override

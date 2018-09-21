@@ -72,6 +72,12 @@ public final class AeronClient implements AeronConnector, Disposable {
     return new AeronClient(name, optionsConfigurer);
   }
 
+  /**
+   * Aeron client.
+   *
+   * @param name name
+   * @return aeron client
+   */
   public static AeronClient create(String name) {
     return create(
         name,

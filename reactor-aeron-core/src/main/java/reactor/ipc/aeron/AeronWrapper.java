@@ -7,6 +7,7 @@ import reactor.core.Disposable;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
+/** Aeron wrapper. */
 public final class AeronWrapper implements Disposable {
 
   private static final Logger logger = Loggers.getLogger(AeronWrapper.class);
@@ -19,6 +20,12 @@ public final class AeronWrapper implements Disposable {
 
   private final boolean isDriverLaunched;
 
+  /**
+   * Constructor.
+   *
+   * @param category category
+   * @param options options
+   */
   public AeronWrapper(String category, AeronOptions options) {
     this.category = category;
     if (options.getAeron() == null) {
@@ -38,6 +45,15 @@ public final class AeronWrapper implements Disposable {
     }
   }
 
+  /**
+   * Adds publication.
+   *
+   * @param channel channel
+   * @param streamId stream id
+   * @param purpose purpose
+   * @param sessionId session id
+   * @return publication
+   */
   public Publication addPublication(String channel, int streamId, String purpose, long sessionId) {
     Publication publication = aeron.addPublication(channel, streamId);
     if (logger.isDebugEnabled()) {
@@ -51,6 +67,15 @@ public final class AeronWrapper implements Disposable {
     return publication;
   }
 
+  /**
+   * Adds subscription.
+   *
+   * @param channel channel
+   * @param streamId stream id
+   * @param purpose purpose
+   * @param sessionId session id
+   * @return subscription
+   */
   public Subscription addSubscription(
       String channel, int streamId, String purpose, long sessionId) {
     Subscription subscription = aeron.addSubscription(channel, streamId);

@@ -61,7 +61,8 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
       int clientControlStreamId,
       int clientSessionStreamId) {
     logger.error(
-        "[{}] Unsupported {} request for a client, clientChannel: {}, clientControlStreamId: {}, clientSessionStreamId: {}",
+        "[{}] Unsupported {} request for a client, clientChannel: {}, "
+          + "clientControlStreamId: {}, clientSessionStreamId: {}",
         category,
         MessageType.CONNECT,
         clientChannel,

@@ -24,12 +24,25 @@ public final class HeartbeatWatchdog {
 
   private final String category;
 
+  /**
+   * Constructor.
+   *
+   * @param heartbeatTimeoutMillis heartbeat timeout millis
+   * @param category category
+   */
   public HeartbeatWatchdog(long heartbeatTimeoutMillis, String category) {
     this.heartbeatTimeoutMillis = heartbeatTimeoutMillis;
     this.timeoutNs = TimeUnit.MILLISECONDS.toNanos(heartbeatTimeoutMillis * 3 / 2);
     this.category = category;
   }
 
+  /**
+   * Adds watch dog task.
+   *
+   * @param sessionId session id
+   * @param onHeartbeatLostTask on heartbeat lost lambda
+   * @param lastSignalTimeNsProvider last signal provider
+   */
   public void add(
       long sessionId, Runnable onHeartbeatLostTask, LongSupplier lastSignalTimeNsProvider) {
     lastTimeNsBySessionId.put(sessionId, now());
@@ -65,6 +78,11 @@ public final class HeartbeatWatchdog {
     return System.nanoTime();
   }
 
+  /**
+   * Removes watch dog task by session id.
+   *
+   * @param sessionId session id
+   */
   public void remove(long sessionId) {
     Disposable disposable = disposableBySessionId.remove(sessionId);
     if (disposable != null) {

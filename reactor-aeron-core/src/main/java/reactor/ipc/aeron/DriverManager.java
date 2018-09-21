@@ -17,6 +17,7 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
+/** Driver manager. */
 public final class DriverManager {
 
   private static final Logger logger = Loggers.getLogger(DriverManager.class);
@@ -158,7 +159,7 @@ public final class DriverManager {
     Runtime.getRuntime().addShutdownHook(shutdownHook);
   }
 
-  /** Could result into JVM crashes when there is pending Aeron activity */
+  /** NOTE: could result into JVM crashes when there is pending Aeron activity. */
   private synchronized void forceShutdown() {
     aeron = null;
     try {

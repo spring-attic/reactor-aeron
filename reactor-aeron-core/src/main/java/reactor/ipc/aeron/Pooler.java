@@ -43,6 +43,8 @@ public class Pooler implements Runnable {
   }
 
   // FIXME: Thread-safety
+
+  /** Init method. */
   public void initialise() {
     if (!isRunning) {
       isRunning = true;
@@ -65,6 +67,11 @@ public class Pooler implements Runnable {
     this.poolers = ArrayUtil.add(poolers, pooler);
   }
 
+  /**
+   * Shutdown method.
+   *
+   * @return shutdown reference
+   */
   public Mono<Void> shutdown() {
     return Mono.create(
         sink -> {
@@ -95,16 +102,21 @@ public class Pooler implements Runnable {
     BackoffIdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
     while (isRunning) {
       InnerPooler[] ss = poolers;
-      int nReceived = 0;
+      int numOfReceived = 0;
       for (InnerPooler data : ss) {
-        nReceived = data.poll();
+        numOfReceived = data.poll();
       }
-      idleStrategy.idle(nReceived);
+      idleStrategy.idle(numOfReceived);
     }
 
     logger.debug("[{}] Terminated", name);
   }
 
+  /**
+   * Removes subscription.
+   *
+   * @param subscription subscription
+   */
   public synchronized void removeSubscription(Subscription subscription) {
     InnerPooler[] ss = poolers;
     for (int i = 0; i < ss.length; i++) {
@@ -145,14 +157,14 @@ public class Pooler implements Runnable {
 
     int poll() {
       int r = (int) Math.min(requested, 8);
-      int nPolled = 0;
+      int numOfPolled = 0;
       if (r > 0) {
-        nPolled = subscription.poll(handler, r);
-        if (nPolled > 0) {
-          Operators.produced(REQUESTED, this, nPolled);
+        numOfPolled = subscription.poll(handler, r);
+        if (numOfPolled > 0) {
+          Operators.produced(REQUESTED, this, numOfPolled);
         }
       }
-      return nPolled;
+      return numOfPolled;
     }
 
     @Override

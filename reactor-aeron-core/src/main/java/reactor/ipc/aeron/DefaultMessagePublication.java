@@ -23,6 +23,14 @@ public final class DefaultMessagePublication implements Disposable, MessagePubli
 
   private final String category;
 
+  /**
+   * Constructor.
+   *
+   * @param publication publication
+   * @param category category
+   * @param waitConnectedMillis wait connect millis
+   * @param waitBackpressuredMillis wait backpressure millis
+   */
   public DefaultMessagePublication(
       Publication publication,
       String category,

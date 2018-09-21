@@ -32,6 +32,15 @@ public class Protocol {
     return index;
   }
 
+  /**
+   * Factory method for connect body.
+   *
+   * @param connectRequestId connect request id
+   * @param clientChannel client channel
+   * @param clientControlStreamId client control stream id
+   * @param clientSessionStreamId client session stream id
+   * @return byte buffer
+   */
   public static ByteBuffer createConnectBody(
       UUID connectRequestId,
       String clientChannel,
@@ -58,8 +67,15 @@ public class Protocol {
     return ByteBuffer.wrap(bytes, 0, index);
   }
 
+  /**
+   * Factory for connect ack body.
+   *
+   * @param connectRequestId connect request id
+   * @param serverSessionStreamId server session stream id
+   * @return bytebuffer of connect ack body
+   */
   public static ByteBuffer createConnectAckBody(UUID connectRequestId, int serverSessionStreamId) {
-    byte array[] = new byte[BitUtil.SIZE_OF_INT + SIZE_OF_UUID];
+    byte[] array = new byte[BitUtil.SIZE_OF_INT + SIZE_OF_UUID];
     UnsafeBuffer buffer = new UnsafeBuffer(array);
     int index = 0;
     buffer.putInt(index, serverSessionStreamId);
@@ -72,6 +88,12 @@ public class Protocol {
     return ByteBuffer.wrap(new byte[0]);
   }
 
+  /**
+   * Factory for disconnect body bytebuffer.
+   *
+   * @param sessionId session id
+   * @return bytebuffer of disconnect body
+   */
   public static ByteBuffer createDisconnectBody(long sessionId) {
     byte[] bytes = new byte[BitUtil.SIZE_OF_LONG];
     UnsafeBuffer buffer = new UnsafeBuffer(bytes);

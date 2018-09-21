@@ -5,6 +5,7 @@ import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoSink;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
@@ -25,6 +26,14 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
 
   private volatile DefaultMessagePublication publication;
 
+  /**
+   * Constructor.
+   *
+   * @param category category
+   * @param wrapper wrapper
+   * @param channel channel
+   * @param options options
+   */
   public DefaultAeronOutbound(
       String category, AeronWrapper wrapper, String channel, AeronOptions options) {
     this.category = category;
@@ -53,6 +62,13 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
     }
   }
 
+  /**
+   * Init method.
+   *
+   * @param sessionId session id
+   * @param streamId stream id
+   * @return initialization handle
+   */
   public Mono<Void> initialise(long sessionId, int streamId) {
     return Mono.create(
         sink -> {
@@ -66,25 +82,29 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
                   options.backpressureTimeoutMillis());
           this.sequencer = new AeronWriteSequencer(scheduler, category, publication, sessionId);
           int timeoutMillis = options.connectTimeoutMillis();
-          new RetryTask(
-                  Schedulers.single(),
-                  100,
-                  timeoutMillis,
-                  () -> {
-                    if (aeronPublication.isConnected()) {
-                      sink.success();
-                      return true;
-                    }
-                    return false;
-                  },
-                  th ->
-                      sink.error(
-                          new Exception(
-                              String.format(
-                                  "Publication %s for sending data in not connected during %d millis",
-                                  publication.asString(), timeoutMillis),
-                              th)))
-              .schedule();
+          createRetryTask(sink, aeronPublication, timeoutMillis).schedule();
+        });
+  }
+
+  private RetryTask createRetryTask(
+      MonoSink<Void> sink, Publication aeronPublication, int timeoutMillis) {
+    return new RetryTask(
+        Schedulers.single(),
+        100,
+        timeoutMillis,
+        () -> {
+          if (aeronPublication.isConnected()) {
+            sink.success();
+            return true;
+          }
+          return false;
+        },
+        throwable -> {
+          String errMessage =
+              String.format(
+                  "Publication %s for sending data in not connected during %d millis",
+                  publication.asString(), timeoutMillis);
+          sink.error(new Exception(errMessage, throwable));
         });
   }
 

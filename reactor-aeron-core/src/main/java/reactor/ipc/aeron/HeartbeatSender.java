@@ -11,6 +11,7 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
+/** Heartbeat sender. */
 public class HeartbeatSender {
 
   private final Logger logger = Loggers.getLogger(HeartbeatSender.class);
@@ -21,12 +22,25 @@ public class HeartbeatSender {
 
   private final Scheduler scheduler;
 
+  /**
+   * Heartbeat sender.
+   *
+   * @param heartbeatIntervalMillis heartbeart interval millis
+   * @param category category
+   */
   public HeartbeatSender(long heartbeatIntervalMillis, String category) {
     this.heartbeatIntervalMillis = heartbeatIntervalMillis;
     this.category = category;
     this.scheduler = Schedulers.single();
   }
 
+  /**
+   * Schedule heartbeats.
+   *
+   * @param controlPub control publication
+   * @param sessionId session id
+   * @return hearbeat task handle
+   */
   public Mono<Void> scheduleHeartbeats(Publication controlPub, long sessionId) {
     return Mono.create(
         sink -> {

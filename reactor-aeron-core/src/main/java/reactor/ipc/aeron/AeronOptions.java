@@ -3,6 +3,7 @@ package reactor.ipc.aeron;
 import io.aeron.Aeron;
 import java.time.Duration;
 
+/** Aeron options. */
 public class AeronOptions {
 
   private static final String DEFAULT_SERVER_CHANNEL = "aeron:udp?endpoint=localhost:12000";
@@ -32,10 +33,20 @@ public class AeronOptions {
 
   private int heartbeatTimeoutMillis = DEFAULT_HEARTBEAT_TIMEOUT_MILLIS;
 
+  /**
+   * Return connect tieout millis.
+   *
+   * @return connect timeout millis
+   */
   public int connectTimeoutMillis() {
     return connectTimeoutMillis;
   }
 
+  /**
+   * Setter for connect timeout millis.
+   *
+   * @param connectTimeoutMillis connect timeout millis
+   */
   public void connectTimeoutMillis(int connectTimeoutMillis) {
     if (connectTimeoutMillis <= 0) {
       throw new IllegalArgumentException(
@@ -45,10 +56,20 @@ public class AeronOptions {
     this.connectTimeoutMillis = connectTimeoutMillis;
   }
 
+  /**
+   * Return control backpressure timeout millis.
+   *
+   * @return control backpressure timeout millis
+   */
   public int controlBackpressureTimeoutMillis() {
     return controlBackpressureTimeoutMillis;
   }
 
+  /**
+   * Setter control backpressure timeout millis.
+   *
+   * @param controlBackpressureTimeoutMillis control backpressure timeout millis
+   */
   public void controlBackpressureTimeoutMillis(int controlBackpressureTimeoutMillis) {
     if (controlBackpressureTimeoutMillis <= 0) {
       throw new IllegalArgumentException(
@@ -59,10 +80,20 @@ public class AeronOptions {
     this.controlBackpressureTimeoutMillis = controlBackpressureTimeoutMillis;
   }
 
+  /**
+   * Setter for server channel.
+   *
+   * @param serverChannel server channel
+   */
   public void serverChannel(String serverChannel) {
     this.serverChannel = serverChannel;
   }
 
+  /**
+   * Returns server channel.
+   *
+   * @return server channel
+   */
   public String serverChannel() {
     return serverChannel;
   }
@@ -71,6 +102,11 @@ public class AeronOptions {
     return serverStreamId;
   }
 
+  /**
+   * Setter for server stream id.
+   *
+   * @param serverStreamId server stream id
+   */
   public void serverStreamId(int serverStreamId) {
     if (serverStreamId <= 0) {
       throw new IllegalArgumentException("serverStreamId > 0 expected, but got: " + serverStreamId);
@@ -83,14 +119,29 @@ public class AeronOptions {
     return aeron;
   }
 
+  /**
+   * Setter for aeron.
+   *
+   * @param aeron aeron
+   */
   public void aeron(Aeron aeron) {
     this.aeron = aeron;
   }
 
+  /**
+   * Returns backpressure timeout millis.
+   *
+   * @return backpressure timeout millis
+   */
   public int backpressureTimeoutMillis() {
     return backpressureTimeoutMillis;
   }
 
+  /**
+   * Setter for backpressure timeout millis.
+   *
+   * @param backpressureTimeoutMillis backpressure timeout millis
+   */
   public void backpressureTimeoutMillis(int backpressureTimeoutMillis) {
     if (backpressureTimeoutMillis <= 0) {
       throw new IllegalArgumentException(
@@ -100,6 +151,11 @@ public class AeronOptions {
     this.backpressureTimeoutMillis = backpressureTimeoutMillis;
   }
 
+  /**
+   * Setter for heartbeat timeout millis.
+   *
+   * @param heartbeatTimeoutMillis heartbeat timeout millis
+   */
   public void heartbeatTimeoutMillis(int heartbeatTimeoutMillis) {
     if (heartbeatTimeoutMillis <= 0) {
       throw new IllegalArgumentException(
@@ -108,6 +164,11 @@ public class AeronOptions {
     this.heartbeatTimeoutMillis = heartbeatTimeoutMillis;
   }
 
+  /**
+   * Returns heartbeat timeout millis.
+   *
+   * @return heartbeat timeout millis
+   */
   public int heartbeatTimeoutMillis() {
     return heartbeatTimeoutMillis;
   }

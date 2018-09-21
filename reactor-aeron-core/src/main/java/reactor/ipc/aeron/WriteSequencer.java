@@ -19,13 +19,13 @@ import reactor.util.Logger;
 import reactor.util.Loggers;
 import reactor.util.concurrent.Queues;
 
+/** Write sequencer. */
 abstract class WriteSequencer<T> {
 
   private static final Logger logger = Loggers.getLogger(WriteSequencer.class);
-  /**
-   * Cast the supplied queue (SpscLinkedArrayQueue) to use its atomic dual-insert
-   * backed by {@link BiPredicate#test)
-   **/
+
+  // Cast the supplied queue (SpscLinkedArrayQueue) to use its atomic dual-insert backed by {@link
+  // BiPredicate#test)
   private final BiPredicate<MonoSink<?>, Object> pendingWriteOffer;
 
   private final Queue<?> pendingWrites;

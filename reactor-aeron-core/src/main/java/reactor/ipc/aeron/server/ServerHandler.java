@@ -166,13 +166,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
       this.sessionId = sessionId;
       this.inbound =
           new AeronServerInbound(
-              category,
-              wrapper,
-              options,
-              pooler,
-              serverSessionStreamId,
-              sessionId,
-              () -> dispose());
+              category, wrapper, options, pooler, serverSessionStreamId, sessionId, this::dispose);
       this.connector =
           new ServerConnector(
               category,
@@ -202,7 +196,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
                       heartbeatWatchdog.remove(sessionId);
                       dispose();
                     },
-                    () -> inbound.lastSignalTimeNs());
+                    inbound::lastSignalTimeNs);
 
                 sessionHandlerById.put(sessionId, this);
 

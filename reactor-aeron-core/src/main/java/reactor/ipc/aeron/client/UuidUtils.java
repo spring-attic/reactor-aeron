@@ -12,7 +12,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * @author Jon Brisbin
  * @author Stephane Maldini
  */
-enum UUIDUtils {
+enum UuidUtils {
   ;
 
   private static boolean IS_THREADLOCALRANDOM_AVAILABLE = false;
@@ -25,7 +25,7 @@ enum UUIDUtils {
     try {
       IS_THREADLOCALRANDOM_AVAILABLE =
           null
-              != UUIDUtils.class
+              != UuidUtils.class
                   .getClassLoader()
                   .loadClass("java.util.concurrent.ThreadLocalRandom");
     } catch (Throwable t) {
