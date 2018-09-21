@@ -5,10 +5,16 @@ import java.util.Objects;
 import java.util.function.BooleanSupplier;
 import org.agrona.concurrent.IdleStrategy;
 
+/** Condition. */
 public class Condition {
 
   private final BooleanSupplier predicate;
 
+  /**
+   * Constructor.
+   *
+   * @param predicate predicate
+   */
   public Condition(BooleanSupplier predicate) {
     Objects.requireNonNull(predicate, "predicate shouldn't be null");
 

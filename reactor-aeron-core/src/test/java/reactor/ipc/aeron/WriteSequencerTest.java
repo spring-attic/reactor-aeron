@@ -1,15 +1,15 @@
 package reactor.ipc.aeron;
 
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasItems;
-import static org.junit.Assert.assertThat;
 import static reactor.ipc.aeron.TestUtils.log;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
@@ -23,14 +23,16 @@ public class WriteSequencerTest {
 
   private Scheduler scheduler2;
 
-  @Before
+  /** Setup. */
+  @BeforeEach
   public void doSetup() {
     scheduler = Schedulers.newSingle("sequencer", false);
     scheduler1 = Schedulers.newSingle("scheduler-A");
     scheduler2 = Schedulers.newSingle("scheduler-B");
   }
 
-  @After
+  /** Teardown. */
+  @AfterEach
   public void doTeardown() {
     scheduler.dispose();
     scheduler1.dispose();
@@ -61,7 +63,11 @@ public class WriteSequencerTest {
     private final SubscriberForTest inner;
 
     WriteSequencerForTest(Scheduler scheduler) {
-      super(scheduler, discardedValue -> {});
+      super(
+          scheduler,
+          discardedValue -> {
+            // no-op
+          });
       this.inner = new SubscriberForTest(this);
     }
 

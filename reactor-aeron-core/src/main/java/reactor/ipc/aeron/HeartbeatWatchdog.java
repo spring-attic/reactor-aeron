@@ -34,7 +34,11 @@ public final class HeartbeatWatchdog {
       long sessionId, Runnable onHeartbeatLostTask, LongSupplier lastSignalTimeNsProvider) {
     lastTimeNsBySessionId.put(sessionId, now());
 
-    AtomicReference<Runnable> taskRef = new AtomicReference<>(() -> {});
+    AtomicReference<Runnable> taskRef =
+        new AtomicReference<>(
+            () -> {
+              // no-op
+            });
     Disposable disposable =
         Schedulers.single()
             .schedulePeriodically(

@@ -1,18 +1,3 @@
-/*
- * Copyright (c) 2011-2017 Pivotal Software Inc, All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *       http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package reactor.ipc.aeron;
 
 import java.util.ArrayList;
@@ -21,6 +6,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+/** Thread watcher. */
 public class ThreadWatcher {
 
   private List<String> beforeThreadNames;
@@ -33,6 +19,14 @@ public class ThreadWatcher {
     return awaitTerminated(timeoutMillis, new String[] {});
   }
 
+  /**
+   * Await termination.
+   *
+   * @param timeoutMillis timeout
+   * @param excludedPrefixes prefixes to exclude
+   * @return tru or false
+   * @throws InterruptedException exception
+   */
   public boolean awaitTerminated(long timeoutMillis, String... excludedPrefixes)
       throws InterruptedException {
     List<String> liveThreadNames;

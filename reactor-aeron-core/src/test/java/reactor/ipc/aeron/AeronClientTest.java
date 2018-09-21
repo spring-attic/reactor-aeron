@@ -1,7 +1,9 @@
 package reactor.ipc.aeron;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 import java.time.Duration;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.ReplayProcessor;
@@ -17,14 +19,18 @@ public class AeronClientTest extends BaseAeronTest {
   private String clientChannel =
       "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort();
 
-  @Test(expected = RuntimeException.class)
+  @Test
   public void testClientCouldNotConnectToServer() {
-    AeronClient client = AeronClient.create();
-    try {
-      client.newHandler((inbound, outbound) -> Mono.never()).block();
-    } finally {
-      client.dispose();
-    }
+    assertThrows(
+        RuntimeException.class,
+        () -> {
+          AeronClient client = AeronClient.create();
+          try {
+            client.newHandler((inbound, outbound) -> Mono.never()).block();
+          } finally {
+            client.dispose();
+          }
+        });
   }
 
   @Test

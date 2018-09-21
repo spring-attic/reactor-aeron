@@ -84,7 +84,12 @@ public class AeronWriteSequencerBenchmark {
                 break;
               }
 
-              int nPolled = subscription.poll((buffer, offset, length, header) -> {}, 1000);
+              int nPolled =
+                  subscription.poll(
+                      (buffer, offset, length, header) -> {
+                        // no-op
+                      },
+                      1000);
 
               idleStrategy.idle(nPolled);
             }

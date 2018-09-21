@@ -21,7 +21,11 @@ public class ClientDemo {
               outbound
                   .send(ByteBufferFlux.from("Hello", "world!").log("send"))
                   .then()
-                  .subscribe(avoid -> {}, Throwable::printStackTrace);
+                  .subscribe(
+                      avoid -> {
+                        // no-op
+                      },
+                      Throwable::printStackTrace);
               return Mono.never();
             })
         .block();

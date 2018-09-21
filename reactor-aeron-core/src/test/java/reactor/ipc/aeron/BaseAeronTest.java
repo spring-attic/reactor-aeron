@@ -3,8 +3,8 @@ package reactor.ipc.aeron;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import org.junit.After;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 
@@ -25,12 +25,14 @@ public class BaseAeronTest {
     return disposable;
   }
 
-  @BeforeClass
+  /** Setup. */
+  @BeforeAll
   public static void doSetup() {
     AeronTestUtils.setAeronEnvProps();
   }
 
-  @After
+  /** Teardown. */
+  @AfterEach
   public void doTeardown() {
     disposables.forEach(Disposable::dispose);
     disposables.clear();

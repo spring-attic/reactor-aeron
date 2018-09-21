@@ -6,6 +6,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import reactor.core.scheduler.Scheduler;
 
+/** Retry task. */
 public final class RetryTask implements Runnable {
 
   private final Scheduler scheduler;
@@ -20,6 +21,15 @@ public final class RetryTask implements Runnable {
 
   private long startTimeNs = 0;
 
+  /**
+   * Constructor.
+   *
+   * @param scheduler scheduler
+   * @param retryMillis retry millis
+   * @param timeoutMillis timeout
+   * @param task task
+   * @param onTimeoutTask lambda on timeout
+   */
   public RetryTask(
       Scheduler scheduler,
       long retryMillis,

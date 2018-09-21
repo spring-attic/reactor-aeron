@@ -5,9 +5,9 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
@@ -22,12 +22,14 @@ public class AeronWriteSequencerTest {
 
   private static final Duration TIMEOUT = Duration.ofSeconds(1);
 
-  @Before
+  /** Setup. */
+  @BeforeEach
   public void doSetup() {
     scheduler = Schedulers.newSingle("sender");
   }
 
-  @After
+  /** Teardown. */
+  @AfterEach
   public void doTeardown() {
     scheduler.dispose();
   }
@@ -111,7 +113,13 @@ public class AeronWriteSequencerTest {
 
     writeSequencer
         .add(ByteBufferFlux.from("I'm", "here").subscribeOn(scheduler))
-        .subscribe(msg -> {}, th -> {});
+        .subscribe(
+            msg -> {
+              // no-op
+            },
+            th -> {
+              // no-op
+            });
 
     StepVerifier.create(publication.messages().asString())
         .expectNext("Hello", "world", "I'm", "here")

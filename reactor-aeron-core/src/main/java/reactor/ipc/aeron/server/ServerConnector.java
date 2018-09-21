@@ -1,18 +1,3 @@
-/*
- * Copyright (c) 2011-2017 Pivotal Software Inc, All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *       http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package reactor.ipc.aeron.server;
 
 import io.aeron.Publication;
@@ -52,7 +37,10 @@ public class ServerConnector implements Disposable {
 
   private final HeartbeatSender heartbeatSender;
 
-  private volatile Disposable heartbeatSenderDisposable = () -> {};
+  private volatile Disposable heartbeatSenderDisposable =
+      () -> {
+        // no-op
+      };
 
   ServerConnector(
       String category,
@@ -77,29 +65,40 @@ public class ServerConnector implements Disposable {
 
   Mono<Void> connect() {
     return Mono.create(
-            sink ->
-                new RetryTask(
-                        Schedulers.single(),
-                        100,
-                        options.connectTimeoutMillis() + options.controlBackpressureTimeoutMillis(),
-                        new SendConnectAckTask(sink),
-                        th ->
-                            sink.error(
-                                new RuntimeException(
-                                    String.format(
-                                        "Failed to send %s into %s",
-                                        MessageType.CONNECT_ACK,
-                                        AeronUtils.format(clientControlPublication)),
-                                    th)))
-                    .schedule())
+            (MonoSink<Void> sink) -> {
+              int retryMillis = 100;
+              int timeoutMillis =
+                  options.connectTimeoutMillis() + options.controlBackpressureTimeoutMillis();
+              RetryTask retryTask =
+                  new RetryTask(
+                      Schedulers.single(),
+                      retryMillis,
+                      timeoutMillis,
+                      new SendConnectAckTask(sink),
+                      throwable -> {
+                        String errMessage =
+                            String.format(
+                                "Failed to send %s into %s",
+                                MessageType.CONNECT_ACK,
+                                AeronUtils.format(clientControlPublication));
+                        RuntimeException exception = new RuntimeException(errMessage, throwable);
+                        sink.error(exception);
+                      });
+              retryTask.schedule();
+            })
         .then(
             Mono.fromRunnable(
-                () -> {
-                  this.heartbeatSenderDisposable =
-                      heartbeatSender
-                          .scheduleHeartbeats(clientControlPublication, sessionId)
-                          .subscribe(ignore -> {}, th -> {});
-                }));
+                () ->
+                    this.heartbeatSenderDisposable =
+                        heartbeatSender
+                            .scheduleHeartbeats(clientControlPublication, sessionId)
+                            .subscribe(
+                                ignore -> {
+                                  // no-op
+                                },
+                                th -> {
+                                  // no-op
+                                })));
   }
 
   @Override

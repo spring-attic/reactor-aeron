@@ -5,6 +5,7 @@ import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import reactor.core.publisher.Mono;
 
+/** Aeron outbound. */
 public interface AeronOutbound extends Publisher<Void> {
 
   /**
@@ -25,17 +26,6 @@ public interface AeronOutbound extends Publisher<Void> {
   Mono<Void> then();
 
   /**
-   * Subscribe a {@code Void} subscriber to this outbound and trigger all eventual parent outbound
-   * send.
-   *
-   * @param s the {@link Subscriber} to listen for send sequence completion/failure
-   */
-  @Override
-  default void subscribe(Subscriber<? super Void> s) {
-    then().subscribe(s);
-  }
-
-  /**
    * Append a {@link Publisher} task such as a Mono and return a new {@link AeronOutbound} to
    * sequence further send.
    *
@@ -45,5 +35,16 @@ public interface AeronOutbound extends Publisher<Void> {
    */
   default AeronOutbound then(Publisher<Void> other) {
     return new AeronOutboundThen(this, other);
+  }
+
+  /**
+   * Subscribe a {@code Void} subscriber to this outbound and trigger all eventual parent outbound
+   * send.
+   *
+   * @param s the {@link Subscriber} to listen for send sequence completion/failure
+   */
+  @Override
+  default void subscribe(Subscriber<? super Void> s) {
+    then().subscribe(s);
   }
 }

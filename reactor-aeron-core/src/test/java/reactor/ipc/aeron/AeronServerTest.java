@@ -1,10 +1,10 @@
 package reactor.ipc.aeron;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.ByteBuffer;
 import java.time.Duration;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -56,8 +56,6 @@ public class AeronServerTest extends BaseAeronTest {
 
   @Test
   public void testServerDisconnectsClientsUponShutdown() throws InterruptedException {
-    ThreadWatcher threadWatcher = new ThreadWatcher();
-
     AeronServer server = createAeronServer("server");
     ReplayProcessor<ByteBuffer> processor = ReplayProcessor.create();
     Disposable serverDisposable =
@@ -83,6 +81,8 @@ public class AeronServerTest extends BaseAeronTest {
 
     serverDisposable.dispose();
     client.dispose();
+
+    ThreadWatcher threadWatcher = new ThreadWatcher();
 
     assertTrue(threadWatcher.awaitTerminated(5000, "single-", "parallel-"));
   }

@@ -15,7 +15,7 @@
   <dependencies>
     <dependency>
       <groupId>io.scalecube</groupId>
-      <artifactId>scalecube-reactor-aeron</artifactId>
+      <artifactId>reactor-aeron-core</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>

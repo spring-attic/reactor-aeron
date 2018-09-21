@@ -18,7 +18,11 @@ final class AeronWriteSequencer extends WriteSequencer<ByteBuffer> {
 
   AeronWriteSequencer(
       Scheduler scheduler, String category, MessagePublication publication, long sessionId) {
-    super(scheduler, discardedPublisher -> {});
+    super(
+        scheduler,
+        discardedPublisher -> {
+          // no-op
+        });
     this.sessionId = sessionId;
     this.errorHandler = th -> logger.error("[{}] Unexpected exception", category, th);
     this.inner = new SignalSender(this, publication, this.sessionId);

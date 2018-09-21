@@ -36,7 +36,10 @@ public class Client_Throughput {
                           }))
                   .then()
                   .subscribe(
-                      avoid -> {}, th -> System.err.printf("Failed to send flux due to: %s\n", th));
+                      avoid -> {
+                        // no-op
+                      },
+                      th -> System.err.printf("Failed to send flux due to: %s\n", th));
 
               return Mono.never();
             })

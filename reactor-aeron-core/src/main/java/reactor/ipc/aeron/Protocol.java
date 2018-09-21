@@ -7,6 +7,7 @@ import org.agrona.BitUtil;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 
+/** Protocol. */
 public class Protocol {
 
   private static final int SIZE_OF_UUID = BitUtil.SIZE_OF_LONG * 2;

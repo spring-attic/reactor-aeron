@@ -1,18 +1,3 @@
-/*
- * Copyright (c) 2011-2017 Pivotal Software Inc, All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *       http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package reactor.ipc.aeron;
 
 import java.net.DatagramSocket;
@@ -57,9 +42,10 @@ public final class SocketUtils {
    * Spring Expression Language (SpEL) and the following syntax.
    *
    * <pre>
-   * <code>&lt;bean id="bean1" ... p:port="#{T(org.springframework.util.SocketUtils).findAvailableTcpPort(12000)}"
+   * <code>&lt;bean id="bean1" ... p:port="#{T(org.springframework.util.SocketUtils)
+   * .findAvailableTcpPort(12000)}"
    * /&gt;</code></pre>
-   *
+   * <p/>
    * If this constructor were {@code private}, you would be required to supply the fully qualified
    * class name to SpEL's {@code T()} function for each usage. Thus, the fact that this constructor
    * is {@code public} allows you to reduce boilerplate configuration with SpEL as can be seen in

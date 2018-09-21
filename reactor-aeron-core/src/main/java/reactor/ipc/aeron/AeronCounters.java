@@ -1,18 +1,3 @@
-/*
- * Copyright (c) 2011-2017 Pivotal Software, Inc. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package reactor.ipc.aeron;
 
 import io.aeron.CncFileDescriptor;
@@ -27,7 +12,7 @@ import org.agrona.concurrent.status.CountersReader;
 /**
  * Based on <a
  * href="https://github.com/real-logic/Aeron/blob/master/aeron-samples/src/main/java/uk/co/real_logic/aeron/samples/AeronStat.java">AeronCounters.java
- * from Aeron</a>
+ * from Aeron</a>.
  */
 public final class AeronCounters {
 
@@ -35,6 +20,11 @@ public final class AeronCounters {
 
   private final MappedByteBuffer cncByteBuffer;
 
+  /**
+   * Constructor.
+   *
+   * @param dirName directory name
+   */
   public AeronCounters(String dirName) {
     final File cncFile = new File(dirName + "/" + CncFileDescriptor.CNC_FILE);
 
