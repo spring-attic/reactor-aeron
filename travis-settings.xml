@@ -42,6 +42,11 @@
       <username>${env.SONATYPE_USERNAME}</username>
       <password>${env.SONATYPE_PASSWORD}</password>
     </server>
+    <server>
+      <id>docker.io</id>
+      <username>${env.DOCKER_USERNAME}</username>
+      <password>${env.DOCKER_PASSWORD}</password>
+    </server>
   </servers>
   <activeProfiles>
     <activeProfile>bintray</activeProfile>
