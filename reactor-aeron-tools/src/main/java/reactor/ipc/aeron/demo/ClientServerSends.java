@@ -1,9 +1,9 @@
 package reactor.ipc.aeron.demo;
 
 import reactor.core.publisher.Mono;
-import reactor.ipc.aeron.server.AeronServer;
+import reactor.ipc.aeron.client.AeronClient;
 
-public class ServerDemo {
+public class ClientServerSends {
 
   /**
    * Main runner.
@@ -11,18 +11,22 @@ public class ServerDemo {
    * @param args program arguments.
    */
   public static void main(String[] args) {
-    AeronServer server =
-        AeronServer.create(
-            "server",
+    AeronClient client =
+        AeronClient.create(
+            "client",
             options -> {
               options.serverChannel("aeron:udp?endpoint=localhost:13000");
+              options.clientChannel("aeron:udp?endpoint=localhost:12001");
             });
-    server
+    client
         .newHandler(
             (inbound, outbound) -> {
+              System.out.println("Handler invoked");
               inbound.receive().asString().log("receive").subscribe();
               return Mono.never();
             })
         .block();
+
+    System.out.println("main completed");
   }
 }

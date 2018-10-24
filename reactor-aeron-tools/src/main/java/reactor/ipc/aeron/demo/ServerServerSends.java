@@ -1,9 +1,12 @@
 package reactor.ipc.aeron.demo;
 
+import java.time.Duration;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.server.AeronServer;
 
-public class ServerDemo {
+public class ServerServerSends {
 
   /**
    * Main runner.
@@ -20,9 +23,18 @@ public class ServerDemo {
     server
         .newHandler(
             (inbound, outbound) -> {
-              inbound.receive().asString().log("receive").subscribe();
+              outbound
+                  .send(
+                      Flux.range(1, 10000)
+                          .delayElements(Duration.ofMillis(250))
+                          .map(i -> AeronUtils.stringToByteBuffer("" + i))
+                          .log("send"))
+                  .then()
+                  .subscribe();
               return Mono.never();
             })
         .block();
+
+    System.out.println("main finished");
   }
 }
