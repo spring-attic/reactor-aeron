@@ -26,7 +26,7 @@
     <log4j.version>2.11.0</log4j.version>
     <disruptor.version>3.4.2</disruptor.version>
     <jackson.version>2.9.6</jackson.version>
-    <aeron.version>1.10.4</aeron.version>
+    <aeron.version>1.11.2</aeron.version>
     <reactor-netty.version>0.7.8.RELEASE</reactor-netty.version>
     <reactor-core.version>3.1.8.RELEASE</reactor-core.version>
     <reactivestreams.version>1.0.2</reactivestreams.version>
