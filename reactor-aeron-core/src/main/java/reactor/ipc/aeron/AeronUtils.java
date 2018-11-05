@@ -9,10 +9,6 @@ import org.agrona.concurrent.BackoffIdleStrategy;
 /** Aeron utils. */
 public final class AeronUtils {
 
-  public static final String LABEL_PREFIX_SENDER_POS = "sender pos";
-
-  public static final String LABEL_PREFIX_SUBSCRIBER_POS = "subscriber pos";
-
   public static final String CHANNEL_PREFIX = "aeron:udp?endpoint=";
 
   /**
