@@ -2,6 +2,8 @@ package reactor.ipc.aeron;
 
 import io.aeron.Aeron;
 import io.aeron.driver.MediaDriver;
+import io.aeron.driver.status.SenderPos;
+import io.aeron.driver.status.SubscriberPos;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -218,8 +220,7 @@ public final class DriverManager {
       AtomicBoolean canShutdown = new AtomicBoolean(false);
       aeronCounters.forEach(
           (id, label) -> {
-            if (label.startsWith(AeronUtils.LABEL_PREFIX_SENDER_POS)
-                || label.startsWith(AeronUtils.LABEL_PREFIX_SUBSCRIBER_POS)) {
+            if (label.startsWith(SenderPos.NAME) || label.startsWith(SubscriberPos.NAME)) {
               canShutdown.set(true);
             }
           });
