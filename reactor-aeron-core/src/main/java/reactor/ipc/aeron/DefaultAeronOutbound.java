@@ -22,7 +22,7 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
 
   private final AeronOptions options;
 
-  private volatile WriteSequencer<ByteBuffer> sequencer;
+  private volatile AeronWriteSequencer sequencer;
 
   private volatile DefaultMessagePublication publication;
 
