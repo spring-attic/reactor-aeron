@@ -30,7 +30,7 @@ class AeronWriteSequencer {
 
   private final long sessionId;
 
-  private final InnerSubscriber<ByteBuffer> inner;
+  private final SignalSender signalSender;
 
   private final Consumer<Throwable> errorHandler;
 
@@ -42,9 +42,6 @@ class AeronWriteSequencer {
   private final Scheduler scheduler;
 
   private volatile int wip;
-
-  // a publisher is being drained
-  private volatile boolean innerActive;
 
   AeronWriteSequencer(
       Scheduler scheduler, String category, MessagePublication publication, long sessionId) {
@@ -58,15 +55,15 @@ class AeronWriteSequencer {
     this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
     this.sessionId = sessionId;
     this.errorHandler = th -> logger.error("[{}] Unexpected exception", category, th);
-    this.inner = new SignalSender(this, publication, this.sessionId);
+    this.signalSender = new SignalSender(this, publication, this.sessionId);
   }
 
   Consumer<Throwable> getErrorHandler() {
     return errorHandler;
   }
 
-  InnerSubscriber<ByteBuffer> getInner() {
-    return inner;
+  InnerSubscriber<ByteBuffer> getSignalSender() {
+    return signalSender;
   }
 
   public Mono<Void> add(Publisher<?> publisher) {
@@ -86,12 +83,12 @@ class AeronWriteSequencer {
   }
 
   boolean isReady() {
-    return !getInner().isCancelled;
+    return !getSignalSender().isCancelled;
   }
 
   @SuppressWarnings("unchecked")
   public void drain() {
-    InnerSubscriber<ByteBuffer> inner = getInner();
+    InnerSubscriber<ByteBuffer> inner = getSignalSender();
     if (WIP.getAndIncrement(this) == 0) {
 
       for (; ; ) {
@@ -106,7 +103,7 @@ class AeronWriteSequencer {
           continue;
         }
 
-        if (innerActive) {
+        if (signalSender.isActive()) {
           if (WIP.decrementAndGet(this) == 0) {
             break;
           }
@@ -153,11 +150,11 @@ class AeronWriteSequencer {
             continue;
           }
 
-          innerActive = true;
+          signalSender.setActive();
           inner.setResultSink(promise);
           inner.onSubscribe(Operators.scalarSubscription(inner, (ByteBuffer) vr));
         } else {
-          innerActive = true;
+          signalSender.setActive();
           inner.setResultSink(promise);
           p.subscribe(inner);
         }
@@ -271,6 +268,9 @@ class AeronWriteSequencer {
     long upstreamRequested;
     final int batchSize;
 
+    // a publisher is being drained
+    private volatile boolean active;
+
     InnerSubscriber(AeronWriteSequencer parent, int batchSize) {
       this.parent = parent;
       this.batchSize = batchSize;
@@ -278,6 +278,18 @@ class AeronWriteSequencer {
 
     public void setResultSink(MonoSink<?> promise) {
       this.promise = promise;
+    }
+
+    boolean isActive() {
+      return active;
+    }
+
+    void setInactive() {
+      this.active = false;
+    }
+
+    void setActive() {
+      this.active = false;
     }
 
     @Override
@@ -292,7 +304,7 @@ class AeronWriteSequencer {
     @Override
     public void onComplete() {
       long p = produced;
-      parent.innerActive = false;
+      setInactive();
 
       if (p != 0L) {
         produced = 0L;
@@ -307,7 +319,7 @@ class AeronWriteSequencer {
     @Override
     public void onError(Throwable t) {
       long p = produced;
-      parent.innerActive = false;
+      setInactive();
 
       if (p != 0L) {
         produced = 0L;
@@ -452,7 +464,7 @@ class AeronWriteSequencer {
             ms.cancel();
           }
 
-          parent.innerActive = false;
+          setInactive();
         } else {
           long r = requested;
           if (r != Long.MAX_VALUE) {

@@ -72,7 +72,7 @@ public class WriteSequencerTest {
     }
 
     @Override
-    InnerSubscriber<ByteBuffer> getInner() {
+    InnerSubscriber<ByteBuffer> getSignalSender() {
       return inner;
     }
 
