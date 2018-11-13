@@ -189,12 +189,15 @@ class AeronWriteSequencer {
 
   static class SignalSender extends InnerSubscriber<ByteBuffer> {
 
+    private final AeronWriteSequencer sequencer;
+
     private final long sessionId;
 
     private final MessagePublication publication;
 
     SignalSender(AeronWriteSequencer sequencer, MessagePublication publication, long sessionId) {
-      super(sequencer, 16);
+      super(16);
+      this.sequencer = sequencer;
 
       this.sessionId = sessionId;
       this.publication = publication;
@@ -225,27 +228,25 @@ class AeronWriteSequencer {
               "Failed to publish signal into session with Id: " + sessionId + ", result: " + result,
               cause));
 
-      scheduleNextPublisherDrain();
+      sequencer.scheduleDrain();
     }
 
     @Override
     void doOnError(Throwable t) {
       promise.error(t);
 
-      scheduleNextPublisherDrain();
+      sequencer.scheduleDrain();
     }
 
     @Override
     void doOnComplete() {
       promise.success();
 
-      scheduleNextPublisherDrain();
+      sequencer.scheduleDrain();
     }
   }
 
   abstract static class InnerSubscriber<T> implements CoreSubscriber<T>, Subscription {
-
-    final AeronWriteSequencer parent;
 
     volatile Subscription missedSubscription;
     volatile long missedRequested;
@@ -271,8 +272,7 @@ class AeronWriteSequencer {
     // a publisher is being drained
     private volatile boolean active;
 
-    InnerSubscriber(AeronWriteSequencer parent, int batchSize) {
-      this.parent = parent;
+    InnerSubscriber(int batchSize) {
       this.batchSize = batchSize;
     }
 
@@ -536,10 +536,6 @@ class AeronWriteSequencer {
       Operators.addCap(MISSED_PRODUCED, this, n);
 
       drain();
-    }
-
-    protected void scheduleNextPublisherDrain() {
-      parent.scheduleDrain();
     }
 
     @SuppressWarnings("rawtypes")

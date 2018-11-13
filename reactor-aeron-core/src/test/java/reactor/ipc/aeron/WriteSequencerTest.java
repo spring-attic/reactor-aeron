@@ -68,7 +68,7 @@ public class WriteSequencerTest {
 
     WriteSequencerForTest(Scheduler scheduler) {
       super(scheduler, "test", null, 1234);
-      this.inner = new SubscriberForTest(this);
+      this.inner = new SubscriberForTest();
     }
 
     @Override
@@ -93,8 +93,8 @@ public class WriteSequencerTest {
 
       final List<ByteBuffer> signals = new CopyOnWriteArrayList<>();
 
-      SubscriberForTest(WriteSequencerForTest parent) {
-        super(parent, 1);
+      SubscriberForTest() {
+        super(1);
       }
 
       @Override
@@ -119,8 +119,6 @@ public class WriteSequencerTest {
       public void doOnComplete() {
         log("onComplete");
         promise.success();
-
-        scheduleNextPublisherDrain();
       }
     }
   }
