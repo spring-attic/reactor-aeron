@@ -68,11 +68,11 @@ public class WriteSequencerTest {
 
     WriteSequencerForTest(Scheduler scheduler) {
       super(scheduler, "test", null, 1234);
-      this.inner = new SubscriberForTest();
+      this.inner = new SubscriberForTest(this, null, 1234);
     }
 
     @Override
-    InnerSubscriber<ByteBuffer> getSignalSender() {
+    SignalSender getSignalSender() {
       return inner;
     }
 
@@ -89,36 +89,32 @@ public class WriteSequencerTest {
           .collect(Collectors.toList());
     }
 
-    static class SubscriberForTest extends InnerSubscriber<ByteBuffer> {
+    static class SubscriberForTest extends SignalSender {
 
       final List<ByteBuffer> signals = new CopyOnWriteArrayList<>();
 
-      SubscriberForTest() {
-        super(1);
+      SubscriberForTest(
+          AeronWriteSequencer sequencer, MessagePublication publication, long sessionId) {
+        super(sequencer, publication, sessionId);
       }
 
-      @Override
       public void doOnNext(ByteBuffer o) {
         log("onNext: " + o);
-
         signals.add(o);
       }
 
-      @Override
       void doOnSubscribe() {
         request(Long.MAX_VALUE);
       }
 
-      @Override
       public void doOnError(Throwable t) {
         log("onError: " + t);
-        promise.success();
+        super.doOnError(t);
       }
 
-      @Override
       public void doOnComplete() {
         log("onComplete");
-        promise.success();
+        super.doOnComplete();
       }
     }
   }

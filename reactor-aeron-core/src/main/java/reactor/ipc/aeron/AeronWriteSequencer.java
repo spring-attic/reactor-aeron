@@ -1,17 +1,12 @@
 package reactor.ipc.aeron;
 
 import java.nio.ByteBuffer;
-import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
-import java.util.concurrent.atomic.AtomicLongFieldUpdater;
-import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscription;
-import reactor.core.CoreSubscriber;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Operators;
@@ -62,7 +57,7 @@ class AeronWriteSequencer {
     return errorHandler;
   }
 
-  InnerSubscriber<ByteBuffer> getSignalSender() {
+  SignalSender getSignalSender() {
     return signalSender;
   }
 
@@ -83,19 +78,19 @@ class AeronWriteSequencer {
   }
 
   boolean isReady() {
-    return !getSignalSender().isCancelled;
+    return !getSignalSender().isCancelled();
   }
 
   @SuppressWarnings("unchecked")
   public void drain() {
-    InnerSubscriber<ByteBuffer> inner = getSignalSender();
+    SignalSender inner = getSignalSender();
     if (WIP.getAndIncrement(this) == 0) {
 
       for (; ; ) {
-        if (inner.isCancelled) {
+        if (inner.isCancelled()) {
           discard();
 
-          inner.isCancelled = false;
+          inner.setNotCancelled();
 
           if (WIP.decrementAndGet(this) == 0) {
             break;
@@ -185,374 +180,5 @@ class AeronWriteSequencer {
 
   void scheduleDrain() {
     scheduler.schedule(this::drain);
-  }
-
-  static class SignalSender extends InnerSubscriber<ByteBuffer> {
-
-    private final AeronWriteSequencer sequencer;
-
-    private final long sessionId;
-
-    private final MessagePublication publication;
-
-    SignalSender(AeronWriteSequencer sequencer, MessagePublication publication, long sessionId) {
-      super(16);
-      this.sequencer = sequencer;
-
-      this.sessionId = sessionId;
-      this.publication = publication;
-    }
-
-    @Override
-    void doOnSubscribe() {
-      request(Long.MAX_VALUE);
-    }
-
-    @Override
-    void doOnNext(ByteBuffer byteBuffer) {
-      Exception cause = null;
-      long result = 0;
-      try {
-        result = publication.publish(MessageType.NEXT, byteBuffer, sessionId);
-        if (result > 0) {
-          return;
-        }
-      } catch (Exception ex) {
-        cause = ex;
-      }
-
-      cancel();
-
-      promise.error(
-          new Exception(
-              "Failed to publish signal into session with Id: " + sessionId + ", result: " + result,
-              cause));
-
-      sequencer.scheduleDrain();
-    }
-
-    @Override
-    void doOnError(Throwable t) {
-      promise.error(t);
-
-      sequencer.scheduleDrain();
-    }
-
-    @Override
-    void doOnComplete() {
-      promise.success();
-
-      sequencer.scheduleDrain();
-    }
-  }
-
-  abstract static class InnerSubscriber<T> implements CoreSubscriber<T>, Subscription {
-
-    volatile Subscription missedSubscription;
-    volatile long missedRequested;
-    volatile long missedProduced;
-    volatile int wip;
-
-    // a subscription has been cancelled
-    volatile boolean isCancelled;
-
-    /** The current outstanding request amount. */
-    long requested;
-
-    boolean unbounded;
-
-    /** The current subscription which may null if no Subscriptions have been set. */
-    Subscription actual;
-
-    long produced;
-    MonoSink<?> promise;
-    long upstreamRequested;
-    final int batchSize;
-
-    // a publisher is being drained
-    private volatile boolean active;
-
-    InnerSubscriber(int batchSize) {
-      this.batchSize = batchSize;
-    }
-
-    public void setResultSink(MonoSink<?> promise) {
-      this.promise = promise;
-    }
-
-    boolean isActive() {
-      return active;
-    }
-
-    void setInactive() {
-      this.active = false;
-    }
-
-    void setActive() {
-      this.active = false;
-    }
-
-    @Override
-    public final void cancel() {
-      if (!isCancelled) {
-        isCancelled = true;
-
-        drain();
-      }
-    }
-
-    @Override
-    public void onComplete() {
-      long p = produced;
-      setInactive();
-
-      if (p != 0L) {
-        produced = 0L;
-        produced(p);
-      }
-
-      doOnComplete();
-    }
-
-    abstract void doOnComplete();
-
-    @Override
-    public void onError(Throwable t) {
-      long p = produced;
-      setInactive();
-
-      if (p != 0L) {
-        produced = 0L;
-        produced(p);
-      }
-
-      doOnError(t);
-    }
-
-    abstract void doOnError(Throwable t);
-
-    @Override
-    public void onNext(T t) {
-      produced++;
-
-      doOnNext(t);
-
-      if (upstreamRequested - produced == 0 && requested - produced > 0) {
-        requestFromUpstream(actual);
-      }
-    }
-
-    abstract void doOnNext(T t);
-
-    @Override
-    public void onSubscribe(Subscription s) {
-      Objects.requireNonNull(s);
-
-      if (isCancelled) {
-        s.cancel();
-        return;
-      }
-
-      if (wip == 0 && WIP.compareAndSet(this, 0, 1)) {
-        actual = s;
-        upstreamRequested = 0;
-
-        doOnSubscribe();
-
-        long r = requested;
-
-        if (WIP.decrementAndGet(this) != 0) {
-          drainLoop();
-        }
-
-        if (r != 0L) {
-          requestFromUpstream(s);
-        }
-
-        return;
-      }
-
-      MISSED_SUBSCRIPTION.set(this, s);
-      drain();
-    }
-
-    abstract void doOnSubscribe();
-
-    @Override
-    public final void request(long n) {
-      if (Operators.validate(n)) {
-        if (unbounded) {
-          return;
-        }
-        if (wip == 0 && WIP.compareAndSet(this, 0, 1)) {
-          long r = requested;
-
-          if (r != Long.MAX_VALUE) {
-            r = Operators.addCap(r, n);
-            requested = r;
-            if (r == Long.MAX_VALUE) {
-              unbounded = true;
-            }
-          }
-          Subscription a = actual;
-
-          if (WIP.decrementAndGet(this) != 0) {
-            drainLoop();
-          }
-
-          if (a != null) {
-            requestFromUpstream(a);
-          }
-
-          return;
-        }
-
-        Operators.addCap(MISSED_REQUESTED, this, n);
-
-        drain();
-      }
-    }
-
-    final void requestFromUpstream(Subscription s) {
-      if (upstreamRequested < requested) {
-        upstreamRequested += batchSize;
-
-        s.request(batchSize);
-      }
-    }
-
-    final void drain() {
-      if (WIP.getAndIncrement(this) != 0) {
-        return;
-      }
-      drainLoop();
-    }
-
-    final void drainLoop() {
-      int missed = 1;
-
-      long requestAmount = 0L;
-      Subscription requestTarget = null;
-
-      for (; ; ) {
-
-        Subscription ms = missedSubscription;
-
-        if (ms != null) {
-          ms = MISSED_SUBSCRIPTION.getAndSet(this, null);
-        }
-
-        long mr = missedRequested;
-        if (mr != 0L) {
-          mr = MISSED_REQUESTED.getAndSet(this, 0L);
-        }
-
-        long mp = missedProduced;
-        if (mp != 0L) {
-          mp = MISSED_PRODUCED.getAndSet(this, 0L);
-        }
-
-        Subscription a = actual;
-
-        if (isCancelled) {
-          if (a != null) {
-            a.cancel();
-            actual = null;
-            upstreamRequested = 0;
-          }
-          if (ms != null) {
-            ms.cancel();
-          }
-
-          setInactive();
-        } else {
-          long r = requested;
-          if (r != Long.MAX_VALUE) {
-            long u = Operators.addCap(r, mr);
-
-            if (u != Long.MAX_VALUE) {
-              long v = u - mp;
-              if (v < 0L) {
-                Operators.reportMoreProduced();
-                v = 0;
-              }
-              r = v;
-            } else {
-              r = u;
-            }
-            requested = r;
-          }
-
-          if (ms != null) {
-            actual = ms;
-            upstreamRequested = 0;
-            if (r != 0L) {
-              requestAmount = Operators.addCap(requestAmount, r);
-              requestTarget = ms;
-            }
-          } else if (mr != 0L && a != null) {
-            requestAmount = Operators.addCap(requestAmount, mr);
-            requestTarget = a;
-          }
-        }
-
-        missed = WIP.addAndGet(this, -missed);
-        if (missed == 0) {
-          if (requestAmount != 0L) {
-            requestFromUpstream(requestTarget);
-          }
-          return;
-        }
-      }
-    }
-
-    final void produced(long n) {
-      if (unbounded) {
-        return;
-      }
-      if (wip == 0 && WIP.compareAndSet(this, 0, 1)) {
-        long r = requested;
-
-        if (r != Long.MAX_VALUE) {
-          long u = r - n;
-          if (u < 0L) {
-            Operators.reportMoreProduced();
-            u = 0;
-          }
-          requested = u;
-        } else {
-          unbounded = true;
-        }
-
-        if (WIP.decrementAndGet(this) == 0) {
-          return;
-        }
-
-        drainLoop();
-
-        return;
-      }
-
-      Operators.addCap(MISSED_PRODUCED, this, n);
-
-      drain();
-    }
-
-    @SuppressWarnings("rawtypes")
-    static final AtomicReferenceFieldUpdater<InnerSubscriber, Subscription> MISSED_SUBSCRIPTION =
-        AtomicReferenceFieldUpdater.newUpdater(
-            InnerSubscriber.class, Subscription.class, "missedSubscription");
-
-    @SuppressWarnings("rawtypes")
-    static final AtomicLongFieldUpdater<InnerSubscriber> MISSED_REQUESTED =
-        AtomicLongFieldUpdater.newUpdater(InnerSubscriber.class, "missedRequested");
-
-    @SuppressWarnings("rawtypes")
-    static final AtomicLongFieldUpdater<InnerSubscriber> MISSED_PRODUCED =
-        AtomicLongFieldUpdater.newUpdater(InnerSubscriber.class, "missedProduced");
-
-    @SuppressWarnings("rawtypes")
-    static final AtomicIntegerFieldUpdater<InnerSubscriber> WIP =
-        AtomicIntegerFieldUpdater.newUpdater(InnerSubscriber.class, "wip");
   }
 }
