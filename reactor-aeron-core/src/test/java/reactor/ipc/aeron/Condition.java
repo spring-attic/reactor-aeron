@@ -21,7 +21,7 @@ public class Condition {
     this.predicate = predicate;
   }
 
-  void awaitTrue(Duration timeout) {
+  public void awaitTrue(Duration timeout) {
     IdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
     long start = System.nanoTime();
     for (; ; ) {

@@ -1,4 +1,4 @@
-package reactor.ipc.aeron;
+package io.aeron.driver;
 
 import java.nio.ByteBuffer;
 import java.util.Queue;
@@ -10,20 +10,19 @@ import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Operators;
-import reactor.core.scheduler.Scheduler;
+import reactor.ipc.aeron.AbortedException;
+import reactor.ipc.aeron.MessagePublication;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 import reactor.util.concurrent.Queues;
 
-class AeronWriteSequencer {
+public class AeronWriteSequencer {
 
   @SuppressWarnings("rawtypes")
   static final AtomicIntegerFieldUpdater<AeronWriteSequencer> WIP =
       AtomicIntegerFieldUpdater.newUpdater(AeronWriteSequencer.class, "wip");
 
   private static final Logger logger = Loggers.getLogger(AeronWriteSequencer.class);
-
-  private final long sessionId;
 
   private final PublisherSender inner;
 
@@ -34,23 +33,26 @@ class AeronWriteSequencer {
   private final BiPredicate<MonoSink<?>, Object> pendingWriteOffer;
   private final Queue<?> pendingWrites;
   private final Consumer<Object> discardedHandler;
-  private final Scheduler scheduler;
+  private final Queue<Runnable> commandQueue;
 
+  @SuppressWarnings("unused")
   private volatile int wip;
 
   AeronWriteSequencer(
-      Scheduler scheduler, String category, MessagePublication publication, long sessionId) {
+      Queue<Runnable> commandQueue,
+      String category,
+      MessagePublication publication,
+      long sessionId) {
     this.discardedHandler =
         o -> {
           // no-op
         };
-    this.scheduler = scheduler;
+    this.commandQueue = commandQueue;
     this.pendingWrites = Queues.unbounded().get();
     //noinspection unchecked
     this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
-    this.sessionId = sessionId;
     this.errorHandler = th -> logger.error("[{}] Unexpected exception", category, th);
-    this.inner = new PublisherSender(this, publication, this.sessionId);
+    this.inner = new PublisherSender(this, publication, sessionId);
   }
 
   Consumer<Throwable> getErrorHandler() {
@@ -61,6 +63,12 @@ class AeronWriteSequencer {
     return inner;
   }
 
+  /**
+   * Adds a client defined data publisher to {@link AeronWriteSequencer} instance.
+   *
+   * @param publisher data publisher
+   * @return mono handle
+   */
   public Mono<Void> add(Publisher<?> publisher) {
     return Mono.create(
         sink -> {
@@ -73,16 +81,11 @@ class AeronWriteSequencer {
         });
   }
 
-  public boolean isEmpty() {
-    return pendingWrites.isEmpty();
-  }
-
   boolean isReady() {
     return !getInner().isCancelled();
   }
 
-  @SuppressWarnings("unchecked")
-  public void drain() {
+  private void drain() {
     PublisherSender inner = getInner();
     if (WIP.getAndIncrement(this) == 0) {
 
@@ -125,6 +128,7 @@ class AeronWriteSequencer {
         }
 
         v = pendingWrites.poll();
+        //noinspection unchecked
         Publisher<ByteBuffer> p = (Publisher<ByteBuffer>) v;
 
         if (p instanceof Callable) {
@@ -151,6 +155,7 @@ class AeronWriteSequencer {
         } else {
           inner.setActive(true);
           inner.setResultSink(promise);
+          //noinspection ConstantConditions
           p.subscribe(inner);
         }
       }
@@ -179,6 +184,6 @@ class AeronWriteSequencer {
   }
 
   void scheduleDrain() {
-    scheduler.schedule(this::drain);
+    commandQueue.offer(this::drain);
   }
 }

@@ -1,10 +1,14 @@
-package reactor.ipc.aeron;
+package io.aeron.driver;
 
 import io.aeron.Publication;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Queue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +18,11 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.UnicastProcessor;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
+import reactor.ipc.aeron.AeronUtils;
+import reactor.ipc.aeron.ByteBufferFlux;
+import reactor.ipc.aeron.Condition;
+import reactor.ipc.aeron.MessagePublication;
+import reactor.ipc.aeron.MessageType;
 import reactor.test.StepVerifier;
 
 public class AeronWriteSequencerTest {
@@ -21,16 +30,22 @@ public class AeronWriteSequencerTest {
   private Scheduler scheduler;
 
   private static final Duration TIMEOUT = Duration.ofSeconds(1);
+  private BlockingQueue<Runnable> commandQueue;
 
   /** Setup. */
   @BeforeEach
   public void doSetup() {
-    scheduler = Schedulers.newSingle("sender");
+    commandQueue = new LinkedBlockingQueue<>();
+    ThreadPoolExecutor executorService =
+        new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, commandQueue);
+    executorService.prestartAllCoreThreads();
+    scheduler = Schedulers.fromExecutorService(executorService);
   }
 
   /** Teardown. */
   @AfterEach
   public void doTeardown() {
+    commandQueue.clear();
     scheduler.dispose();
   }
 
@@ -39,7 +54,8 @@ public class AeronWriteSequencerTest {
     FakeMessagePublication publication = new FakeMessagePublication();
     publication.publishSuccessfully(4);
 
-    AeronWriteSequencer writeSequencer = new AeronWriteSequencer(scheduler, "test", publication, 1);
+    AeronWriteSequencer writeSequencer =
+        new AeronWriteSequencer(commandQueue, "test", publication, 1);
 
     Mono<Void> result1 = writeSequencer.add(ByteBufferFlux.from("Hello", "world"));
     Mono<Void> result2 = writeSequencer.add(ByteBufferFlux.from("All", "good"));
@@ -61,7 +77,8 @@ public class AeronWriteSequencerTest {
     publication.failPublication(Publication.BACK_PRESSURED);
     publication.publishSuccessfully(2);
 
-    AeronWriteSequencer writeSequencer = new AeronWriteSequencer(scheduler, "test", publication, 1);
+    AeronWriteSequencer writeSequencer =
+        new AeronWriteSequencer(commandQueue, "test", publication, 1);
 
     Mono<Void> result1 = writeSequencer.add(ByteBufferFlux.from("Hello", "world"));
     Mono<Void> result2 = writeSequencer.add(ByteBufferFlux.from("1", "2"));
@@ -81,7 +98,8 @@ public class AeronWriteSequencerTest {
     FakeMessagePublication publication = new FakeMessagePublication();
     publication.publishSuccessfully(4);
 
-    AeronWriteSequencer writeSequencer = new AeronWriteSequencer(scheduler, "test", publication, 1);
+    AeronWriteSequencer writeSequencer =
+        new AeronWriteSequencer(commandQueue, "test", publication, 1);
 
     Scheduler scheduler = Schedulers.single();
     writeSequencer.add(ByteBufferFlux.from("Hello", "world").subscribeOn(scheduler)).subscribe();
@@ -99,7 +117,8 @@ public class AeronWriteSequencerTest {
     FakeMessagePublication publication = new FakeMessagePublication();
     publication.publishSuccessfully(4);
 
-    AeronWriteSequencer writeSequencer = new AeronWriteSequencer(scheduler, "test", publication, 1);
+    AeronWriteSequencer writeSequencer =
+        new AeronWriteSequencer(commandQueue, "test", publication, 1);
 
     Scheduler scheduler = Schedulers.single();
     Mono<Void> result1 =
@@ -133,7 +152,8 @@ public class AeronWriteSequencerTest {
     FakeMessagePublication publication = new FakeMessagePublication();
     publication.publishSuccessfully(32);
 
-    AeronWriteSequencer writeSequencer = new AeronWriteSequencer(scheduler, "test", publication, 1);
+    AeronWriteSequencer writeSequencer =
+        new AeronWriteSequencer(commandQueue, "test", publication, 1);
 
     Mono<Void> result =
         writeSequencer.add(

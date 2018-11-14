@@ -2,6 +2,7 @@ package reactor.ipc.aeron;
 
 import io.aeron.Publication;
 import io.aeron.driver.AeronWrapper;
+import io.aeron.driver.AeronWriteSequencer;
 import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
@@ -81,7 +82,7 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
                   category,
                   options.connectTimeoutMillis(),
                   options.backpressureTimeoutMillis());
-          this.sequencer = new AeronWriteSequencer(scheduler, category, publication, sessionId);
+          this.sequencer = wrapper.newWriteSequencer(category, publication, sessionId);
           int timeoutMillis = options.connectTimeoutMillis();
           createRetryTask(sink, aeronPublication, timeoutMillis).schedule();
         });

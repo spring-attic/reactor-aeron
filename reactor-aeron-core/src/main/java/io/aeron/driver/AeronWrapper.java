@@ -6,6 +6,7 @@ import io.aeron.Subscription;
 import reactor.core.Disposable;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronUtils;
+import reactor.ipc.aeron.MessagePublication;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -16,7 +17,7 @@ public final class AeronWrapper implements Disposable {
 
   private final String category;
 
-  // dont try to remove static qualifier! done for tests purposes
+  // dont try to remove static qualifier! this is damn singleton
   private static final DriverManager driverManager = new DriverManager();
 
   private final Aeron aeron;
@@ -91,6 +92,23 @@ public final class AeronWrapper implements Disposable {
           AeronUtils.format(channel, streamId));
     }
     return subscription;
+  }
+
+  /**
+   * Creates new AeronWriteSequencer.
+   *
+   * @param category catergory
+   * @param publication publication (see {@link #addPublication(String, int, String, long)}
+   * @param sessionId session id
+   * @return new write sequencer
+   */
+  public AeronWriteSequencer newWriteSequencer(
+      String category, MessagePublication publication, long sessionId) {
+    MediaDriver.Context mc = driverManager.getMediaContext();
+    if (logger.isDebugEnabled()) {
+      logger.debug("[{}] Created aeronWriteSequencer{}", category, formatSessionId(sessionId));
+    }
+    return new AeronWriteSequencer(mc.senderCommandQueue(), category, publication, sessionId);
   }
 
   private String formatSessionId(long sessionId) {

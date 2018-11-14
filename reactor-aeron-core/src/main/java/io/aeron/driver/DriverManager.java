@@ -1,6 +1,7 @@
 package io.aeron.driver;
 
 import io.aeron.Aeron;
+import io.aeron.driver.MediaDriver.Context;
 import io.aeron.driver.status.SenderPos;
 import io.aeron.driver.status.SubscriberPos;
 import java.io.File;
@@ -195,6 +196,14 @@ public final class DriverManager {
 
   public synchronized Aeron getAeron() {
     return aeron;
+  }
+
+  public Context getMediaContext() {
+    return mediaContext;
+  }
+
+  public Aeron.Context getAeronContext() {
+    return aeronContext;
   }
 
   private class RetryShutdownTask implements Runnable {

@@ -1,4 +1,4 @@
-package reactor.ipc.aeron;
+package io.aeron.driver;
 
 import java.nio.ByteBuffer;
 import java.util.Objects;
@@ -9,6 +9,8 @@ import org.reactivestreams.Subscription;
 import reactor.core.CoreSubscriber;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Operators;
+import reactor.ipc.aeron.MessagePublication;
+import reactor.ipc.aeron.MessageType;
 
 class PublisherSender implements CoreSubscriber<ByteBuffer>, Subscription {
 
