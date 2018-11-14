@@ -36,6 +36,9 @@ class AeronWriteSequencer {
   private final Consumer<Object> discardedHandler;
   private final Scheduler scheduler;
 
+  // a publisher is being drained
+  private volatile boolean innerActive;
+
   private volatile int wip;
 
   AeronWriteSequencer(
@@ -90,7 +93,7 @@ class AeronWriteSequencer {
         if (inner.isCancelled()) {
           discard();
 
-          inner.setNotCancelled();
+          inner.setCancelled(false);
 
           if (WIP.decrementAndGet(this) == 0) {
             break;
@@ -98,7 +101,7 @@ class AeronWriteSequencer {
           continue;
         }
 
-        if (signalSender.isActive()) {
+        if (innerActive) {
           if (WIP.decrementAndGet(this) == 0) {
             break;
           }
@@ -145,16 +148,24 @@ class AeronWriteSequencer {
             continue;
           }
 
-          signalSender.setActive();
+          innerActive = true;
           inner.setResultSink(promise);
           inner.onSubscribe(Operators.scalarSubscription(inner, (ByteBuffer) vr));
         } else {
-          signalSender.setActive();
+          innerActive = true;
           inner.setResultSink(promise);
           p.subscribe(inner);
         }
       }
     }
+  }
+
+  boolean innerActive() {
+    return innerActive;
+  }
+
+  public void setInnerInactive() {
+    this.innerActive = false;
   }
 
   void discard() {

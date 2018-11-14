@@ -48,8 +48,6 @@ class SignalSender implements CoreSubscriber<ByteBuffer>, Subscription {
   private long produced;
   private MonoSink<?> promise;
   private long upstreamRequested;
-  // a publisher is being drained
-  private volatile boolean active;
 
   SignalSender(AeronWriteSequencer sequencer, MessagePublication publication, long sessionId) {
     this.batchSize = 16;
@@ -104,26 +102,14 @@ class SignalSender implements CoreSubscriber<ByteBuffer>, Subscription {
     return isCancelled;
   }
 
-  void setNotCancelled() {
-    this.isCancelled = false;
-  }
-
-  boolean isActive() {
-    return active;
-  }
-
-  void setInactive() {
-    this.active = false;
-  }
-
-  void setActive() {
-    this.active = false;
+  void setCancelled(boolean isCancelled) {
+    this.isCancelled = isCancelled;
   }
 
   @Override
   public final void cancel() {
-    if (!isCancelled) {
-      isCancelled = true;
+    if (!isCancelled()) {
+      setCancelled(true);
 
       drain();
     }
@@ -132,7 +118,7 @@ class SignalSender implements CoreSubscriber<ByteBuffer>, Subscription {
   @Override
   public void onComplete() {
     long p = produced;
-    setInactive();
+    sequencer.setInnerInactive();
 
     if (p != 0L) {
       produced = 0L;
@@ -145,7 +131,7 @@ class SignalSender implements CoreSubscriber<ByteBuffer>, Subscription {
   @Override
   public void onError(Throwable t) {
     long p = produced;
-    setInactive();
+    sequencer.setInnerInactive();
 
     if (p != 0L) {
       produced = 0L;
@@ -170,7 +156,7 @@ class SignalSender implements CoreSubscriber<ByteBuffer>, Subscription {
   public void onSubscribe(Subscription s) {
     Objects.requireNonNull(s);
 
-    if (isCancelled) {
+    if (isCancelled()) {
       s.cancel();
       return;
     }
@@ -274,7 +260,7 @@ class SignalSender implements CoreSubscriber<ByteBuffer>, Subscription {
 
       Subscription a = actual;
 
-      if (isCancelled) {
+      if (isCancelled()) {
         if (a != null) {
           a.cancel();
           actual = null;
@@ -284,7 +270,7 @@ class SignalSender implements CoreSubscriber<ByteBuffer>, Subscription {
           ms.cancel();
         }
 
-        setInactive();
+        sequencer.setInnerInactive();
       } else {
         long r = requested;
         if (r != Long.MAX_VALUE) {
