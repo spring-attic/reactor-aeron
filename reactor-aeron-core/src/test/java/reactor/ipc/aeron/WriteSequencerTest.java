@@ -4,9 +4,11 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasItems;
 import static reactor.ipc.aeron.TestUtils.log;
 
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,10 +45,12 @@ public class WriteSequencerTest {
   public void itProvidesSignalsFromAddedPublishers() throws Exception {
     WriteSequencerForTest sequencer = new WriteSequencerForTest(scheduler);
 
-    Flux<String> flux1 = Flux.just("Hello", "world").publishOn(scheduler1);
+    Flux<ByteBuffer> flux1 =
+        Flux.just("Hello", "world").map(AeronUtils::stringToByteBuffer).publishOn(scheduler1);
     Mono result1 = sequencer.add(flux1);
 
-    Flux<String> flux2 = Flux.just("Everybody", "happy").publishOn(scheduler2);
+    Flux<ByteBuffer> flux2 =
+        Flux.just("Everybody", "happy").map(AeronUtils::stringToByteBuffer).publishOn(scheduler2);
     Mono result2 = sequencer.add(flux2);
 
     result1.block();
@@ -55,7 +59,7 @@ public class WriteSequencerTest {
     assertThat(sequencer.getSignals(), hasItems("Hello", "world", "Everybody", "happy"));
   }
 
-  static class WriteSequencerForTest extends WriteSequencer<String> {
+  static class WriteSequencerForTest extends AeronWriteSequencer {
 
     static final Consumer<Throwable> ERROR_HANDLER =
         th -> System.err.println("Unexpected exception: " + th);
@@ -63,16 +67,12 @@ public class WriteSequencerTest {
     private final SubscriberForTest inner;
 
     WriteSequencerForTest(Scheduler scheduler) {
-      super(
-          scheduler,
-          discardedValue -> {
-            // no-op
-          });
-      this.inner = new SubscriberForTest(this);
+      super(scheduler, "test", null, 1234);
+      this.inner = new SubscriberForTest(this, null, 1234);
     }
 
     @Override
-    InnerSubscriber<String> getInner() {
+    PublisherSender getInner() {
       return inner;
     }
 
@@ -82,41 +82,39 @@ public class WriteSequencerTest {
     }
 
     List<String> getSignals() {
-      return inner.signals;
+      return inner
+          .signals
+          .stream()
+          .map(AeronUtils::byteBufferToString)
+          .collect(Collectors.toList());
     }
 
-    static class SubscriberForTest extends InnerSubscriber<String> {
+    static class SubscriberForTest extends PublisherSender {
 
-      final List<String> signals = new CopyOnWriteArrayList<>();
+      final List<ByteBuffer> signals = new CopyOnWriteArrayList<>();
 
-      SubscriberForTest(WriteSequencerForTest parent) {
-        super(parent, 1);
+      SubscriberForTest(
+          AeronWriteSequencer sequencer, MessagePublication publication, long sessionId) {
+        super(sequencer, publication, sessionId);
       }
 
-      @Override
-      public void doOnNext(String o) {
+      public void doOnNext(ByteBuffer o) {
         log("onNext: " + o);
-
         signals.add(o);
       }
 
-      @Override
       void doOnSubscribe() {
         request(Long.MAX_VALUE);
       }
 
-      @Override
       public void doOnError(Throwable t) {
         log("onError: " + t);
-        promise.success();
+        super.doOnError(t);
       }
 
-      @Override
       public void doOnComplete() {
         log("onComplete");
-        promise.success();
-
-        scheduleNextPublisherDrain();
+        super.doOnComplete();
       }
     }
   }
