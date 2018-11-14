@@ -16,6 +16,7 @@ public final class AeronWrapper implements Disposable {
 
   private final String category;
 
+  // dont try to remove static qualifier! done for tests purposes
   private static final DriverManager driverManager = new DriverManager();
 
   private final Aeron aeron;

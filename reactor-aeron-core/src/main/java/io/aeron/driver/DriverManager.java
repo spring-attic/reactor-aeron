@@ -39,8 +39,10 @@ public final class DriverManager {
   private State state = notStartedState;
 
   private MediaDriver driver;
+  private MediaDriver.Context mediaContext;
 
   private Aeron aeron;
+  private Aeron.Context aeronContext;
 
   private AeronCounters aeronCounters;
 
@@ -115,11 +117,14 @@ public final class DriverManager {
   }
 
   private void doInitialize() {
-    driver = MediaDriver.launchEmbedded(new MediaDriver.Context());
-    Aeron.Context ctx = new Aeron.Context();
+    mediaContext = new MediaDriver.Context();
+    driver = MediaDriver.launchEmbedded(mediaContext);
+
+    aeronContext = new Aeron.Context();
     String aeronDirName = driver.aeronDirectoryName();
-    ctx.aeronDirectoryName(aeronDirName);
-    aeron = Aeron.connect(ctx);
+    aeronContext.aeronDirectoryName(aeronDirName);
+
+    aeron = Aeron.connect(aeronContext);
     aeronCounters = new AeronCounters(aeronDirName);
     aeronDirNames.add(aeronDirName);
 
