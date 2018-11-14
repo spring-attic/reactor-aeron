@@ -1,4 +1,4 @@
-package reactor.ipc.aeron;
+package io.aeron.driver;
 
 import java.time.Duration;
 import org.junit.jupiter.api.Test;

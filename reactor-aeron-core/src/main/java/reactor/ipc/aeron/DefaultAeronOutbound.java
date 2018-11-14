@@ -1,18 +1,17 @@
 package reactor.ipc.aeron;
 
 import io.aeron.Publication;
+import io.aeron.driver.AeronWrapper;
+import io.aeron.driver.AeronWriteSequencer;
 import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
-import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
 /** Default aeron outbound. */
 public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
-
-  private final Scheduler scheduler;
 
   private final String category;
 
@@ -40,7 +39,6 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
     this.wrapper = wrapper;
     this.channel = channel;
     this.options = options;
-    this.scheduler = Schedulers.newSingle(category + "-[sender]", false);
   }
 
   @Override
@@ -55,8 +53,6 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
 
   @Override
   public void dispose() {
-    scheduler.dispose();
-
     if (publication != null) {
       publication.dispose();
     }
@@ -80,7 +76,7 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
                   category,
                   options.connectTimeoutMillis(),
                   options.backpressureTimeoutMillis());
-          this.sequencer = new AeronWriteSequencer(scheduler, category, publication, sessionId);
+          this.sequencer = wrapper.newWriteSequencer(category, publication, sessionId);
           int timeoutMillis = options.connectTimeoutMillis();
           createRetryTask(sink, aeronPublication, timeoutMillis).schedule();
         });

@@ -1,6 +1,7 @@
 package reactor.ipc.aeron.server;
 
 import io.aeron.Subscription;
+import io.aeron.driver.AeronWrapper;
 import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
@@ -8,7 +9,6 @@ import reactor.core.Disposable;
 import reactor.core.publisher.TopicProcessor;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
-import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.ByteBufferFlux;
 import reactor.ipc.aeron.DataMessageSubscriber;
 import reactor.ipc.aeron.MessageType;

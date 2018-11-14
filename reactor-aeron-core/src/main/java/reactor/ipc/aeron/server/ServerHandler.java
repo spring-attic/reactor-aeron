@@ -1,5 +1,6 @@
 package reactor.ipc.aeron.server;
 
+import io.aeron.driver.AeronWrapper;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,7 +16,6 @@ import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
 import reactor.ipc.aeron.AeronUtils;
-import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.ControlMessageSubscriber;
 import reactor.ipc.aeron.DefaultAeronOutbound;
 import reactor.ipc.aeron.HeartbeatSender;

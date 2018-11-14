@@ -1,7 +1,7 @@
-package reactor.ipc.aeron;
+package io.aeron.driver;
 
 import io.aeron.Aeron;
-import io.aeron.driver.MediaDriver;
+import io.aeron.driver.MediaDriver.Context;
 import io.aeron.driver.status.SenderPos;
 import io.aeron.driver.status.SubscriberPos;
 import java.io.File;
@@ -16,6 +16,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
+import reactor.ipc.aeron.AeronCounters;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -39,8 +40,10 @@ public final class DriverManager {
   private State state = notStartedState;
 
   private MediaDriver driver;
+  private MediaDriver.Context mediaContext;
 
   private Aeron aeron;
+  private Aeron.Context aeronContext;
 
   private AeronCounters aeronCounters;
 
@@ -115,11 +118,14 @@ public final class DriverManager {
   }
 
   private void doInitialize() {
-    driver = MediaDriver.launchEmbedded(new MediaDriver.Context());
-    Aeron.Context ctx = new Aeron.Context();
+    mediaContext = new MediaDriver.Context();
+    driver = MediaDriver.launchEmbedded(mediaContext);
+
+    aeronContext = new Aeron.Context();
     String aeronDirName = driver.aeronDirectoryName();
-    ctx.aeronDirectoryName(aeronDirName);
-    aeron = Aeron.connect(ctx);
+    aeronContext.aeronDirectoryName(aeronDirName);
+
+    aeron = Aeron.connect(aeronContext);
     aeronCounters = new AeronCounters(aeronDirName);
     aeronDirNames.add(aeronDirName);
 
@@ -190,6 +196,14 @@ public final class DriverManager {
 
   public synchronized Aeron getAeron() {
     return aeron;
+  }
+
+  public Context getMediaContext() {
+    return mediaContext;
+  }
+
+  public Aeron.Context getAeronContext() {
+    return aeronContext;
   }
 
   private class RetryShutdownTask implements Runnable {

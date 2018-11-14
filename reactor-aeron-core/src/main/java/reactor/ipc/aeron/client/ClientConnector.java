@@ -1,13 +1,13 @@
 package reactor.ipc.aeron.client;
 
 import io.aeron.Publication;
+import io.aeron.driver.AeronWrapper;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.AeronUtils;
-import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.DefaultMessagePublication;
 import reactor.ipc.aeron.HeartbeatSender;
 import reactor.ipc.aeron.MessagePublication;

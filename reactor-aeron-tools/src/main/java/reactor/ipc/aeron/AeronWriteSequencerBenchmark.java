@@ -1,6 +1,8 @@
 package reactor.ipc.aeron;
 
 import io.aeron.Publication;
+import io.aeron.driver.AeronWrapper;
+import io.aeron.driver.AeronWriteSequencer;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import org.agrona.concurrent.BackoffIdleStrategy;
@@ -47,9 +49,8 @@ public class AeronWriteSequencerBenchmark {
             "benchmark",
             options.connectTimeoutMillis(),
             options.backpressureTimeoutMillis());
-    Scheduler scheduler = Schedulers.single();
-    AeronWriteSequencer sequencer =
-        new AeronWriteSequencer(scheduler, "test", messagePublication, 1);
+
+    AeronWriteSequencer sequencer = aeron.newWriteSequencer("test", messagePublication, 1);
 
     for (int i = 1; i <= numOfRuns; i++) {
       Publisher<ByteBuffer> publisher = new BenchmarkPublisher(1_000_000, 512);
