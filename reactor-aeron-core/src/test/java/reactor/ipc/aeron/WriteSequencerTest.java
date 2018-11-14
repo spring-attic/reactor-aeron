@@ -72,7 +72,7 @@ public class WriteSequencerTest {
     }
 
     @Override
-    SignalSender getSignalSender() {
+    PublisherSender getInner() {
       return inner;
     }
 
@@ -89,7 +89,7 @@ public class WriteSequencerTest {
           .collect(Collectors.toList());
     }
 
-    static class SubscriberForTest extends SignalSender {
+    static class SubscriberForTest extends PublisherSender {
 
       final List<ByteBuffer> signals = new CopyOnWriteArrayList<>();
 

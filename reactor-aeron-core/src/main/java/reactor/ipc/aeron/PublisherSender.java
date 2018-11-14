@@ -10,20 +10,21 @@ import reactor.core.CoreSubscriber;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Operators;
 
-class SignalSender implements CoreSubscriber<ByteBuffer>, Subscription {
+class PublisherSender implements CoreSubscriber<ByteBuffer>, Subscription {
 
-  private static final AtomicReferenceFieldUpdater<SignalSender, Subscription> MISSED_SUBSCRIPTION =
-      AtomicReferenceFieldUpdater.newUpdater(
-          SignalSender.class, Subscription.class, "missedSubscription");
+  private static final AtomicReferenceFieldUpdater<PublisherSender, Subscription>
+      MISSED_SUBSCRIPTION =
+          AtomicReferenceFieldUpdater.newUpdater(
+              PublisherSender.class, Subscription.class, "missedSubscription");
 
-  private static final AtomicLongFieldUpdater<SignalSender> MISSED_REQUESTED =
-      AtomicLongFieldUpdater.newUpdater(SignalSender.class, "missedRequested");
+  private static final AtomicLongFieldUpdater<PublisherSender> MISSED_REQUESTED =
+      AtomicLongFieldUpdater.newUpdater(PublisherSender.class, "missedRequested");
 
-  private static final AtomicLongFieldUpdater<SignalSender> MISSED_PRODUCED =
-      AtomicLongFieldUpdater.newUpdater(SignalSender.class, "missedProduced");
+  private static final AtomicLongFieldUpdater<PublisherSender> MISSED_PRODUCED =
+      AtomicLongFieldUpdater.newUpdater(PublisherSender.class, "missedProduced");
 
-  private static final AtomicIntegerFieldUpdater<SignalSender> WIP =
-      AtomicIntegerFieldUpdater.newUpdater(SignalSender.class, "wip");
+  private static final AtomicIntegerFieldUpdater<PublisherSender> WIP =
+      AtomicIntegerFieldUpdater.newUpdater(PublisherSender.class, "wip");
 
   private final int batchSize;
   private final AeronWriteSequencer sequencer;
@@ -53,7 +54,7 @@ class SignalSender implements CoreSubscriber<ByteBuffer>, Subscription {
   private MonoSink<?> promise;
   private long upstreamRequested;
 
-  SignalSender(AeronWriteSequencer sequencer, MessagePublication publication, long sessionId) {
+  PublisherSender(AeronWriteSequencer sequencer, MessagePublication publication, long sessionId) {
     this.batchSize = 16;
     this.sequencer = sequencer;
     this.sessionId = sessionId;

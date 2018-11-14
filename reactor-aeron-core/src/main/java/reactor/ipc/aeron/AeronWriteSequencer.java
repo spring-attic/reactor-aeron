@@ -25,7 +25,7 @@ class AeronWriteSequencer {
 
   private final long sessionId;
 
-  private final SignalSender signalSender;
+  private final PublisherSender inner;
 
   private final Consumer<Throwable> errorHandler;
 
@@ -50,15 +50,15 @@ class AeronWriteSequencer {
     this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
     this.sessionId = sessionId;
     this.errorHandler = th -> logger.error("[{}] Unexpected exception", category, th);
-    this.signalSender = new SignalSender(this, publication, this.sessionId);
+    this.inner = new PublisherSender(this, publication, this.sessionId);
   }
 
   Consumer<Throwable> getErrorHandler() {
     return errorHandler;
   }
 
-  SignalSender getSignalSender() {
-    return signalSender;
+  PublisherSender getInner() {
+    return inner;
   }
 
   public Mono<Void> add(Publisher<?> publisher) {
@@ -78,12 +78,12 @@ class AeronWriteSequencer {
   }
 
   boolean isReady() {
-    return !getSignalSender().isCancelled();
+    return !getInner().isCancelled();
   }
 
   @SuppressWarnings("unchecked")
   public void drain() {
-    SignalSender inner = getSignalSender();
+    PublisherSender inner = getInner();
     if (WIP.getAndIncrement(this) == 0) {
 
       for (; ; ) {
