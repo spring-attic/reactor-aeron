@@ -1,9 +1,11 @@
-package reactor.ipc.aeron;
+package io.aeron.driver;
 
 import io.aeron.Aeron;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import reactor.core.Disposable;
+import reactor.ipc.aeron.AeronOptions;
+import reactor.ipc.aeron.AeronUtils;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 

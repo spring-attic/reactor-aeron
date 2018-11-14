@@ -1,7 +1,6 @@
-package reactor.ipc.aeron;
+package io.aeron.driver;
 
 import io.aeron.Aeron;
-import io.aeron.driver.MediaDriver;
 import io.aeron.driver.status.SenderPos;
 import io.aeron.driver.status.SubscriberPos;
 import java.io.File;
@@ -16,6 +15,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
+import reactor.ipc.aeron.AeronCounters;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 

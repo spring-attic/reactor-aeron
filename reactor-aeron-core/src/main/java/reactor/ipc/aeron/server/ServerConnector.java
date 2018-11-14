@@ -1,6 +1,7 @@
 package reactor.ipc.aeron.server;
 
 import io.aeron.Publication;
+import io.aeron.driver.AeronWrapper;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import reactor.core.Disposable;
@@ -9,7 +10,6 @@ import reactor.core.publisher.MonoSink;
 import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronUtils;
-import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.DefaultMessagePublication;
 import reactor.ipc.aeron.HeartbeatSender;
 import reactor.ipc.aeron.MessagePublication;

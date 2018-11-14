@@ -1,6 +1,7 @@
 package reactor.ipc.aeron.client;
 
 import io.aeron.Subscription;
+import io.aeron.driver.AeronWrapper;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -12,7 +13,6 @@ import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.AeronConnector;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOutbound;
-import reactor.ipc.aeron.AeronWrapper;
 import reactor.ipc.aeron.DefaultAeronOutbound;
 import reactor.ipc.aeron.HeartbeatSender;
 import reactor.ipc.aeron.HeartbeatWatchdog;

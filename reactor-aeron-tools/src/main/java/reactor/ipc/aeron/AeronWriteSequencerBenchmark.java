@@ -1,6 +1,7 @@
 package reactor.ipc.aeron;
 
 import io.aeron.Publication;
+import io.aeron.driver.AeronWrapper;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import org.agrona.concurrent.BackoffIdleStrategy;
