@@ -38,6 +38,10 @@ class SignalSender implements CoreSubscriber<ByteBuffer>, Subscription {
 
   // a subscription has been cancelled
   private volatile boolean isCancelled;
+
+  // a publisher is being drained
+  private volatile boolean isActive;
+
   /** The current outstanding request amount. */
   private long requested;
 
@@ -106,6 +110,14 @@ class SignalSender implements CoreSubscriber<ByteBuffer>, Subscription {
     this.isCancelled = isCancelled;
   }
 
+  boolean isActive() {
+    return isActive;
+  }
+
+  void setActive(boolean active) {
+    isActive = active;
+  }
+
   @Override
   public final void cancel() {
     if (!isCancelled()) {
@@ -118,7 +130,7 @@ class SignalSender implements CoreSubscriber<ByteBuffer>, Subscription {
   @Override
   public void onComplete() {
     long p = produced;
-    sequencer.setInnerInactive();
+    setActive(false);
 
     if (p != 0L) {
       produced = 0L;
@@ -131,7 +143,7 @@ class SignalSender implements CoreSubscriber<ByteBuffer>, Subscription {
   @Override
   public void onError(Throwable t) {
     long p = produced;
-    sequencer.setInnerInactive();
+    setActive(false);
 
     if (p != 0L) {
       produced = 0L;
@@ -270,7 +282,7 @@ class SignalSender implements CoreSubscriber<ByteBuffer>, Subscription {
           ms.cancel();
         }
 
-        sequencer.setInnerInactive();
+        setActive(false);
       } else {
         long r = requested;
         if (r != Long.MAX_VALUE) {
