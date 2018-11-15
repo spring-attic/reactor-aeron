@@ -137,6 +137,15 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
     heartbeatWatchdog.heartbeatReceived(sessionId);
   }
 
+  @Override
+  public void onComplete(long sessionId) {
+    logger.info("[{}] Received {} for sessionId: {}", category, MessageType.COMPLETE, sessionId);
+    SessionHandler sessionHandler = sessionHandlerById.get(sessionId);
+    if (sessionHandler != null) {
+      sessionHandler.dispose();
+    }
+  }
+
   class SessionHandler implements Disposable {
 
     private final Logger logger = Loggers.getLogger(SessionHandler.class);

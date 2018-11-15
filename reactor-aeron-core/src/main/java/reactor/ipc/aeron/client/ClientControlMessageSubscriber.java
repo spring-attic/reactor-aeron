@@ -55,6 +55,12 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
   }
 
   @Override
+  public void onComplete(long sessionId) {
+    logger.info("[{}] Received {} for sessionId: {}", category, MessageType.COMPLETE, sessionId);
+    // todo to do something
+  }
+
+  @Override
   public void onConnect(
       UUID connectRequestId,
       String clientChannel,
