@@ -8,13 +8,13 @@ import org.agrona.DirectBuffer;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-public class ControlPoolerFragmentHandler implements FragmentHandler {
+public class ControlFragmentHandler implements FragmentHandler {
 
-  private final Logger logger = Loggers.getLogger(ControlPoolerFragmentHandler.class);
+  private final Logger logger = Loggers.getLogger(ControlFragmentHandler.class);
 
   private final ControlMessageSubscriber subscriber;
 
-  public ControlPoolerFragmentHandler(ControlMessageSubscriber subscriber) {
+  public ControlFragmentHandler(ControlMessageSubscriber subscriber) {
     this.subscriber = subscriber;
   }
 
@@ -55,6 +55,8 @@ public class ControlPoolerFragmentHandler implements FragmentHandler {
       subscriber.onConnectAck(connectRequestId, sessionId, serverSessionStreamId);
     } else if (type == MessageType.HEARTBEAT.ordinal()) {
       subscriber.onHeartbeat(sessionId);
+    } else if (type == MessageType.COMPLETE.ordinal()) {
+      subscriber.onComplete(sessionId);
     } else {
       // TODO: Add publication channel into the message
       logger.error("Unknown message type id: {}", type);

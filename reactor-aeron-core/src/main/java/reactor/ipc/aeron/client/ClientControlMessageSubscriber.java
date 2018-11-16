@@ -9,6 +9,7 @@ import reactor.core.publisher.MonoProcessor;
 import reactor.ipc.aeron.ControlMessageSubscriber;
 import reactor.ipc.aeron.HeartbeatWatchdog;
 import reactor.ipc.aeron.MessageType;
+import reactor.ipc.aeron.Protocol;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -52,6 +53,18 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
   @Override
   public void onHeartbeat(long sessionId) {
     heartbeatWatchdog.heartbeatReceived(sessionId);
+  }
+
+  /**
+   * Handler for complete signal from server. At the moment of writing this javadoc the server
+   * doesn't emit complete signal. Method is left with logging. See for details {@link
+   * MessageType#COMPLETE}, {@link Protocol#createDisconnectBody(long)}.
+   *
+   * @param sessionId session id
+   */
+  @Override
+  public void onComplete(long sessionId) {
+    logger.info("[{}] Received {} for sessionId: {}", category, MessageType.COMPLETE, sessionId);
   }
 
   @Override

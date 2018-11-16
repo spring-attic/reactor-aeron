@@ -140,11 +140,11 @@ public class Pooler implements Runnable {
         AtomicLongFieldUpdater.newUpdater(InnerPooler.class, "requested");
 
     InnerPooler(Subscription subscription, ControlMessageSubscriber subscriber) {
-      this(subscription, subscriber, new ControlPoolerFragmentHandler(subscriber));
+      this(subscription, subscriber, new ControlFragmentHandler(subscriber));
     }
 
     InnerPooler(Subscription subscription, DataMessageSubscriber subscriber) {
-      this(subscription, subscriber, new DataPoolerFragmentHandler(subscriber));
+      this(subscription, subscriber, new DataFragmentHandler(subscriber));
     }
 
     private InnerPooler(
