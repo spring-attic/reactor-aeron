@@ -52,7 +52,8 @@ public final class AeronClient implements AeronConnector, Disposable {
     this.options = options;
     this.name = name == null ? "client" : name;
     this.heartbeatWatchdog = new HeartbeatWatchdog(options.heartbeatTimeoutMillis(), this.name);
-    this.controlMessageSubscriber = new ClientControlMessageSubscriber(name, heartbeatWatchdog);
+    this.controlMessageSubscriber =
+        new ClientControlMessageSubscriber(name, heartbeatWatchdog, this::dispose);
     this.clientControlStreamId = streamIdCounter.incrementAndGet();
     this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), this.name);
 
@@ -109,6 +110,14 @@ public final class AeronClient implements AeronConnector, Disposable {
     wrapper.dispose();
   }
 
+  private void dispose(long sessionId) {
+    handlers
+        .stream()
+        .filter(handler -> handler.sessionId == sessionId)
+        .findFirst()
+        .ifPresent(ClientHandler::dispose);
+  }
+
   class ClientHandler implements Disposable {
 
     private final BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>>
@@ -150,11 +159,13 @@ public final class AeronClient implements AeronConnector, Disposable {
               connectAckResponse -> {
                 inbound =
                     new AeronClientInbound(
+                        name,
                         pooler,
                         wrapper,
                         options.clientChannel(),
                         clientSessionStreamId,
-                        connectAckResponse.sessionId);
+                        connectAckResponse.sessionId,
+                        this::dispose);
 
                 this.sessionId = connectAckResponse.sessionId;
                 heartbeatWatchdog.add(
