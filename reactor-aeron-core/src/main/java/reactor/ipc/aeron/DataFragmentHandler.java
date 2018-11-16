@@ -8,13 +8,13 @@ import org.agrona.DirectBuffer;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-public class DataPoolerFragmentHandler implements FragmentHandler {
+public class DataFragmentHandler implements FragmentHandler {
 
-  private final Logger logger = Loggers.getLogger(DataPoolerFragmentHandler.class);
+  private final Logger logger = Loggers.getLogger(DataFragmentHandler.class);
 
   private final DataMessageSubscriber subscriber;
 
-  public DataPoolerFragmentHandler(DataMessageSubscriber subscriber) {
+  public DataFragmentHandler(DataMessageSubscriber subscriber) {
     this.subscriber = subscriber;
   }
 
