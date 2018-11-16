@@ -1,9 +1,9 @@
 package reactor.ipc.aeron.server;
 
 import io.aeron.driver.AeronWrapper;
-import java.util.Map;
+import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
@@ -46,7 +46,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
   private final HeartbeatWatchdog heartbeatWatchdog;
 
-  private final Map<Long, SessionHandler> sessionHandlerById = new ConcurrentHashMap<>();
+  private final List<SessionHandler> handlers = new CopyOnWriteArrayList<>();
 
   private final HeartbeatSender heartbeatSender;
 
@@ -80,8 +80,8 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
         .shutdown()
         .doOnTerminate(
             () -> {
-              sessionHandlerById.values().forEach(SessionHandler::dispose);
-
+              handlers.forEach(SessionHandler::dispose);
+              handlers.clear();
               controlSubscription.close();
               wrapper.dispose();
             })
@@ -140,10 +140,11 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
   @Override
   public void onComplete(long sessionId) {
     logger.info("[{}] Received {} for sessionId: {}", category, MessageType.COMPLETE, sessionId);
-    SessionHandler sessionHandler = sessionHandlerById.get(sessionId);
-    if (sessionHandler != null) {
-      sessionHandler.dispose();
-    }
+    handlers
+        .stream()
+        .filter(handler -> handler.sessionId == sessionId)
+        .findFirst()
+        .ifPresent(SessionHandler::dispose);
   }
 
   class SessionHandler implements Disposable {
@@ -207,7 +208,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
                     },
                     inbound::lastSignalTimeNs);
 
-                sessionHandlerById.put(sessionId, this);
+                handlers.add(this);
 
                 logger.debug(
                     "[{}] Client with connectRequestId: {} successfully connected, sessionId: {}",
@@ -232,7 +233,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
     @Override
     public void dispose() {
-      sessionHandlerById.remove(this);
+      handlers.remove(this);
 
       heartbeatWatchdog.remove(sessionId);
 
