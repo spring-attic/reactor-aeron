@@ -12,8 +12,12 @@ import reactor.ipc.aeron.ByteBufferFlux;
 import reactor.ipc.aeron.DataMessageSubscriber;
 import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.Pooler;
+import reactor.util.Logger;
+import reactor.util.Loggers;
 
 final class AeronClientInbound implements AeronInbound, Disposable {
+
+  private static final Logger logger = Loggers.getLogger(AeronClientInbound.class);
 
   private final ByteBufferFlux flux;
 
@@ -24,11 +28,17 @@ final class AeronClientInbound implements AeronInbound, Disposable {
   private final ClientDataMessageProcessor processor;
 
   AeronClientInbound(
-      Pooler pooler, AeronWrapper wrapper, String channel, int streamId, long sessionId) {
+      String name,
+      Pooler pooler,
+      AeronWrapper wrapper,
+      String channel,
+      int streamId,
+      long sessionId,
+      Runnable onCompleteHandler) {
     this.pooler = Objects.requireNonNull(pooler);
     this.serverDataSubscription =
         wrapper.addSubscription(channel, streamId, "to receive data from server on", sessionId);
-    this.processor = new ClientDataMessageProcessor(sessionId);
+    this.processor = new ClientDataMessageProcessor(name, sessionId, onCompleteHandler);
     this.flux = new ByteBufferFlux(processor);
 
     pooler.addDataSubscription(serverDataSubscription, processor);
@@ -52,6 +62,8 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
   static class ClientDataMessageProcessor implements DataMessageSubscriber, Publisher<ByteBuffer> {
 
+    private final String category;
+
     private final long sessionId;
 
     private volatile long lastSignalTimeNs = 0;
@@ -60,8 +72,12 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
     private volatile Subscriber<? super ByteBuffer> subscriber;
 
-    ClientDataMessageProcessor(long sessionId) {
+    private final Runnable onCompleteHandler;
+
+    ClientDataMessageProcessor(String category, long sessionId, Runnable onCompleteHandler) {
+      this.category = category;
       this.sessionId = sessionId;
+      this.onCompleteHandler = onCompleteHandler;
     }
 
     @Override
@@ -80,7 +96,22 @@ final class AeronClientInbound implements AeronInbound, Disposable {
     }
 
     @Override
-    public void onComplete(long sessionId) {}
+    public void onComplete(long sessionId) {
+      if (logger.isTraceEnabled()) {
+        logger.trace(
+            "[{}] Received {} for sessionId: {}", category, MessageType.COMPLETE, sessionId);
+      }
+
+      if (this.sessionId == sessionId) {
+        onCompleteHandler.run();
+      } else {
+        logger.error(
+            "[{}] Received {} for unexpected sessionId: {}",
+            category,
+            MessageType.COMPLETE,
+            sessionId);
+      }
+    }
 
     @Override
     public void subscribe(Subscriber<? super ByteBuffer> subscriber) {

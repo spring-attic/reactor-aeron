@@ -3,6 +3,7 @@ package reactor.ipc.aeron.client;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
@@ -10,6 +11,7 @@ import reactor.ipc.aeron.ControlMessageSubscriber;
 import reactor.ipc.aeron.HeartbeatWatchdog;
 import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.Protocol;
+import reactor.ipc.aeron.client.AeronClientInbound.ClientDataMessageProcessor;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -21,12 +23,16 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
 
   private final HeartbeatWatchdog heartbeatWatchdog;
 
+  private final Consumer<Long> onCompleteHandler;
+
   private final Map<UUID, MonoProcessor<ConnectAckResponse>> sinkByConnectRequestId =
       new ConcurrentHashMap<>();
 
-  ClientControlMessageSubscriber(String category, HeartbeatWatchdog heartbeatWatchdog) {
+  ClientControlMessageSubscriber(
+      String category, HeartbeatWatchdog heartbeatWatchdog, Consumer<Long> onCompleteHandler) {
     this.category = category;
     this.heartbeatWatchdog = heartbeatWatchdog;
+    this.onCompleteHandler = onCompleteHandler;
   }
 
   @Override
@@ -57,14 +63,17 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
 
   /**
    * Handler for complete signal from server. At the moment of writing this javadoc the server
-   * doesn't emit complete signal. Method is left with logging. See for details {@link
-   * MessageType#COMPLETE}, {@link Protocol#createDisconnectBody(long)}.
+   * doesn't emit complete signal. Method is left with logging.
+   *
+   * <p>See for details: {@link MessageType#COMPLETE}, {@link Protocol#createDisconnectBody(long)},
+   * {@link ClientDataMessageProcessor#onComplete(long)}.
    *
    * @param sessionId session id
    */
   @Override
   public void onComplete(long sessionId) {
     logger.info("[{}] Received {} for sessionId: {}", category, MessageType.COMPLETE, sessionId);
+    onCompleteHandler.accept(sessionId);
   }
 
   @Override
