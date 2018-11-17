@@ -1,8 +1,6 @@
-package reactor.ipc.aeron;
+package io.aeron.driver;
 
 import io.aeron.Publication;
-import io.aeron.driver.AeronWrapper;
-import io.aeron.driver.AeronWriteSequencer;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import org.agrona.concurrent.BackoffIdleStrategy;
@@ -13,6 +11,11 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
+import reactor.ipc.aeron.AeronOptions;
+import reactor.ipc.aeron.AeronUtils;
+import reactor.ipc.aeron.DebugUtil;
+import reactor.ipc.aeron.DefaultMessagePublication;
+import reactor.ipc.aeron.MessagePublication;
 
 public class AeronWriteSequencerBenchmark {
 
@@ -36,13 +39,16 @@ public class AeronWriteSequencerBenchmark {
 
   private void run() {
     AeronOptions options = new AeronOptions();
-    AeronWrapper aeron = new AeronWrapper("bench", options.getAeron());
-    io.aeron.Subscription subscription = aeron.addSubscription(channel, 1, "benchmark", 0);
+    AeronResources aeronResources = new AeronResources("benchmark");
+
+    io.aeron.Subscription subscription =
+        aeronResources.addSubscription("benchmark", channel, 1, "benchmark", 0);
 
     BenchmarkPooler pooler = new BenchmarkPooler(subscription);
     pooler.schedulePoll();
 
-    Publication publication = aeron.addPublication(channel, 1, "benchmark", 0);
+    Publication publication = aeronResources.publication("benchmark", channel, 1, "benchmark", 0);
+
     MessagePublication messagePublication =
         new DefaultMessagePublication(
             publication,
@@ -50,7 +56,7 @@ public class AeronWriteSequencerBenchmark {
             options.connectTimeoutMillis(),
             options.backpressureTimeoutMillis());
 
-    AeronWriteSequencer sequencer = aeron.newWriteSequencer("test", messagePublication, 1);
+    AeronWriteSequencer sequencer = aeronResources.newWriteSequencer("test", messagePublication, 1);
 
     for (int i = 1; i <= numOfRuns; i++) {
       Publisher<ByteBuffer> publisher = new BenchmarkPublisher(1_000_000, 512);
@@ -66,7 +72,9 @@ public class AeronWriteSequencerBenchmark {
     }
 
     pooler.dispose();
-    aeron.dispose();
+    aeronResources.release(publication);
+    aeronResources.release(subscription);
+    aeronResources.dispose();
   }
 
   private static class BenchmarkPooler implements Disposable {

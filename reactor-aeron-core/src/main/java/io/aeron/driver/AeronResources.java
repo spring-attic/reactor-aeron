@@ -187,7 +187,7 @@ public class AeronResources implements Disposable, AutoCloseable {
     return !isRunning;
   }
 
-  private Subscription addSubscription(
+  Subscription addSubscription(
       String category, String channel, int streamId, String purpose, long sessionId) {
     Subscription subscription = aeron.addSubscription(channel, streamId);
     if (logger.isDebugEnabled()) {
