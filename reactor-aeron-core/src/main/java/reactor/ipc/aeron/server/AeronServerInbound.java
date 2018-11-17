@@ -1,7 +1,6 @@
 package reactor.ipc.aeron.server;
 
 import io.aeron.Subscription;
-import io.aeron.driver.AeronWrapper;
 import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
@@ -9,10 +8,10 @@ import reactor.core.Disposable;
 import reactor.core.publisher.TopicProcessor;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
+import reactor.ipc.aeron.AeronResources;
 import reactor.ipc.aeron.ByteBufferFlux;
 import reactor.ipc.aeron.DataMessageSubscriber;
 import reactor.ipc.aeron.MessageType;
-import reactor.ipc.aeron.Pooler;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -22,33 +21,37 @@ final class AeronServerInbound implements AeronInbound, Disposable {
 
   private final TopicProcessor<ByteBuffer> processor;
 
-  private final Pooler pooler;
-
   private final Subscription serverDataSubscription;
 
   private final ServerDataMessageProcessor messageProcessor;
 
+  private final AeronResources aeronResources;
+
   AeronServerInbound(
       String name,
-      AeronWrapper wrapper,
+      AeronResources aeronResources,
       AeronOptions options,
-      Pooler pooler,
       int serverSessionStreamId,
       long sessionId,
       Runnable onCompleteHandler) {
     this.processor = TopicProcessor.<ByteBuffer>builder().name(name).build();
-    this.pooler = pooler;
+    this.aeronResources = aeronResources;
     this.flux = new ByteBufferFlux(processor);
 
     this.serverDataSubscription =
-        wrapper.addSubscription(
-            options.serverChannel(), serverSessionStreamId, "to receive client data on", sessionId);
+        aeronResources
+            .aeronWrapper()
+            .addSubscription(
+                options.serverChannel(),
+                serverSessionStreamId,
+                "to receive client data on",
+                sessionId);
 
     this.messageProcessor = new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
   }
 
   void initialise() {
-    pooler.addDataSubscription(serverDataSubscription, messageProcessor);
+    aeronResources.pooler().addDataSubscription(serverDataSubscription, messageProcessor);
 
     messageProcessor.subscribe(processor);
   }
@@ -61,8 +64,7 @@ final class AeronServerInbound implements AeronInbound, Disposable {
   @Override
   public void dispose() {
     processor.onComplete();
-
-    pooler.removeSubscription(serverDataSubscription);
+    aeronResources.pooler().removeSubscription(serverDataSubscription);
     serverDataSubscription.close();
   }
 

@@ -1,7 +1,6 @@
 package reactor.ipc.aeron.client;
 
 import io.aeron.Subscription;
-import io.aeron.driver.AeronWrapper;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -13,10 +12,10 @@ import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.AeronConnector;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOutbound;
+import reactor.ipc.aeron.AeronResources;
 import reactor.ipc.aeron.DefaultAeronOutbound;
 import reactor.ipc.aeron.HeartbeatSender;
 import reactor.ipc.aeron.HeartbeatWatchdog;
-import reactor.ipc.aeron.Pooler;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -30,10 +29,6 @@ public final class AeronClient implements AeronConnector, Disposable {
 
   private static final AtomicInteger streamIdCounter = new AtomicInteger();
 
-  private final Pooler pooler;
-
-  private final AeronWrapper wrapper;
-
   private final ClientControlMessageSubscriber controlMessageSubscriber;
 
   private final Subscription controlSubscription;
@@ -46,49 +41,50 @@ public final class AeronClient implements AeronConnector, Disposable {
 
   private final HeartbeatWatchdog heartbeatWatchdog;
 
-  private AeronClient(String name, Consumer<AeronClientOptions> optionsConfigurer) {
+  private final AeronResources aeronResources;
+
+  /**
+   * Create aeron client.
+   *
+   * @param aeronResources aeronResources
+   * @return aeron client
+   */
+  public static AeronClient create(AeronResources aeronResources) {
+    return new AeronClient(
+        null,
+        aeronResources,
+        options -> {
+          // no-op
+        });
+  }
+
+  public static AeronClient create(
+      String name, AeronResources aeronResources, Consumer<AeronClientOptions> optionsConfigurer) {
+    return new AeronClient(name, aeronResources, optionsConfigurer);
+  }
+
+  private AeronClient(
+      String name, AeronResources aeronResources, Consumer<AeronClientOptions> optionsConfigurer) {
     AeronClientOptions options = new AeronClientOptions();
     optionsConfigurer.accept(options);
     this.options = options;
     this.name = name == null ? "client" : name;
+    this.aeronResources = aeronResources;
     this.heartbeatWatchdog = new HeartbeatWatchdog(options.heartbeatTimeoutMillis(), this.name);
     this.controlMessageSubscriber =
         new ClientControlMessageSubscriber(name, heartbeatWatchdog, this::dispose);
     this.clientControlStreamId = streamIdCounter.incrementAndGet();
     this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), this.name);
 
-    this.wrapper = new AeronWrapper(this.name, options);
     this.controlSubscription =
-        wrapper.addSubscription(
-            options.clientChannel(), clientControlStreamId, "to receive control requests on", 0);
-
-    Pooler pooler = new Pooler(this.name);
-    pooler.addControlSubscription(controlSubscription, controlMessageSubscriber);
-    pooler.initialise();
-
-    this.pooler = pooler;
-  }
-
-  public static AeronClient create(String name, Consumer<AeronClientOptions> optionsConfigurer) {
-    return new AeronClient(name, optionsConfigurer);
-  }
-
-  /**
-   * Aeron client.
-   *
-   * @param name name
-   * @return aeron client
-   */
-  public static AeronClient create(String name) {
-    return create(
-        name,
-        options -> {
-          // no-op
-        });
-  }
-
-  public static AeronClient create() {
-    return create(null);
+        aeronResources
+            .aeronWrapper()
+            .addSubscription(
+                options.clientChannel(),
+                clientControlStreamId,
+                "to receive control requests on",
+                0);
+    aeronResources.pooler().addControlSubscription(controlSubscription, controlMessageSubscriber);
   }
 
   @Override
@@ -101,13 +97,9 @@ public final class AeronClient implements AeronConnector, Disposable {
   @Override
   public void dispose() {
     handlers.forEach(ClientHandler::dispose);
-
-    pooler.removeSubscription(controlSubscription);
-    pooler.shutdown().block();
-
+    handlers.clear();
+    aeronResources.pooler().removeSubscription(controlSubscription);
     controlSubscription.close();
-
-    wrapper.dispose();
   }
 
   private void dispose(long sessionId) {
@@ -138,11 +130,12 @@ public final class AeronClient implements AeronConnector, Disposable {
             ioHandler) {
       this.ioHandler = ioHandler;
       this.clientSessionStreamId = streamIdCounter.incrementAndGet();
-      this.outbound = new DefaultAeronOutbound(name, wrapper, options.serverChannel(), options);
+      this.outbound =
+          new DefaultAeronOutbound(name, aeronResources, options.serverChannel(), options);
       this.connector =
           new ClientConnector(
               name,
-              wrapper,
+              aeronResources,
               options,
               controlMessageSubscriber,
               heartbeatSender,
@@ -160,8 +153,7 @@ public final class AeronClient implements AeronConnector, Disposable {
                 inbound =
                     new AeronClientInbound(
                         name,
-                        pooler,
-                        wrapper,
+                        aeronResources,
                         options.clientChannel(),
                         clientSessionStreamId,
                         connectAckResponse.sessionId,

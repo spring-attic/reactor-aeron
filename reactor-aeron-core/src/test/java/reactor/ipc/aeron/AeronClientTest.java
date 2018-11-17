@@ -3,6 +3,8 @@ package reactor.ipc.aeron;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.Duration;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
@@ -13,18 +15,32 @@ import reactor.test.StepVerifier;
 
 public class AeronClientTest extends BaseAeronTest {
 
-  private String serverChannel =
+  private static String serverChannel =
       "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort(13000);
 
-  private String clientChannel =
+  private static String clientChannel =
       "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort();
+
+  private static AeronResources aeronResources;
+
+  @BeforeAll
+  static void beforeAll() {
+    aeronResources = new AeronResources("test");
+  }
+
+  @AfterAll
+  static void afterAll() {
+    if (aeronResources != null) {
+      aeronResources.dispose();
+    }
+  }
 
   @Test
   public void testClientCouldNotConnectToServer() {
     assertThrows(
         RuntimeException.class,
         () -> {
-          AeronClient client = AeronClient.create();
+          AeronClient client = AeronClient.create(aeronResources);
           try {
             client.newHandler((inbound, outbound) -> Mono.never()).block();
           } finally {
@@ -156,6 +172,7 @@ public class AeronClientTest extends BaseAeronTest {
     AeronServer server =
         AeronServer.create(
             "server",
+            aeronResources,
             options -> {
               options.serverChannel(serverChannel);
               options.heartbeatTimeoutMillis(500);
@@ -176,6 +193,7 @@ public class AeronClientTest extends BaseAeronTest {
     AeronClient client =
         AeronClient.create(
             "client",
+            aeronResources,
             options -> {
               options.clientChannel(clientChannel);
               options.serverChannel(serverChannel);
@@ -200,6 +218,7 @@ public class AeronClientTest extends BaseAeronTest {
   private AeronClient createAeronClient(String name) {
     return AeronClient.create(
         name,
+        aeronResources,
         options -> {
           options.clientChannel(clientChannel);
           options.serverChannel(serverChannel);
@@ -207,6 +226,6 @@ public class AeronClientTest extends BaseAeronTest {
   }
 
   private AeronServer createAeronServer(String name) {
-    return AeronServer.create(name, options -> options.serverChannel(serverChannel));
+    return AeronServer.create(name, aeronResources, options -> options.serverChannel(serverChannel));
   }
 }

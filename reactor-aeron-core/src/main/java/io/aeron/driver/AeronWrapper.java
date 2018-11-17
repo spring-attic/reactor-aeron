@@ -4,7 +4,6 @@ import io.aeron.Aeron;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import reactor.core.Disposable;
-import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.MessagePublication;
 import reactor.util.Logger;
@@ -28,16 +27,16 @@ public final class AeronWrapper implements Disposable {
    * Constructor.
    *
    * @param category category
-   * @param options options
+   * @param aeron aeron
    */
-  public AeronWrapper(String category, AeronOptions options) {
+  public AeronWrapper(String category, Aeron aeron) {
     this.category = category;
-    if (options.getAeron() == null) {
+    if (aeron == null) {
       driverManager.launchDriver();
-      aeron = driverManager.getAeron();
+      this.aeron = driverManager.getAeron();
       isDriverLaunched = true;
     } else {
-      aeron = options.getAeron();
+      this.aeron = aeron;
       isDriverLaunched = false;
     }
   }

@@ -1,6 +1,5 @@
 package reactor.ipc.aeron.server;
 
-import io.aeron.driver.AeronWrapper;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -15,13 +14,13 @@ import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
+import reactor.ipc.aeron.AeronResources;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.ControlMessageSubscriber;
 import reactor.ipc.aeron.DefaultAeronOutbound;
 import reactor.ipc.aeron.HeartbeatSender;
 import reactor.ipc.aeron.HeartbeatWatchdog;
 import reactor.ipc.aeron.MessageType;
-import reactor.ipc.aeron.Pooler;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -33,14 +32,12 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
   private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
-  private final AeronWrapper wrapper;
-
   private final BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>>
       ioHandler;
 
   private final AeronOptions options;
 
-  private final Pooler pooler;
+  private final AeronResources aeronResources;
 
   private final AtomicLong nextSessionId = new AtomicLong(0);
 
@@ -55,37 +52,33 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
   ServerHandler(
       String category,
       BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler,
+      AeronResources aeronResources,
       AeronOptions options) {
-    this.wrapper = new AeronWrapper(category, options);
+    this.aeronResources = aeronResources;
     this.controlSubscription =
-        wrapper.addSubscription(
-            options.serverChannel(), options.serverStreamId(), "to receive control requests on", 0);
+        aeronResources
+            .aeronWrapper()
+            .addSubscription(
+                options.serverChannel(),
+                options.serverStreamId(),
+                "to receive control requests on",
+                0);
+
+    aeronResources.pooler().addControlSubscription(controlSubscription, this);
 
     this.category = category;
     this.ioHandler = ioHandler;
     this.options = options;
-    this.pooler = new Pooler(category);
     this.heartbeatWatchdog = new HeartbeatWatchdog(options.heartbeatTimeoutMillis(), category);
     this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), category);
   }
 
-  void initialise() {
-    pooler.addControlSubscription(controlSubscription, this);
-    pooler.initialise();
-  }
-
   @Override
   public void dispose() {
-    pooler
-        .shutdown()
-        .doOnTerminate(
-            () -> {
-              handlers.forEach(SessionHandler::dispose);
-              handlers.clear();
-              controlSubscription.close();
-              wrapper.dispose();
-            })
-        .subscribe();
+    handlers.forEach(SessionHandler::dispose);
+    handlers.clear();
+    aeronResources.pooler().removeSubscription(controlSubscription);
+    controlSubscription.close();
   }
 
   @Override
@@ -171,16 +164,16 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
         long sessionId,
         int serverSessionStreamId) {
       this.clientSessionStreamId = clientSessionStreamId;
-      this.outbound = new DefaultAeronOutbound(category, wrapper, clientChannel, options);
+      this.outbound = new DefaultAeronOutbound(category, aeronResources, clientChannel, options);
       this.connectRequestId = connectRequestId;
       this.sessionId = sessionId;
       this.inbound =
           new AeronServerInbound(
-              category, wrapper, options, pooler, serverSessionStreamId, sessionId, this::dispose);
+              category, aeronResources, options, serverSessionStreamId, sessionId, this::dispose);
       this.connector =
           new ServerConnector(
               category,
-              wrapper,
+              aeronResources,
               clientChannel,
               clientControlStreamId,
               sessionId,

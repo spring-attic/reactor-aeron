@@ -36,7 +36,7 @@ public class AeronWriteSequencerBenchmark {
 
   private void run() {
     AeronOptions options = new AeronOptions();
-    AeronWrapper aeron = new AeronWrapper("bench", options);
+    AeronWrapper aeron = new AeronWrapper("bench", options.getAeron());
     io.aeron.Subscription subscription = aeron.addSubscription(channel, 1, "benchmark", 0);
 
     BenchmarkPooler pooler = new BenchmarkPooler(subscription);

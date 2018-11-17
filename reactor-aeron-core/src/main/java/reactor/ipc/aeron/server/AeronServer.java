@@ -10,6 +10,7 @@ import reactor.ipc.aeron.AeronConnector;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
+import reactor.ipc.aeron.AeronResources;
 
 /** Aeron server. */
 public final class AeronServer implements AeronConnector {
@@ -18,35 +19,32 @@ public final class AeronServer implements AeronConnector {
 
   private final String name;
 
-  public static AeronServer create(String name, Consumer<AeronOptions> optionsConfigurer) {
-    return new AeronServer(name, optionsConfigurer);
-  }
+  private final AeronResources aeronResources;
 
   /**
-   * Factory method.
+   * Create aeron server.
    *
-   * @param name name
+   * @param aeronResources aeronResources
    * @return aeron server
    */
-  public static AeronServer create(String name) {
+  public static AeronServer create(AeronResources aeronResources) {
     return create(
-        name,
+        null,
+        aeronResources,
         options -> {
           // no-op
         });
   }
 
-  /**
-   * Factory method.
-   *
-   * @return aeron server
-   */
-  public static AeronServer create() {
-    return create(null);
+  public static AeronServer create(
+      String name, AeronResources aeronResources, Consumer<AeronOptions> optionsConfigurer) {
+    return new AeronServer(name, aeronResources, optionsConfigurer);
   }
 
-  private AeronServer(String name, Consumer<AeronOptions> optionsConfigurer) {
+  private AeronServer(
+      String name, AeronResources aeronResources, Consumer<AeronOptions> optionsConfigurer) {
     this.name = name == null ? "server" : name;
+    this.aeronResources = aeronResources;
     AeronOptions options = new AeronOptions();
     optionsConfigurer.accept(options);
     this.options = options;
@@ -59,9 +57,7 @@ public final class AeronServer implements AeronConnector {
 
     return Mono.create(
         sink -> {
-          ServerHandler handler = new ServerHandler(name, ioHandler, options);
-          handler.initialise();
-
+          ServerHandler handler = new ServerHandler(name, ioHandler, aeronResources, options);
           sink.success(handler);
         });
   }
