@@ -37,6 +37,8 @@ public class ServerConnector implements Disposable {
 
   private final HeartbeatSender heartbeatSender;
 
+  private final AeronResources aeronResources;
+
   private volatile Disposable heartbeatSenderDisposable =
       () -> {
         // no-op
@@ -58,14 +60,10 @@ public class ServerConnector implements Disposable {
     this.options = options;
     this.sessionId = sessionId;
     this.heartbeatSender = heartbeatSender;
+    this.aeronResources = aeronResources;
     this.clientControlPublication =
-        aeronResources
-            .aeronWrapper()
-            .addPublication(
-                clientChannel,
-                clientControlStreamId,
-                "to send control requests to client",
-                sessionId);
+        aeronResources.publication(
+            clientChannel, clientControlStreamId, "to send control requests to client", sessionId);
   }
 
   Mono<Void> connect() {
@@ -104,7 +102,7 @@ public class ServerConnector implements Disposable {
   @Override
   public void dispose() {
     heartbeatSenderDisposable.dispose();
-    clientControlPublication.close();
+    aeronResources.release(clientControlPublication);
   }
 
   class SendConnectAckTask implements Callable<Boolean> {

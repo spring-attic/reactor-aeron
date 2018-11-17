@@ -36,6 +36,8 @@ final class ClientConnector implements Disposable {
   private final Publication serverControlPublication;
 
   private final HeartbeatSender heartbeatSender;
+  
+  private final AeronResources aeronResources;
 
   private volatile long sessionId;
 
@@ -53,6 +55,7 @@ final class ClientConnector implements Disposable {
       int clientControlStreamId,
       int clientSessionStreamId) {
     this.category = category;
+    this.aeronResources = aeronResources;
     this.options = options;
     this.controlMessageSubscriber = controlMessageSubscriber;
     this.clientControlStreamId = clientControlStreamId;
@@ -60,13 +63,11 @@ final class ClientConnector implements Disposable {
     this.heartbeatSender = heartbeatSender;
     this.connectRequestId = UuidUtils.create();
     this.serverControlPublication =
-        aeronResources
-            .aeronWrapper()
-            .addPublication(
-                options.serverChannel(),
-                options.serverStreamId(),
-                "to send control requests to server",
-                0);
+        aeronResources.publication(
+            options.serverChannel(),
+            options.serverStreamId(),
+            "to send control requests to server",
+            0);
   }
 
   Mono<ClientControlMessageSubscriber.ConnectAckResponse> connect() {
@@ -190,6 +191,6 @@ final class ClientConnector implements Disposable {
 
     heartbeatSenderDisposable.dispose();
 
-    serverControlPublication.close();
+    aeronResources.release(serverControlPublication);
   }
 }

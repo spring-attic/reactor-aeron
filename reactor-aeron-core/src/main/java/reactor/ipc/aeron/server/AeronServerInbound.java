@@ -5,9 +5,9 @@ import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import reactor.core.Disposable;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.TopicProcessor;
 import reactor.ipc.aeron.AeronInbound;
-import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronResources;
 import reactor.ipc.aeron.ByteBufferFlux;
 import reactor.ipc.aeron.DataMessageSubscriber;
@@ -17,43 +17,36 @@ import reactor.util.Loggers;
 
 final class AeronServerInbound implements AeronInbound, Disposable {
 
-  private final ByteBufferFlux flux;
-
   private final TopicProcessor<ByteBuffer> processor;
-
-  private final Subscription serverDataSubscription;
-
-  private final ServerDataMessageProcessor messageProcessor;
+  private final ByteBufferFlux flux;
 
   private final AeronResources aeronResources;
 
-  AeronServerInbound(
-      String name,
-      AeronResources aeronResources,
-      AeronOptions options,
-      int serverSessionStreamId,
-      long sessionId,
-      Runnable onCompleteHandler) {
+  private Subscription serverDataSubscription;
+  private ServerDataMessageProcessor messageProcessor;
+
+  AeronServerInbound(String name, AeronResources aeronResources) {
     this.processor = TopicProcessor.<ByteBuffer>builder().name(name).build();
     this.aeronResources = aeronResources;
     this.flux = new ByteBufferFlux(processor);
-
-    this.serverDataSubscription =
-        aeronResources
-            .aeronWrapper()
-            .addSubscription(
-                options.serverChannel(),
-                serverSessionStreamId,
-                "to receive client data on",
-                sessionId);
-
-    this.messageProcessor = new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
   }
 
-  void initialise() {
-    aeronResources.pooler().addDataSubscription(serverDataSubscription, messageProcessor);
-
+  Mono<Void> initialise(
+      String name,
+      String channel,
+      int serverSessionStreamId,
+      long sessionId,
+      Runnable onCompleteHandler) {
+    messageProcessor = new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
+    serverDataSubscription =
+        aeronResources.dataSubscription(
+            channel,
+            serverSessionStreamId,
+            "to receive client data on",
+            sessionId,
+            messageProcessor);
     messageProcessor.subscribe(processor);
+    return Mono.empty(); // FIXME Mono.fromRunnable()
   }
 
   @Override
@@ -64,8 +57,7 @@ final class AeronServerInbound implements AeronInbound, Disposable {
   @Override
   public void dispose() {
     processor.onComplete();
-    aeronResources.pooler().removeSubscription(serverDataSubscription);
-    serverDataSubscription.close();
+    aeronResources.release(serverDataSubscription);
   }
 
   long lastSignalTimeNs() {

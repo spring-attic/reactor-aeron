@@ -33,14 +33,11 @@ final class AeronClientInbound implements AeronInbound, Disposable {
       long sessionId,
       Runnable onCompleteHandler) {
     this.aeronResources = aeronResources;
-    this.serverDataSubscription =
-        aeronResources
-            .aeronWrapper()
-            .addSubscription(channel, streamId, "to receive data from server on", sessionId);
     this.processor = new ClientDataMessageProcessor(name, sessionId, onCompleteHandler);
     this.flux = new ByteBufferFlux(processor);
-
-    aeronResources.pooler().addDataSubscription(serverDataSubscription, processor);
+    this.serverDataSubscription =
+        aeronResources.dataSubscription(
+            channel, streamId, "to receive data from server on", sessionId, processor);
   }
 
   @Override
@@ -50,8 +47,7 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
   @Override
   public void dispose() {
-    aeronResources.pooler().removeSubscription(serverDataSubscription);
-    serverDataSubscription.close();
+    aeronResources.release(serverDataSubscription);
   }
 
   long getLastSignalTimeNs() {

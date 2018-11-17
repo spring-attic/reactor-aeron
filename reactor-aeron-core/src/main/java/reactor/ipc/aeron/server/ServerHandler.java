@@ -56,15 +56,12 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
       AeronOptions options) {
     this.aeronResources = aeronResources;
     this.controlSubscription =
-        aeronResources
-            .aeronWrapper()
-            .addSubscription(
-                options.serverChannel(),
-                options.serverStreamId(),
-                "to receive control requests on",
-                0);
-
-    aeronResources.pooler().addControlSubscription(controlSubscription, this);
+        aeronResources.controlSubscription(
+            options.serverChannel(),
+            options.serverStreamId(),
+            "to receive control requests on",
+            0,
+            this);
 
     this.category = category;
     this.ioHandler = ioHandler;
@@ -77,8 +74,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
   public void dispose() {
     handlers.forEach(SessionHandler::dispose);
     handlers.clear();
-    aeronResources.pooler().removeSubscription(controlSubscription);
-    controlSubscription.close();
+    aeronResources.release(controlSubscription);
   }
 
   @Override
@@ -113,7 +109,24 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
             sessionId,
             serverSessionStreamId);
 
-    sessionHandler.initialise().subscribeOn(Schedulers.single()).subscribe();
+    sessionHandler
+        .initialise()
+        .subscribeOn(Schedulers.newSingle("ds"))
+        .subscribe(
+            null,
+            th ->
+                logger.error(
+                    "[{}] Occurred exception on connect to {}, sessionId: {}, "
+                        + "connectRequestId: {}, clientSessionStreamId: {}, "
+                        + "clientControlStreamId: {}, serverSessionStreamId: {}, error: ",
+                    category,
+                    clientChannel,
+                    sessionId,
+                    connectRequestId,
+                    clientSessionStreamId,
+                    clientControlStreamId,
+                    serverSessionStreamId,
+                    th));
   }
 
   @Override
@@ -150,6 +163,8 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
     private final int clientSessionStreamId;
 
+    private final int serverSessionStreamId;
+
     private final UUID connectRequestId;
 
     private final long sessionId;
@@ -167,9 +182,8 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
       this.outbound = new DefaultAeronOutbound(category, aeronResources, clientChannel, options);
       this.connectRequestId = connectRequestId;
       this.sessionId = sessionId;
-      this.inbound =
-          new AeronServerInbound(
-              category, aeronResources, options, serverSessionStreamId, sessionId, this::dispose);
+      this.serverSessionStreamId = serverSessionStreamId;
+      this.inbound = new AeronServerInbound(category, aeronResources);
       this.connector =
           new ServerConnector(
               category,
@@ -184,15 +198,19 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
     }
 
     Mono<Void> initialise() {
-      Mono<Void> initialiseOutbound = outbound.initialise(sessionId, clientSessionStreamId);
 
       return connector
           .connect()
-          .then(initialiseOutbound)
+          .then(outbound.initialise(sessionId, clientSessionStreamId))
+          .then(
+              inbound.initialise(
+                  category,
+                  options.serverChannel(),
+                  serverSessionStreamId,
+                  sessionId,
+                  this::dispose))
           .doOnSuccess(
               avoid -> {
-                inbound.initialise();
-
                 heartbeatWatchdog.add(
                     sessionId,
                     () -> {

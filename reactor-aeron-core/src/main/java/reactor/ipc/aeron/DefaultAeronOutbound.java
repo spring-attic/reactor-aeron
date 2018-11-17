@@ -68,18 +68,16 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
     return Mono.create(
         sink -> {
           Publication aeronPublication =
-              aeronResources
-                  .aeronWrapper()
-                  .addPublication(channel, streamId, "to send data to", sessionId);
+              aeronResources.publication(channel, streamId, "to send data to", sessionId);
           this.publication =
               new DefaultMessagePublication(
                   aeronPublication,
                   category,
                   options.connectTimeoutMillis(),
                   options.backpressureTimeoutMillis());
-          this.sequencer =
-              aeronResources.aeronWrapper().newWriteSequencer(category, publication, sessionId);
+          this.sequencer = aeronResources.newWriteSequencer(category, publication, sessionId);
           int timeoutMillis = options.connectTimeoutMillis();
+
           createRetryTask(sink, aeronPublication, timeoutMillis).schedule();
         });
   }

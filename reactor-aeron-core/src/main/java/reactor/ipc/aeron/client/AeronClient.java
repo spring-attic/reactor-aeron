@@ -75,16 +75,13 @@ public final class AeronClient implements AeronConnector, Disposable {
         new ClientControlMessageSubscriber(name, heartbeatWatchdog, this::dispose);
     this.clientControlStreamId = streamIdCounter.incrementAndGet();
     this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), this.name);
-
     this.controlSubscription =
-        aeronResources
-            .aeronWrapper()
-            .addSubscription(
-                options.clientChannel(),
-                clientControlStreamId,
-                "to receive control requests on",
-                0);
-    aeronResources.pooler().addControlSubscription(controlSubscription, controlMessageSubscriber);
+        aeronResources.controlSubscription(
+            options.clientChannel(),
+            clientControlStreamId,
+            "to receive control requests on",
+            0,
+            controlMessageSubscriber);
   }
 
   @Override
@@ -98,8 +95,7 @@ public final class AeronClient implements AeronConnector, Disposable {
   public void dispose() {
     handlers.forEach(ClientHandler::dispose);
     handlers.clear();
-    aeronResources.pooler().removeSubscription(controlSubscription);
-    controlSubscription.close();
+    aeronResources.release(controlSubscription);
   }
 
   private void dispose(long sessionId) {
@@ -173,7 +169,15 @@ public final class AeronClient implements AeronConnector, Disposable {
                   Mono.from(ioHandler.apply(inbound, outbound))
                       .doOnTerminate(this::dispose)
                       .subscribe())
-          .doOnError(th -> dispose())
+          .doOnError(
+              th -> {
+                logger.error(
+                    "[{}] Occurred exception for sessionId: {} clientSessionStreamId: {}, error: ",
+                    name,
+                    sessionId,
+                    clientSessionStreamId);
+                dispose();
+              })
           .then(Mono.just(this));
     }
 
