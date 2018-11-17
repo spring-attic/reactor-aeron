@@ -15,7 +15,7 @@ public class ClientThroughput {
    *
    * @param args program arguments.
    */
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     try (AeronResources aeronResources = new AeronResources("test")) {
 
       AeronClient client =
@@ -53,6 +53,8 @@ public class ClientThroughput {
                 return Mono.never();
               })
           .block();
+
+      Thread.currentThread().join();
     }
     System.out.println("main completed");
   }
