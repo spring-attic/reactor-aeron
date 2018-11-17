@@ -2,6 +2,7 @@ package reactor.ipc.aeron;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.aeron.driver.AeronResources;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import org.junit.jupiter.api.AfterAll;

@@ -1,9 +1,9 @@
 package reactor.ipc.aeron.demo;
 
+import io.aeron.driver.AeronResources;
 import java.nio.ByteBuffer;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.ipc.aeron.AeronResources;
 import reactor.ipc.aeron.client.AeronClient;
 
 public class ClientThroughput {

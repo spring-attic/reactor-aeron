@@ -1,5 +1,6 @@
 package reactor.ipc.aeron.server;
 
+import io.aeron.driver.AeronResources;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -14,7 +15,6 @@ import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
-import reactor.ipc.aeron.AeronResources;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.ControlMessageSubscriber;
 import reactor.ipc.aeron.DefaultAeronOutbound;
@@ -57,6 +57,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
     this.aeronResources = aeronResources;
     this.controlSubscription =
         aeronResources.controlSubscription(
+            category,
             options.serverChannel(),
             options.serverStreamId(),
             "to receive control requests on",

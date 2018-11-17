@@ -1,5 +1,6 @@
 package reactor.ipc.aeron.demo;
 
+import io.aeron.driver.AeronResources;
 import java.util.Iterator;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -7,7 +8,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.ipc.aeron.AeronResources;
 import reactor.ipc.aeron.server.AeronServer;
 
 public class ServerThroughput {

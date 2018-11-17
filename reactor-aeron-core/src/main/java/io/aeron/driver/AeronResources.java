@@ -1,15 +1,26 @@
-package reactor.ipc.aeron;
+package io.aeron.driver;
 
 import io.aeron.Aeron;
 import io.aeron.Publication;
 import io.aeron.Subscription;
-import io.aeron.driver.AeronWrapper;
-import io.aeron.driver.AeronWriteSequencer;
 import reactor.core.Disposable;
+import reactor.ipc.aeron.AeronUtils;
+import reactor.ipc.aeron.ControlMessageSubscriber;
+import reactor.ipc.aeron.DataMessageSubscriber;
+import reactor.ipc.aeron.MessagePublication;
+import reactor.ipc.aeron.Pooler;
+import reactor.util.Logger;
+import reactor.util.Loggers;
 
 public class AeronResources implements Disposable, AutoCloseable {
+
+  private static final Logger logger = Loggers.getLogger(AeronResources.class);
+
   private final String name;
-  private final AeronWrapper aeronWrapper;
+
+  private final DriverManager driverManager;
+  private final boolean isDriverLaunched;
+  private final Aeron aeron;
   private final Pooler pooler;
 
   private volatile boolean isRunning = true;
@@ -26,7 +37,15 @@ public class AeronResources implements Disposable, AutoCloseable {
    */
   public AeronResources(String name, Aeron aeron) {
     this.name = name;
-    this.aeronWrapper = new AeronWrapper(name, aeron);
+    this.driverManager = new DriverManager();
+    if (aeron == null) {
+      driverManager.launchDriver();
+      this.aeron = driverManager.getAeron();
+      isDriverLaunched = true;
+    } else {
+      this.aeron = aeron;
+      isDriverLaunched = false;
+    }
     this.pooler = new Pooler(name);
     pooler.initialise();
   }
@@ -40,8 +59,19 @@ public class AeronResources implements Disposable, AutoCloseable {
    * @param sessionId session id
    * @return publication
    */
-  public Publication publication(String channel, int streamId, String purpose, long sessionId) {
-    return aeronWrapper.addPublication(channel, streamId, purpose, sessionId);
+  public Publication publication(
+      String category, String channel, int streamId, String purpose, long sessionId) {
+
+    Publication publication = aeron.addPublication(channel, streamId);
+    if (logger.isDebugEnabled()) {
+      logger.debug(
+          "[{}] Added publication{} {} {}",
+          category,
+          formatSessionId(sessionId),
+          purpose,
+          AeronUtils.format(channel, streamId));
+    }
+    return publication;
   }
 
   /**
@@ -56,12 +86,13 @@ public class AeronResources implements Disposable, AutoCloseable {
    * @return control subscription
    */
   public Subscription controlSubscription(
+      String category,
       String channel,
       int streamId,
       String purpose,
       long sessionId,
       ControlMessageSubscriber controlMessageSubscriber) {
-    Subscription subscription = aeronWrapper.addSubscription(channel, streamId, purpose, sessionId);
+    Subscription subscription = addSubscription(category, channel, streamId, purpose, sessionId);
     pooler.addControlSubscription(subscription, controlMessageSubscriber);
     return subscription;
   }
@@ -78,12 +109,13 @@ public class AeronResources implements Disposable, AutoCloseable {
    * @return control subscription
    */
   public Subscription dataSubscription(
+      String category,
       String channel,
       int streamId,
       String purpose,
       long sessionId,
       DataMessageSubscriber dataMessageSubscriber) {
-    Subscription subscription = aeronWrapper.addSubscription(channel, streamId, purpose, sessionId);
+    Subscription subscription = addSubscription(category, channel, streamId, purpose, sessionId);
     pooler.addDataSubscription(subscription, dataMessageSubscriber);
     return subscription;
   }
@@ -114,14 +146,18 @@ public class AeronResources implements Disposable, AutoCloseable {
   /**
    * Creates new AeronWriteSequencer.
    *
-   * @param category catergory
-   * @param publication publication (see {@link #publication(String, int, String, long)}
+   * @param category category
+   * @param publication publication (see {@link #publication(String, String, int, String, long)}
    * @param sessionId session id
    * @return new write sequencer
    */
   public AeronWriteSequencer newWriteSequencer(
       String category, MessagePublication publication, long sessionId) {
-    return aeronWrapper.newWriteSequencer(category, publication, sessionId);
+    MediaDriver.Context mc = driverManager.getMediaContext();
+    if (logger.isDebugEnabled()) {
+      logger.debug("[{}] Created aeronWriteSequencer{}", category, formatSessionId(sessionId));
+    }
+    return new AeronWriteSequencer(mc.senderCommandQueue(), category, publication, sessionId);
   }
 
   @Override
@@ -140,12 +176,32 @@ public class AeronResources implements Disposable, AutoCloseable {
               th -> {
                 /* todo */
               });
-      aeronWrapper.dispose();
+      if (isDriverLaunched) {
+        driverManager.shutdownDriver().block();
+      }
     }
   }
 
   @Override
   public boolean isDisposed() {
     return !isRunning;
+  }
+
+  private Subscription addSubscription(
+      String category, String channel, int streamId, String purpose, long sessionId) {
+    Subscription subscription = aeron.addSubscription(channel, streamId);
+    if (logger.isDebugEnabled()) {
+      logger.debug(
+          "[{}] Added subscription{} {} {}",
+          category,
+          formatSessionId(sessionId),
+          purpose,
+          AeronUtils.format(channel, streamId));
+    }
+    return subscription;
+  }
+
+  private String formatSessionId(long sessionId) {
+    return sessionId > 0 ? " sessionId: " + sessionId : "";
   }
 }

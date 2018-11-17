@@ -1,12 +1,12 @@
 package reactor.ipc.aeron.client;
 
+import io.aeron.driver.AeronResources;
 import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import reactor.core.Disposable;
 import reactor.ipc.aeron.AeronInbound;
-import reactor.ipc.aeron.AeronResources;
 import reactor.ipc.aeron.ByteBufferFlux;
 import reactor.ipc.aeron.DataMessageSubscriber;
 import reactor.ipc.aeron.MessageType;
@@ -37,7 +37,7 @@ final class AeronClientInbound implements AeronInbound, Disposable {
     this.flux = new ByteBufferFlux(processor);
     this.serverDataSubscription =
         aeronResources.dataSubscription(
-            channel, streamId, "to receive data from server on", sessionId, processor);
+            name, channel, streamId, "to receive data from server on", sessionId, processor);
   }
 
   @Override

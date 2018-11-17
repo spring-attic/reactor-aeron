@@ -1,6 +1,7 @@
 package reactor.ipc.aeron;
 
 import io.aeron.Publication;
+import io.aeron.driver.AeronResources;
 import io.aeron.driver.AeronWriteSequencer;
 import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
@@ -68,7 +69,7 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
     return Mono.create(
         sink -> {
           Publication aeronPublication =
-              aeronResources.publication(channel, streamId, "to send data to", sessionId);
+              aeronResources.publication(category, channel, streamId, "to send data to", sessionId);
           this.publication =
               new DefaultMessagePublication(
                   aeronPublication,

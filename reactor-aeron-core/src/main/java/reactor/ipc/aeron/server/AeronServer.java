@@ -1,5 +1,6 @@
 package reactor.ipc.aeron.server;
 
+import io.aeron.driver.AeronResources;
 import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -10,7 +11,6 @@ import reactor.ipc.aeron.AeronConnector;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
-import reactor.ipc.aeron.AeronResources;
 
 /** Aeron server. */
 public final class AeronServer implements AeronConnector {

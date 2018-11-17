@@ -1,6 +1,7 @@
 package reactor.ipc.aeron.server;
 
 import io.aeron.Publication;
+import io.aeron.driver.AeronResources;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import reactor.core.Disposable;
@@ -8,7 +9,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.AeronOptions;
-import reactor.ipc.aeron.AeronResources;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.DefaultMessagePublication;
 import reactor.ipc.aeron.HeartbeatSender;
@@ -63,7 +63,11 @@ public class ServerConnector implements Disposable {
     this.aeronResources = aeronResources;
     this.clientControlPublication =
         aeronResources.publication(
-            clientChannel, clientControlStreamId, "to send control requests to client", sessionId);
+            category,
+            clientChannel,
+            clientControlStreamId,
+            "to send control requests to client",
+            sessionId);
   }
 
   Mono<Void> connect() {

@@ -1,7 +1,7 @@
 package reactor.ipc.aeron.demo;
 
+import io.aeron.driver.AeronResources;
 import reactor.core.publisher.Mono;
-import reactor.ipc.aeron.AeronResources;
 import reactor.ipc.aeron.client.AeronClient;
 
 public class ClientServerSends {
