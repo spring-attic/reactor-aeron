@@ -10,6 +10,7 @@ import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Operators;
+import reactor.core.scheduler.Scheduler;
 import reactor.ipc.aeron.AbortedException;
 import reactor.ipc.aeron.MessagePublication;
 import reactor.util.Logger;
@@ -33,21 +34,18 @@ public class AeronWriteSequencer {
   private final BiPredicate<MonoSink<?>, Object> pendingWriteOffer;
   private final Queue<?> pendingWrites;
   private final Consumer<Object> discardedHandler;
-  private final Queue<Runnable> commandQueue;
+  private final Scheduler scheduler;
 
   @SuppressWarnings("unused")
   private volatile int wip;
 
   AeronWriteSequencer(
-      Queue<Runnable> commandQueue,
-      String category,
-      MessagePublication publication,
-      long sessionId) {
+      Scheduler scheduler, String category, MessagePublication publication, long sessionId) {
     this.discardedHandler =
         o -> {
           // no-op
         };
-    this.commandQueue = commandQueue;
+    this.scheduler = scheduler;
     this.pendingWrites = Queues.unbounded().get();
     //noinspection unchecked
     this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
@@ -184,6 +182,6 @@ public class AeronWriteSequencer {
   }
 
   void scheduleDrain() {
-    commandQueue.offer(this::drain);
+    scheduler.schedule(this::drain);
   }
 }

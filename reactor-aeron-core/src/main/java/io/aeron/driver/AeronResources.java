@@ -4,6 +4,9 @@ import io.aeron.Aeron;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import reactor.core.Disposable;
+import reactor.core.publisher.MonoProcessor;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.ControlMessageSubscriber;
 import reactor.ipc.aeron.DataMessageSubscriber;
@@ -20,8 +23,8 @@ public class AeronResources implements Disposable, AutoCloseable {
   private final boolean isDriverLaunched;
   private final Aeron aeron;
   private final Pooler pooler;
-
-  private volatile boolean isRunning = true;
+  private final Scheduler sender;
+  private final MonoProcessor<Void> onClose = MonoProcessor.create();
 
   public AeronResources(String name) {
     this(name, null);
@@ -35,6 +38,7 @@ public class AeronResources implements Disposable, AutoCloseable {
    */
   public AeronResources(String name, Aeron aeron) {
     this.driverManager = new DriverManager();
+
     if (aeron == null) {
       driverManager.launchDriver();
       this.aeron = driverManager.getAeron();
@@ -43,8 +47,15 @@ public class AeronResources implements Disposable, AutoCloseable {
       this.aeron = aeron;
       isDriverLaunched = false;
     }
+
     this.pooler = new Pooler(name);
     pooler.initialise();
+
+    sender = Schedulers.newSingle("reactor-aeron-sender");
+
+    onClose
+        .doOnTerminate(this::dispose0)
+        .subscribe(null, th -> logger.warn("AeronResources disposed with error: {}", th));
   }
 
   /**
@@ -62,9 +73,9 @@ public class AeronResources implements Disposable, AutoCloseable {
     Publication publication = aeron.addPublication(channel, streamId);
     if (logger.isDebugEnabled()) {
       logger.debug(
-          "[{}] Added publication{} {} {}",
+          "[{}] Added publication, sessionId={} {} {}",
           category,
-          formatSessionId(sessionId),
+          sessionId,
           purpose,
           AeronUtils.format(channel, streamId));
     }
@@ -148,23 +159,27 @@ public class AeronResources implements Disposable, AutoCloseable {
   @Override
   public void dispose() {
     if (!isDisposed()) {
-      isRunning = false;
-      pooler
-          .shutdown()
-          .subscribe(
-              null,
-              th -> {
-                /* todo */
-              });
-      if (isDriverLaunched) {
-        driverManager.shutdownDriver().block();
-      }
+      onClose.onComplete();
+    }
+  }
+
+  private void dispose0() {
+    if (!sender.isDisposed()) {
+      sender.dispose();
+    }
+
+    pooler
+        .shutdown() //
+        .subscribe(null, th -> logger.warn("Pooler has shutdown with error: {}", th));
+
+    if (isDriverLaunched) {
+      driverManager.shutdownDriver().block();
     }
   }
 
   @Override
   public boolean isDisposed() {
-    return !isRunning;
+    return onClose.isDisposed();
   }
 
   /**
@@ -177,11 +192,12 @@ public class AeronResources implements Disposable, AutoCloseable {
    */
   public AeronWriteSequencer writeSequencer(
       String category, MessagePublication publication, long sessionId) {
-    MediaDriver.Context mc = driverManager.getMediaContext();
+    AeronWriteSequencer writeSequencer =
+        new AeronWriteSequencer(sender, category, publication, sessionId);
     if (logger.isDebugEnabled()) {
-      logger.debug("[{}] Created aeronWriteSequencer{}", category, formatSessionId(sessionId));
+      logger.debug("[{}] Created {}, sessionId={}", category, writeSequencer, sessionId);
     }
-    return new AeronWriteSequencer(mc.senderCommandQueue(), category, publication, sessionId);
+    return writeSequencer;
   }
 
   /**
@@ -199,22 +215,12 @@ public class AeronResources implements Disposable, AutoCloseable {
     Subscription subscription = aeron.addSubscription(channel, streamId);
     if (logger.isDebugEnabled()) {
       logger.debug(
-          "[{}] Added subscription{} {} {}",
+          "[{}] Added subscription, sessionId={} {} {}",
           category,
-          formatSessionId(sessionId),
+          sessionId,
           purpose,
           AeronUtils.format(channel, streamId));
     }
     return subscription;
-  }
-
-  /**
-   * Returns session id prepared for logging.
-   *
-   * @param sessionId session id
-   * @return formatted session id
-   */
-  private String formatSessionId(long sessionId) {
-    return sessionId > 0 ? " sessionId: " + sessionId : "";
   }
 }

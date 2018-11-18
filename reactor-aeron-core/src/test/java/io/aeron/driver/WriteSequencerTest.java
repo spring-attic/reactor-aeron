@@ -6,12 +6,7 @@ import static reactor.ipc.aeron.TestUtils.log;
 
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.Queue;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
@@ -31,18 +26,11 @@ public class WriteSequencerTest {
   private Scheduler scheduler1;
 
   private Scheduler scheduler2;
-  private BlockingQueue<Runnable> commandQueue;
 
   /** Setup. */
   @BeforeEach
   public void doSetup() {
-    commandQueue = new LinkedBlockingQueue<>();
-
-    ThreadPoolExecutor executorService =
-        new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, commandQueue);
-    executorService.prestartAllCoreThreads();
-    scheduler = Schedulers.fromExecutorService(executorService);
-
+    scheduler = Schedulers.newSingle("scheduler-sender");
     scheduler1 = Schedulers.newSingle("scheduler-A");
     scheduler2 = Schedulers.newSingle("scheduler-B");
   }
@@ -50,7 +38,6 @@ public class WriteSequencerTest {
   /** Teardown. */
   @AfterEach
   public void doTeardown() {
-    commandQueue.clear();
     scheduler.dispose();
     scheduler1.dispose();
     scheduler2.dispose();
@@ -59,7 +46,7 @@ public class WriteSequencerTest {
   @Test
   public void itProvidesSignalsFromAddedPublishers() throws Exception {
 
-    WriteSequencerForTest sequencer = new WriteSequencerForTest(commandQueue);
+    WriteSequencerForTest sequencer = new WriteSequencerForTest(scheduler);
 
     Flux<ByteBuffer> flux1 =
         Flux.just("Hello", "world").map(AeronUtils::stringToByteBuffer).publishOn(scheduler1);
@@ -82,8 +69,8 @@ public class WriteSequencerTest {
 
     private final SubscriberForTest inner;
 
-    WriteSequencerForTest(Queue<Runnable> queue) {
-      super(queue, "test", null, 1234);
+    WriteSequencerForTest(Scheduler scheduler) {
+      super(scheduler, "test", null, 1234);
       this.inner = new SubscriberForTest(this, null, 1234);
     }
 
