@@ -56,7 +56,7 @@ public class AeronWriteSequencerBenchmark {
             options.connectTimeoutMillis(),
             options.backpressureTimeoutMillis());
 
-    AeronWriteSequencer sequencer = aeronResources.newWriteSequencer("test", messagePublication, 1);
+    AeronWriteSequencer sequencer = aeronResources.writeSequencer("test", messagePublication, 1);
 
     for (int i = 1; i <= numOfRuns; i++) {
       Publisher<ByteBuffer> publisher = new BenchmarkPublisher(1_000_000, 512);
@@ -72,8 +72,8 @@ public class AeronWriteSequencerBenchmark {
     }
 
     pooler.dispose();
-    aeronResources.release(publication);
-    aeronResources.release(subscription);
+    aeronResources.close(publication);
+    aeronResources.close(subscription);
     aeronResources.dispose();
   }
 

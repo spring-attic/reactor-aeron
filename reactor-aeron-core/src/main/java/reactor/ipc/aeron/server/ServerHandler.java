@@ -75,7 +75,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
   public void dispose() {
     handlers.forEach(SessionHandler::dispose);
     handlers.clear();
-    aeronResources.release(controlSubscription);
+    aeronResources.close(controlSubscription);
   }
 
   @Override

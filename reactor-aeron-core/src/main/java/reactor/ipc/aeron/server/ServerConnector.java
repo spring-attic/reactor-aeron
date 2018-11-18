@@ -106,7 +106,7 @@ public class ServerConnector implements Disposable {
   @Override
   public void dispose() {
     heartbeatSenderDisposable.dispose();
-    aeronResources.release(clientControlPublication);
+    aeronResources.close(clientControlPublication);
   }
 
   class SendConnectAckTask implements Callable<Boolean> {

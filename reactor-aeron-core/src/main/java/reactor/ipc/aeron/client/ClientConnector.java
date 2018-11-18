@@ -192,6 +192,6 @@ final class ClientConnector implements Disposable {
 
     heartbeatSenderDisposable.dispose();
 
-    aeronResources.release(serverControlPublication);
+    aeronResources.close(serverControlPublication);
   }
 }

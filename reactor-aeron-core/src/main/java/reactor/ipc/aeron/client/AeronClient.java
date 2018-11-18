@@ -96,7 +96,7 @@ public final class AeronClient implements AeronConnector, Disposable {
   public void dispose() {
     handlers.forEach(ClientHandler::dispose);
     handlers.clear();
-    aeronResources.release(controlSubscription);
+    aeronResources.close(controlSubscription);
   }
 
   private void dispose(long sessionId) {

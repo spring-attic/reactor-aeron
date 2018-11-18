@@ -47,7 +47,7 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
   @Override
   public void dispose() {
-    aeronResources.release(serverDataSubscription);
+    aeronResources.close(serverDataSubscription);
   }
 
   long getLastSignalTimeNs() {

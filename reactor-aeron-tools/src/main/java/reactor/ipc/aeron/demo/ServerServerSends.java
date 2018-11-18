@@ -38,9 +38,8 @@ public class ServerServerSends {
                 return Mono.never();
               })
           .block();
-
-      Thread.currentThread().join();
     }
     System.out.println("main finished");
+    Thread.currentThread().join();
   }
 }

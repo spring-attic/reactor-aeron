@@ -16,8 +16,6 @@ public class AeronResources implements Disposable, AutoCloseable {
 
   private static final Logger logger = Loggers.getLogger(AeronResources.class);
 
-  private final String name;
-
   private final DriverManager driverManager;
   private final boolean isDriverLaunched;
   private final Aeron aeron;
@@ -36,7 +34,6 @@ public class AeronResources implements Disposable, AutoCloseable {
    * @param aeron aeron
    */
   public AeronResources(String name, Aeron aeron) {
-    this.name = name;
     this.driverManager = new DriverManager();
     if (aeron == null) {
       driverManager.launchDriver();
@@ -51,7 +48,7 @@ public class AeronResources implements Disposable, AutoCloseable {
   }
 
   /**
-   * Adds publication. Also see {@link #release(Publication)}}.
+   * Adds publication. Also see {@link #close(Publication)}}.
    *
    * @param channel channel
    * @param streamId stream id
@@ -76,7 +73,7 @@ public class AeronResources implements Disposable, AutoCloseable {
 
   /**
    * Adds control subscription and register it in the {@link Pooler}. Also see {@link
-   * #release(Subscription)}}.
+   * #close(Subscription)}}.
    *
    * @param channel channel
    * @param streamId stream id
@@ -99,7 +96,7 @@ public class AeronResources implements Disposable, AutoCloseable {
 
   /**
    * Adds data subscription and register it in the {@link Pooler}. Also see {@link
-   * #release(Subscription)}}.
+   * #close(Subscription)}}.
    *
    * @param channel channel
    * @param streamId stream id
@@ -121,11 +118,11 @@ public class AeronResources implements Disposable, AutoCloseable {
   }
 
   /**
-   * Releases the given subscription.
+   * Closes the given subscription.
    *
    * @param subscription subscription
    */
-  public void release(Subscription subscription) {
+  public void close(Subscription subscription) {
     if (subscription != null) {
       pooler.removeSubscription(subscription);
       subscription.close();
@@ -133,31 +130,14 @@ public class AeronResources implements Disposable, AutoCloseable {
   }
 
   /**
-   * Releases the given publication.
+   * Closes the given publication.
    *
    * @param publication publication
    */
-  public void release(Publication publication) {
+  public void close(Publication publication) {
     if (publication != null) {
       publication.close();
     }
-  }
-
-  /**
-   * Creates new AeronWriteSequencer.
-   *
-   * @param category category
-   * @param publication publication (see {@link #publication(String, String, int, String, long)}
-   * @param sessionId session id
-   * @return new write sequencer
-   */
-  public AeronWriteSequencer newWriteSequencer(
-      String category, MessagePublication publication, long sessionId) {
-    MediaDriver.Context mc = driverManager.getMediaContext();
-    if (logger.isDebugEnabled()) {
-      logger.debug("[{}] Created aeronWriteSequencer{}", category, formatSessionId(sessionId));
-    }
-    return new AeronWriteSequencer(mc.senderCommandQueue(), category, publication, sessionId);
   }
 
   @Override
@@ -187,6 +167,33 @@ public class AeronResources implements Disposable, AutoCloseable {
     return !isRunning;
   }
 
+  /**
+   * Creates new {@link AeronWriteSequencer}.
+   *
+   * @param category category
+   * @param publication publication (see {@link #publication(String, String, int, String, long)}
+   * @param sessionId session id
+   * @return new write sequencer
+   */
+  public AeronWriteSequencer writeSequencer(
+      String category, MessagePublication publication, long sessionId) {
+    MediaDriver.Context mc = driverManager.getMediaContext();
+    if (logger.isDebugEnabled()) {
+      logger.debug("[{}] Created aeronWriteSequencer{}", category, formatSessionId(sessionId));
+    }
+    return new AeronWriteSequencer(mc.senderCommandQueue(), category, publication, sessionId);
+  }
+
+  /**
+   * Adds a subscription by given channel and stream id.
+   *
+   * @param category category
+   * @param channel channel
+   * @param streamId stream id
+   * @param purpose purpose
+   * @param sessionId session id
+   * @return subscription for channel and stream id
+   */
   Subscription addSubscription(
       String category, String channel, int streamId, String purpose, long sessionId) {
     Subscription subscription = aeron.addSubscription(channel, streamId);
@@ -201,6 +208,12 @@ public class AeronResources implements Disposable, AutoCloseable {
     return subscription;
   }
 
+  /**
+   * Returns session id prepared for logging.
+   *
+   * @param sessionId session id
+   * @return formatted session id
+   */
   private String formatSessionId(long sessionId) {
     return sessionId > 0 ? " sessionId: " + sessionId : "";
   }

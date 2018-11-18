@@ -76,7 +76,7 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
                   category,
                   options.connectTimeoutMillis(),
                   options.backpressureTimeoutMillis());
-          this.sequencer = aeronResources.newWriteSequencer(category, publication, sessionId);
+          this.sequencer = aeronResources.writeSequencer(category, publication, sessionId);
           int timeoutMillis = options.connectTimeoutMillis();
 
           createRetryTask(sink, aeronPublication, timeoutMillis).schedule();
