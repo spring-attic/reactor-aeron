@@ -176,7 +176,8 @@ public final class AeronClient implements AeronConnector, Disposable {
                     "[{}] Occurred exception for sessionId: {} clientSessionStreamId: {}, error: ",
                     name,
                     sessionId,
-                    clientSessionStreamId);
+                    clientSessionStreamId,
+                    th);
                 dispose();
               })
           .then(Mono.just(this));

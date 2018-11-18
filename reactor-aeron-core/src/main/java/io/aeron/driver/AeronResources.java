@@ -11,7 +11,7 @@ import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.ControlMessageSubscriber;
 import reactor.ipc.aeron.DataMessageSubscriber;
 import reactor.ipc.aeron.MessagePublication;
-import reactor.ipc.aeron.Pooler;
+import reactor.ipc.aeron.Poller;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -22,8 +22,9 @@ public class AeronResources implements Disposable, AutoCloseable {
   private final DriverManager driverManager;
   private final boolean isDriverLaunched;
   private final Aeron aeron;
-  private final Pooler pooler;
+  private final Poller poller;
   private final Scheduler sender;
+  private final Scheduler receiver;
   private final MonoProcessor<Void> onClose = MonoProcessor.create();
 
   public AeronResources(String name) {
@@ -48,10 +49,10 @@ public class AeronResources implements Disposable, AutoCloseable {
       isDriverLaunched = false;
     }
 
-    this.pooler = new Pooler(name);
-    pooler.initialise();
-
     sender = Schedulers.newSingle("reactor-aeron-sender");
+    receiver = Schedulers.newSingle("reactor-aeron-receiver");
+
+    receiver.schedule(poller = new Poller(name, () -> !receiver.isDisposed()));
 
     onClose
         .doOnTerminate(this::dispose0)
@@ -83,7 +84,7 @@ public class AeronResources implements Disposable, AutoCloseable {
   }
 
   /**
-   * Adds control subscription and register it in the {@link Pooler}. Also see {@link
+   * Adds control subscription and register it in the {@link Poller}. Also see {@link
    * #close(Subscription)}}.
    *
    * @param channel channel
@@ -101,12 +102,12 @@ public class AeronResources implements Disposable, AutoCloseable {
       long sessionId,
       ControlMessageSubscriber controlMessageSubscriber) {
     Subscription subscription = addSubscription(category, channel, streamId, purpose, sessionId);
-    pooler.addControlSubscription(subscription, controlMessageSubscriber);
+    poller.addControlSubscription(subscription, controlMessageSubscriber);
     return subscription;
   }
 
   /**
-   * Adds data subscription and register it in the {@link Pooler}. Also see {@link
+   * Adds data subscription and register it in the {@link Poller}. Also see {@link
    * #close(Subscription)}}.
    *
    * @param channel channel
@@ -124,7 +125,7 @@ public class AeronResources implements Disposable, AutoCloseable {
       long sessionId,
       DataMessageSubscriber dataMessageSubscriber) {
     Subscription subscription = addSubscription(category, channel, streamId, purpose, sessionId);
-    pooler.addDataSubscription(subscription, dataMessageSubscriber);
+    poller.addDataSubscription(subscription, dataMessageSubscriber);
     return subscription;
   }
 
@@ -135,7 +136,7 @@ public class AeronResources implements Disposable, AutoCloseable {
    */
   public void close(Subscription subscription) {
     if (subscription != null) {
-      pooler.removeSubscription(subscription);
+      poller.removeSubscription(subscription);
       subscription.close();
     }
   }
@@ -168,9 +169,9 @@ public class AeronResources implements Disposable, AutoCloseable {
       sender.dispose();
     }
 
-    pooler
-        .shutdown() //
-        .subscribe(null, th -> logger.warn("Pooler has shutdown with error: {}", th));
+    if (!receiver.isDisposed()) {
+      receiver.dispose();
+    }
 
     if (isDriverLaunched) {
       driverManager.shutdownDriver().block();

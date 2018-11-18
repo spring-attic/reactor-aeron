@@ -227,6 +227,7 @@ public class AeronClientTest extends BaseAeronTest {
   }
 
   private AeronServer createAeronServer(String name) {
-    return AeronServer.create(name, aeronResources, options -> options.serverChannel(serverChannel));
+    return AeronServer.create(
+        name, aeronResources, options -> options.serverChannel(serverChannel));
   }
 }
