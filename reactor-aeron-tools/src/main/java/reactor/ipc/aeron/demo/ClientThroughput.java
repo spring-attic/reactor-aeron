@@ -27,7 +27,7 @@ public class ClientThroughput {
                 options.clientChannel("aeron:udp?endpoint=" + HOST + ":12001");
               });
 
-      ByteBuffer buffer = ByteBuffer.allocate(1024 * 3);
+      ByteBuffer buffer = ByteBuffer.allocate(1024);
 
       client
           .newHandler(
@@ -53,8 +53,9 @@ public class ClientThroughput {
                 return Mono.never();
               })
           .block();
+
+      System.out.println("main completed");
+      Thread.currentThread().join();
     }
-    System.out.println("main completed");
-    Thread.currentThread().join();
   }
 }

@@ -30,8 +30,9 @@ public class ClientServerSends {
                 return Mono.never();
               })
           .block();
+
+      System.out.println("main completed");
+      Thread.currentThread().join();
     }
-    System.out.println("main completed");
-    Thread.currentThread().join();
   }
 }
