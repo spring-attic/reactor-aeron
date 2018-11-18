@@ -1,6 +1,6 @@
 package reactor.ipc.aeron.server;
 
-import io.aeron.driver.AeronWrapper;
+import io.aeron.driver.AeronResources;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -21,7 +21,6 @@ import reactor.ipc.aeron.DefaultAeronOutbound;
 import reactor.ipc.aeron.HeartbeatSender;
 import reactor.ipc.aeron.HeartbeatWatchdog;
 import reactor.ipc.aeron.MessageType;
-import reactor.ipc.aeron.Pooler;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -33,14 +32,12 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
   private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
-  private final AeronWrapper wrapper;
-
   private final BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>>
       ioHandler;
 
   private final AeronOptions options;
 
-  private final Pooler pooler;
+  private final AeronResources aeronResources;
 
   private final AtomicLong nextSessionId = new AtomicLong(0);
 
@@ -55,37 +52,30 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
   ServerHandler(
       String category,
       BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler,
+      AeronResources aeronResources,
       AeronOptions options) {
-    this.wrapper = new AeronWrapper(category, options);
+    this.aeronResources = aeronResources;
     this.controlSubscription =
-        wrapper.addSubscription(
-            options.serverChannel(), options.serverStreamId(), "to receive control requests on", 0);
+        aeronResources.controlSubscription(
+            category,
+            options.serverChannel(),
+            options.serverStreamId(),
+            "to receive control requests on",
+            0,
+            this);
 
     this.category = category;
     this.ioHandler = ioHandler;
     this.options = options;
-    this.pooler = new Pooler(category);
     this.heartbeatWatchdog = new HeartbeatWatchdog(options.heartbeatTimeoutMillis(), category);
     this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), category);
   }
 
-  void initialise() {
-    pooler.addControlSubscription(controlSubscription, this);
-    pooler.initialise();
-  }
-
   @Override
   public void dispose() {
-    pooler
-        .shutdown()
-        .doOnTerminate(
-            () -> {
-              handlers.forEach(SessionHandler::dispose);
-              handlers.clear();
-              controlSubscription.close();
-              wrapper.dispose();
-            })
-        .subscribe();
+    handlers.forEach(SessionHandler::dispose);
+    handlers.clear();
+    aeronResources.close(controlSubscription);
   }
 
   @Override
@@ -120,7 +110,24 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
             sessionId,
             serverSessionStreamId);
 
-    sessionHandler.initialise().subscribeOn(Schedulers.single()).subscribe();
+    sessionHandler
+        .initialise()
+        .subscribeOn(Schedulers.newSingle("ds"))
+        .subscribe(
+            null,
+            th ->
+                logger.error(
+                    "[{}] Occurred exception on connect to {}, sessionId: {}, "
+                        + "connectRequestId: {}, clientSessionStreamId: {}, "
+                        + "clientControlStreamId: {}, serverSessionStreamId: {}, error: ",
+                    category,
+                    clientChannel,
+                    sessionId,
+                    connectRequestId,
+                    clientSessionStreamId,
+                    clientControlStreamId,
+                    serverSessionStreamId,
+                    th));
   }
 
   @Override
@@ -157,6 +164,8 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
     private final int clientSessionStreamId;
 
+    private final int serverSessionStreamId;
+
     private final UUID connectRequestId;
 
     private final long sessionId;
@@ -171,16 +180,15 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
         long sessionId,
         int serverSessionStreamId) {
       this.clientSessionStreamId = clientSessionStreamId;
-      this.outbound = new DefaultAeronOutbound(category, wrapper, clientChannel, options);
+      this.outbound = new DefaultAeronOutbound(category, aeronResources, clientChannel, options);
       this.connectRequestId = connectRequestId;
       this.sessionId = sessionId;
-      this.inbound =
-          new AeronServerInbound(
-              category, wrapper, options, pooler, serverSessionStreamId, sessionId, this::dispose);
+      this.serverSessionStreamId = serverSessionStreamId;
+      this.inbound = new AeronServerInbound(category, aeronResources);
       this.connector =
           new ServerConnector(
               category,
-              wrapper,
+              aeronResources,
               clientChannel,
               clientControlStreamId,
               sessionId,
@@ -191,15 +199,19 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
     }
 
     Mono<Void> initialise() {
-      Mono<Void> initialiseOutbound = outbound.initialise(sessionId, clientSessionStreamId);
 
       return connector
           .connect()
-          .then(initialiseOutbound)
+          .then(outbound.initialise(sessionId, clientSessionStreamId))
+          .then(
+              inbound.initialise(
+                  category,
+                  options.serverChannel(),
+                  serverSessionStreamId,
+                  sessionId,
+                  this::dispose))
           .doOnSuccess(
               avoid -> {
-                inbound.initialise();
-
                 heartbeatWatchdog.add(
                     sessionId,
                     () -> {

@@ -1,7 +1,7 @@
 package reactor.ipc.aeron;
 
 import io.aeron.Publication;
-import io.aeron.driver.AeronWrapper;
+import io.aeron.driver.AeronResources;
 import io.aeron.driver.AeronWriteSequencer;
 import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
@@ -15,7 +15,7 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
 
   private final String category;
 
-  private final AeronWrapper wrapper;
+  private final AeronResources aeronResources;
 
   private final String channel;
 
@@ -29,14 +29,14 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
    * Constructor.
    *
    * @param category category
-   * @param wrapper wrapper
+   * @param aeronResources aeronResources
    * @param channel channel
    * @param options options
    */
   public DefaultAeronOutbound(
-      String category, AeronWrapper wrapper, String channel, AeronOptions options) {
+      String category, AeronResources aeronResources, String channel, AeronOptions options) {
     this.category = category;
-    this.wrapper = wrapper;
+    this.aeronResources = aeronResources;
     this.channel = channel;
     this.options = options;
   }
@@ -69,15 +69,16 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
     return Mono.create(
         sink -> {
           Publication aeronPublication =
-              wrapper.addPublication(channel, streamId, "to send data to", sessionId);
+              aeronResources.publication(category, channel, streamId, "to send data to", sessionId);
           this.publication =
               new DefaultMessagePublication(
                   aeronPublication,
                   category,
                   options.connectTimeoutMillis(),
                   options.backpressureTimeoutMillis());
-          this.sequencer = wrapper.newWriteSequencer(category, publication, sessionId);
+          this.sequencer = aeronResources.writeSequencer(category, publication, sessionId);
           int timeoutMillis = options.connectTimeoutMillis();
+
           createRetryTask(sink, aeronPublication, timeoutMillis).schedule();
         });
   }

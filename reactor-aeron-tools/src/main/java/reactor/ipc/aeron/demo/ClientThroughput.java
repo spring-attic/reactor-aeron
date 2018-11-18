@@ -1,5 +1,6 @@
 package reactor.ipc.aeron.demo;
 
+import io.aeron.driver.AeronResources;
 import java.nio.ByteBuffer;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -14,42 +15,47 @@ public class ClientThroughput {
    *
    * @param args program arguments.
    */
-  public static void main(String[] args) {
-    AeronClient client =
-        AeronClient.create(
-            "client",
-            options -> {
-              options.serverChannel("aeron:udp?endpoint=" + HOST + ":13000");
-              options.clientChannel("aeron:udp?endpoint=" + HOST + ":12001");
-            });
+  public static void main(String[] args) throws Exception {
+    try (AeronResources aeronResources = new AeronResources("test")) {
 
-    ByteBuffer buffer = ByteBuffer.allocate(1024 * 3);
+      AeronClient client =
+          AeronClient.create(
+              "client",
+              aeronResources,
+              options -> {
+                options.serverChannel("aeron:udp?endpoint=" + HOST + ":13000");
+                options.clientChannel("aeron:udp?endpoint=" + HOST + ":12001");
+              });
 
-    client
-        .newHandler(
-            (inbound, outbound) -> {
-              outbound
-                  .send(
-                      Flux.create(
-                          sink -> {
-                            System.out.println("About to send");
-                            for (int i = 0; i < 1000 * 1024; i++) {
-                              sink.next(buffer);
-                            }
-                            sink.complete();
-                            System.out.println("Send complete");
-                          }))
-                  .then()
-                  .subscribe(
-                      avoid -> {
-                        // no-op
-                      },
-                      th -> System.err.printf("Failed to send flux due to: %s\n", th));
+      ByteBuffer buffer = ByteBuffer.allocate(1024);
 
-              return Mono.never();
-            })
-        .block();
+      client
+          .newHandler(
+              (inbound, outbound) -> {
+                outbound
+                    .send(
+                        Flux.create(
+                            sink -> {
+                              System.out.println("About to send");
+                              for (int i = 0; i < 1000 * 1024; i++) {
+                                sink.next(buffer);
+                              }
+                              sink.complete();
+                              System.out.println("Send complete");
+                            }))
+                    .then()
+                    .subscribe(
+                        avoid -> {
+                          // no-op
+                        },
+                        th -> System.err.printf("Failed to send flux due to: %s\n", th));
 
-    System.out.println("main completed");
+                return Mono.never();
+              })
+          .block();
+
+      System.out.println("main completed");
+      Thread.currentThread().join();
+    }
   }
 }

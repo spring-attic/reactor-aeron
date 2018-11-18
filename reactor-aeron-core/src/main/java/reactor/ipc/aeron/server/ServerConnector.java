@@ -1,7 +1,7 @@
 package reactor.ipc.aeron.server;
 
 import io.aeron.Publication;
-import io.aeron.driver.AeronWrapper;
+import io.aeron.driver.AeronResources;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import reactor.core.Disposable;
@@ -37,6 +37,8 @@ public class ServerConnector implements Disposable {
 
   private final HeartbeatSender heartbeatSender;
 
+  private final AeronResources aeronResources;
+
   private volatile Disposable heartbeatSenderDisposable =
       () -> {
         // no-op
@@ -44,7 +46,7 @@ public class ServerConnector implements Disposable {
 
   ServerConnector(
       String category,
-      AeronWrapper wrapper,
+      AeronResources aeronResources,
       String clientChannel,
       int clientControlStreamId,
       long sessionId,
@@ -58,9 +60,14 @@ public class ServerConnector implements Disposable {
     this.options = options;
     this.sessionId = sessionId;
     this.heartbeatSender = heartbeatSender;
+    this.aeronResources = aeronResources;
     this.clientControlPublication =
-        wrapper.addPublication(
-            clientChannel, clientControlStreamId, "to send control requests to client", sessionId);
+        aeronResources.publication(
+            category,
+            clientChannel,
+            clientControlStreamId,
+            "to send control requests to client",
+            sessionId);
   }
 
   Mono<Void> connect() {
@@ -99,8 +106,7 @@ public class ServerConnector implements Disposable {
   @Override
   public void dispose() {
     heartbeatSenderDisposable.dispose();
-
-    clientControlPublication.close();
+    aeronResources.close(clientControlPublication);
   }
 
   class SendConnectAckTask implements Callable<Boolean> {

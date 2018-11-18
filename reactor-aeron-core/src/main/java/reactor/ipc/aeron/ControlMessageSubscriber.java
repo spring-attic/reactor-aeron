@@ -2,7 +2,7 @@ package reactor.ipc.aeron;
 
 import java.util.UUID;
 
-public interface ControlMessageSubscriber extends PoolerSubscriber {
+public interface ControlMessageSubscriber extends PollerSubscriber {
 
   void onConnect(
       UUID connectRequestId,

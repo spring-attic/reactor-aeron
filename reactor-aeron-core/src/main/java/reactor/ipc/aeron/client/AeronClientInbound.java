@@ -1,8 +1,7 @@
 package reactor.ipc.aeron.client;
 
-import io.aeron.driver.AeronWrapper;
+import io.aeron.driver.AeronResources;
 import java.nio.ByteBuffer;
-import java.util.Objects;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
@@ -11,7 +10,6 @@ import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.ByteBufferFlux;
 import reactor.ipc.aeron.DataMessageSubscriber;
 import reactor.ipc.aeron.MessageType;
-import reactor.ipc.aeron.Pooler;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -23,25 +21,23 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
   private final io.aeron.Subscription serverDataSubscription;
 
-  private final Pooler pooler;
-
   private final ClientDataMessageProcessor processor;
+
+  private final AeronResources aeronResources;
 
   AeronClientInbound(
       String name,
-      Pooler pooler,
-      AeronWrapper wrapper,
+      AeronResources aeronResources,
       String channel,
       int streamId,
       long sessionId,
       Runnable onCompleteHandler) {
-    this.pooler = Objects.requireNonNull(pooler);
-    this.serverDataSubscription =
-        wrapper.addSubscription(channel, streamId, "to receive data from server on", sessionId);
+    this.aeronResources = aeronResources;
     this.processor = new ClientDataMessageProcessor(name, sessionId, onCompleteHandler);
     this.flux = new ByteBufferFlux(processor);
-
-    pooler.addDataSubscription(serverDataSubscription, processor);
+    this.serverDataSubscription =
+        aeronResources.dataSubscription(
+            name, channel, streamId, "to receive data from server on", sessionId, processor);
   }
 
   @Override
@@ -51,9 +47,7 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
   @Override
   public void dispose() {
-    pooler.removeSubscription(serverDataSubscription);
-
-    serverDataSubscription.close();
+    aeronResources.close(serverDataSubscription);
   }
 
   long getLastSignalTimeNs() {

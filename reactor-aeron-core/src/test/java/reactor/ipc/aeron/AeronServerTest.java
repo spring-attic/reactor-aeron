@@ -2,8 +2,11 @@ package reactor.ipc.aeron;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.aeron.driver.AeronResources;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -21,9 +24,23 @@ public class AeronServerTest extends BaseAeronTest {
   private String clientChannel =
       "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort();
 
+  private static AeronResources aeronResources;
+
+  @BeforeAll
+  static void beforeAll() {
+    aeronResources = new AeronResources("test");
+  }
+
+  @AfterAll
+  static void afterAll() {
+    if (aeronResources != null) {
+      aeronResources.dispose();
+    }
+  }
+
   @Test
   public void testServerReceivesData() throws InterruptedException {
-    AeronServer server = AeronServer.create();
+    AeronServer server = AeronServer.create(aeronResources);
     ReplayProcessor<String> processor = ReplayProcessor.create();
     Disposable serverHandlerDisposable =
         server
@@ -34,7 +51,7 @@ public class AeronServerTest extends BaseAeronTest {
                 })
             .block(TIMEOUT);
 
-    AeronClient client = AeronClient.create();
+    AeronClient client = AeronClient.create(aeronResources);
     try {
       client
           .newHandler(
@@ -118,6 +135,7 @@ public class AeronServerTest extends BaseAeronTest {
   private AeronClient createAeronClient(String name) {
     return AeronClient.create(
         name,
+        aeronResources,
         options -> {
           options.clientChannel(clientChannel);
           options.serverChannel(serverChannel);
@@ -125,6 +143,7 @@ public class AeronServerTest extends BaseAeronTest {
   }
 
   private AeronServer createAeronServer(String name) {
-    return AeronServer.create(name, options -> options.serverChannel(serverChannel));
+    return AeronServer.create(
+        name, aeronResources, options -> options.serverChannel(serverChannel));
   }
 }

@@ -1,7 +1,7 @@
 package reactor.ipc.aeron.client;
 
 import io.aeron.Publication;
-import io.aeron.driver.AeronWrapper;
+import io.aeron.driver.AeronResources;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
@@ -37,6 +37,8 @@ final class ClientConnector implements Disposable {
 
   private final HeartbeatSender heartbeatSender;
 
+  private final AeronResources aeronResources;
+
   private volatile long sessionId;
 
   private volatile Disposable heartbeatSenderDisposable =
@@ -46,13 +48,14 @@ final class ClientConnector implements Disposable {
 
   ClientConnector(
       String category,
-      AeronWrapper wrapper,
+      AeronResources aeronResources,
       AeronClientOptions options,
       ClientControlMessageSubscriber controlMessageSubscriber,
       HeartbeatSender heartbeatSender,
       int clientControlStreamId,
       int clientSessionStreamId) {
     this.category = category;
+    this.aeronResources = aeronResources;
     this.options = options;
     this.controlMessageSubscriber = controlMessageSubscriber;
     this.clientControlStreamId = clientControlStreamId;
@@ -60,7 +63,8 @@ final class ClientConnector implements Disposable {
     this.heartbeatSender = heartbeatSender;
     this.connectRequestId = UuidUtils.create();
     this.serverControlPublication =
-        wrapper.addPublication(
+        aeronResources.publication(
+            category,
             options.serverChannel(),
             options.serverStreamId(),
             "to send control requests to server",
@@ -188,6 +192,6 @@ final class ClientConnector implements Disposable {
 
     heartbeatSenderDisposable.dispose();
 
-    serverControlPublication.close();
+    aeronResources.close(serverControlPublication);
   }
 }
