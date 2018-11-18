@@ -48,7 +48,7 @@ public class Poller implements Runnable {
       InnerPoller[] pollers = innerPollers;
       int numOfReceived = 0;
       for (InnerPoller poller : pollers) {
-        numOfReceived = poller.poll();
+        numOfReceived += poller.poll();
       }
       idleStrategy.idle(numOfReceived);
     }
