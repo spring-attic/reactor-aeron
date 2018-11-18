@@ -44,8 +44,8 @@ public class AeronWriteSequencerBenchmark {
     io.aeron.Subscription subscription =
         aeronResources.addSubscription("benchmark", channel, 1, "benchmark", 0);
 
-    BenchmarkPooler pooler = new BenchmarkPooler(subscription);
-    pooler.schedulePoll();
+    BenchmarkPoller poller = new BenchmarkPoller(subscription);
+    poller.schedulePoll();
 
     Publication publication = aeronResources.publication("benchmark", channel, 1, "benchmark", 0);
 
@@ -71,19 +71,19 @@ public class AeronWriteSequencerBenchmark {
           i, numOfRuns, Duration.ofNanos(end - start).toMillis());
     }
 
-    pooler.dispose();
+    poller.dispose();
     aeronResources.close(publication);
     aeronResources.close(subscription);
     aeronResources.dispose();
   }
 
-  private static class BenchmarkPooler implements Disposable {
+  private static class BenchmarkPoller implements Disposable {
 
     private final io.aeron.Subscription subscription;
 
     private final Scheduler scheduler;
 
-    public BenchmarkPooler(io.aeron.Subscription subscription) {
+    public BenchmarkPoller(io.aeron.Subscription subscription) {
       this.subscription = subscription;
       this.scheduler = Schedulers.newSingle("drainer");
     }
