@@ -28,7 +28,7 @@ class AeronClientConnectionProvider implements Disposable {
     AeronClientConnector aeronClient = new AeronClientConnector(name, aeronResources, options);
     clients.add(aeronClient);
     return aeronClient
-        .newHandler(null)
+        .newHandler()
         .doOnSuccess(
             connection ->
                 connection

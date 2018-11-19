@@ -5,12 +5,9 @@ import io.aeron.driver.AeronResources;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiFunction;
-import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.ipc.aeron.AeronConnector;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOutbound;
 import reactor.ipc.aeron.Connection;
@@ -20,7 +17,7 @@ import reactor.ipc.aeron.HeartbeatWatchdog;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-public final class AeronClientConnector implements AeronConnector, Disposable {
+public final class AeronClientConnector implements Disposable {
 
   private static final Logger logger = Loggers.getLogger(AeronClientConnector.class);
 
@@ -63,11 +60,14 @@ public final class AeronClientConnector implements AeronConnector, Disposable {
             controlMessageSubscriber);
   }
 
-  @Override
-  public Mono<Connection> newHandler(
-      BiFunction<AeronInbound, AeronOutbound, ? extends Publisher<Void>> ioHandler) {
-    ClientHandler handler = new ClientHandler();
-    return handler.initialise();
+  /**
+   * Create a new handler.
+   *
+   * @return a {@link Mono} completing with a {@link Disposable} token to dispose the active handler
+   *     (server, client connection...) or failing with the connection error.
+   */
+  public Mono<Connection> newHandler() {
+    return new ClientHandler().initialise();
   }
 
   @Override
