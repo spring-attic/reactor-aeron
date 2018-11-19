@@ -10,9 +10,11 @@ import java.util.function.Consumer;
 import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoProcessor;
 import reactor.ipc.aeron.AeronConnector;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOutbound;
+import reactor.ipc.aeron.Connection;
 import reactor.ipc.aeron.DefaultAeronOutbound;
 import reactor.ipc.aeron.HeartbeatSender;
 import reactor.ipc.aeron.HeartbeatWatchdog;
@@ -107,7 +109,7 @@ public final class AeronClient implements AeronConnector, Disposable {
         .ifPresent(ClientHandler::dispose);
   }
 
-  class ClientHandler implements Disposable {
+  class ClientHandler implements Connection {
 
     private final BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>>
         ioHandler;
@@ -121,6 +123,9 @@ public final class AeronClient implements AeronConnector, Disposable {
     private volatile AeronClientInbound inbound;
 
     private volatile long sessionId;
+
+    private final MonoProcessor<Void> onClose = MonoProcessor.create();
+
 
     ClientHandler(
         BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>>
@@ -138,6 +143,10 @@ public final class AeronClient implements AeronConnector, Disposable {
               heartbeatSender,
               clientControlStreamId,
               clientSessionStreamId);
+
+      this.onClose
+          .doOnTerminate(this::dispose0)
+          .subscribe(null, th -> logger.warn("SessionHandler disposed with error: {}", th));
     }
 
     Mono<Disposable> initialise() {
@@ -184,21 +193,37 @@ public final class AeronClient implements AeronConnector, Disposable {
     }
 
     @Override
+    public AeronInbound inbound() {
+      return inbound;
+    }
+
+    @Override
+    public AeronOutbound outbound() {
+      return outbound;
+    }
+
+    @Override
+    public Mono<Void> onTerminate() {
+      return onClose;
+    }
+
+    @Override
     public void dispose() {
-      connector.dispose();
+      if (!onClose.isDisposed()) {
+        onClose.onComplete();
+      }
+    }
 
+    public void dispose0() {
       handlers.remove(this);
-
       heartbeatWatchdog.remove(sessionId);
-
+      connector.dispose();
       if (inbound != null) {
         inbound.dispose();
       }
       outbound.dispose();
 
-      if (sessionId > 0) {
-        logger.debug("[{}] Closed session with Id: {}", name, sessionId);
-      }
+      logger.debug("[{}] Closed session with Id: {}", name, sessionId);
     }
   }
 }
