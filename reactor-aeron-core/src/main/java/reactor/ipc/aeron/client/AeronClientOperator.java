@@ -6,11 +6,11 @@ import java.util.function.Consumer;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.Connection;
 
-public class AeronClientOperator extends AeronClient {
+class AeronClientOperator extends AeronClient {
 
   private final AeronClient source;
 
-  public AeronClientOperator(AeronClient source) {
+  AeronClientOperator(AeronClient source) {
     this.source = Objects.requireNonNull(source, "source");
   }
 

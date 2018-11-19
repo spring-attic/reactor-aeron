@@ -4,7 +4,7 @@ import java.util.function.Consumer;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.Connection;
 
-public class AeronClientDoOn extends AeronClientOperator {
+class AeronClientDoOn extends AeronClientOperator {
 
   private final Consumer<? super Connection> onConnected;
   private final Consumer<? super Connection> onDisconnected;
@@ -28,7 +28,7 @@ public class AeronClientDoOn extends AeronClientOperator {
               }
               if (onDisconnected != null) {
                 connection
-                    .onTerminate()
+                    .onDispose()
                     .doOnTerminate(() -> onDisconnected.accept(connection))
                     .subscribe(
                         null,

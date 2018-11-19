@@ -282,7 +282,7 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
     }
 
     @Override
-    public Mono<Void> onTerminate() {
+    public Mono<Void> onDispose() {
       return onClose;
     }
 

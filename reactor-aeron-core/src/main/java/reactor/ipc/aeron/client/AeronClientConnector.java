@@ -167,7 +167,7 @@ public final class AeronClientConnector implements AeronConnector, Disposable {
     }
 
     @Override
-    public Mono<Void> onTerminate() {
+    public Mono<Void> onDispose() {
       return onClose;
     }
 

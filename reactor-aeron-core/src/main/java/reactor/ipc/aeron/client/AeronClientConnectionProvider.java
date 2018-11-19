@@ -7,13 +7,13 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.Connection;
 
-public class AeronClientConnectionProvider implements Disposable {
+class AeronClientConnectionProvider implements Disposable {
 
   private final String name;
   private final AeronResources aeronResources;
   private final List<AeronClientConnector> clients = new CopyOnWriteArrayList<>();
 
-  public AeronClientConnectionProvider(String name, AeronResources aeronResources) {
+  AeronClientConnectionProvider(String name, AeronResources aeronResources) {
     this.name = name;
     this.aeronResources = aeronResources;
   }
@@ -32,7 +32,7 @@ public class AeronClientConnectionProvider implements Disposable {
         .doOnSuccess(
             connection ->
                 connection
-                    .onTerminate()
+                    .onDispose()
                     .doOnTerminate(
                         () -> {
                           clients.removeIf(client -> client == aeronClient);

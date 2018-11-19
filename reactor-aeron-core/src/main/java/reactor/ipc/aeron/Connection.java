@@ -4,10 +4,9 @@ import org.reactivestreams.Subscription;
 import reactor.core.CoreSubscriber;
 import reactor.core.Disposable;
 import reactor.core.publisher.BaseSubscriber;
-import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
-public interface Connection extends Disposable {
+public interface Connection extends OnDisposable {
 
   /**
    * Return an existing {@link Connection} that must match the given type wrapper or null.
@@ -41,21 +40,13 @@ public interface Connection extends Disposable {
   AeronOutbound outbound();
 
   /**
-   * Return a Mono succeeding when a {@link Connection} is not used anymore by any current
-   * operations.
-   *
-   * @return a Mono succeeding when a {@link Connection} has been terminated
-   */
-  Mono<Void> onTerminate();
-
-  /**
    * Assign a {@link Disposable} to be invoked when the channel is closed.
    *
    * @param onDispose the close event handler
    * @return {@literal this}
    */
   default Connection onDispose(Disposable onDispose) {
-    onTerminate().doOnTerminate(onDispose::dispose).subscribe();
+    onDispose().doOnTerminate(onDispose::dispose).subscribe();
     return this;
   }
 
@@ -69,7 +60,7 @@ public interface Connection extends Disposable {
       @Override
       protected void hookOnSubscribe(Subscription subscription) {
         request(Long.MAX_VALUE);
-        onTerminate().subscribe(null, e -> this.dispose(), this::dispose);
+        onDispose().subscribe(null, e -> this.dispose(), this::dispose);
       }
 
       @Override
