@@ -4,11 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.aeron.driver.AeronResources;
 import java.time.Duration;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import reactor.core.Disposable;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.ipc.aeron.client.AeronClient;
@@ -51,13 +52,13 @@ public class AeronClientTest extends BaseAeronTest {
 
   @Test
   public void testClientReceivesDataFromServer() {
-    AeronServer server = createAeronServer("server");
-
-    server
-        .newHandler(
-            (inbound, outbound) ->
-                Mono.from(outbound.send(ByteBufferFlux.from("hello1", "2", "3").log("server"))))
-        .block(TIMEOUT);
+    createServer(
+        (connection ->
+            connection
+                .outbound()
+                .send(ByteBufferFlux.from("hello1", "2", "3").log("server"))
+                .then()
+                .subscribe()));
 
     Connection connection = createConnection();
     StepVerifier.create(connection.inbound().receive().asString().log("client"))
@@ -68,14 +69,14 @@ public class AeronClientTest extends BaseAeronTest {
   }
 
   @Test
-  public void testTwoClientsReceiveDataFromServer() throws InterruptedException {
-    AeronServer server = createAeronServer("server");
-    blockAndAddDisposable(
-        server.newHandler(
-            (inbound, outbound) -> {
-              Mono.from(outbound.send(ByteBufferFlux.from("1", "2", "3").log())).subscribe();
-              return Mono.never();
-            }));
+  public void testTwoClientsReceiveDataFromServer() {
+    createServer(
+        (connection ->
+            connection
+                .outbound()
+                .send(ByteBufferFlux.from("1", "2", "3").log("server"))
+                .then()
+                .subscribe()));
 
     Connection connection1 = createConnection();
     Connection connection2 = createConnection();
@@ -95,15 +96,11 @@ public class AeronClientTest extends BaseAeronTest {
 
   @Test
   public void testClientWith2HandlersReceiveData() {
-    AeronServer server = createAeronServer("server-1");
-
-    blockAndAddDisposable(
-        server.newHandler(
-            (inbound, outbound) -> {
-              Mono.from(outbound.send(ByteBufferFlux.from("1", "2", "3").log("server")))
-                  .subscribe();
-              return Mono.never();
-            }));
+    createServer(
+        (inbound, outbound) -> {
+          Mono.from(outbound.send(ByteBufferFlux.from("1", "2", "3").log("server"))).subscribe();
+          return Mono.never();
+        });
 
     ReplayProcessor<String> processor1 = ReplayProcessor.create();
     ReplayProcessor<String> processor2 = ReplayProcessor.create();
@@ -145,24 +142,25 @@ public class AeronClientTest extends BaseAeronTest {
 
   @Test
   public void testClientClosesSessionUponHeartbeatLoss() throws Exception {
-    AeronServer server =
-        AeronServer.create(
-            "server",
-            aeronResources,
-            options -> {
-              options.serverChannel(serverChannel);
-              options.heartbeatTimeoutMillis(500);
-            });
-
-    Disposable serverHandlerDisposable =
-        server
-            .newHandler(
-                (inbound, outbound) ->
-                    Mono.from(
-                        outbound.send(
-                            ByteBufferFlux.from("hello1", "2", "3")
-                                .delayElements(Duration.ofSeconds(1))
-                                .log("server"))))
+    OnDisposable onDisposable =
+        AeronServer.create(aeronResources)
+            .options(
+                options -> {
+                  options.serverChannel(serverChannel);
+                  options.heartbeatTimeoutMillis(500);
+                })
+            .doOnConnection(
+                connection -> {
+                  connection
+                      .outbound()
+                      .send(
+                          ByteBufferFlux.from("hello1", "2", "3")
+                              .delayElements(Duration.ofSeconds(1))
+                              .log("server"))
+                      .then()
+                      .subscribe();
+                })
+            .bind()
             .block(TIMEOUT);
 
     ReplayProcessor<String> processor = ReplayProcessor.create();
@@ -179,14 +177,9 @@ public class AeronClientTest extends BaseAeronTest {
 
     processor.elementAt(2).block(Duration.ofSeconds(4));
 
-    serverHandlerDisposable.dispose();
+    onDisposable.dispose();
 
     Thread.sleep(1500);
-  }
-
-  private AeronServer createAeronServer(String name) {
-    return AeronServer.create(
-        name, aeronResources, options -> options.serverChannel(serverChannel));
   }
 
   private Connection createConnection() {
@@ -197,5 +190,24 @@ public class AeronClientTest extends BaseAeronTest {
     Connection connection =
         AeronClient.create(aeronResources).options(options).connect().block(TIMEOUT);
     return addDisposable(connection);
+  }
+
+  private OnDisposable createServer(
+      BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> handler) {
+    return addDisposable(
+        AeronServer.create(aeronResources)
+            .options(options -> options.serverChannel(serverChannel))
+            .handle(handler)
+            .bind()
+            .block(TIMEOUT));
+  }
+
+  private OnDisposable createServer(Consumer<? super Connection> doOnConnection) {
+    return addDisposable(
+        AeronServer.create(aeronResources)
+            .options(options -> options.serverChannel(serverChannel))
+            .doOnConnection(doOnConnection)
+            .bind()
+            .block(TIMEOUT));
   }
 }

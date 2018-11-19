@@ -37,14 +37,6 @@ public class ServerThroughput {
 
     try (AeronResources aeronResources = new AeronResources("test")) {
 
-      AeronServer server =
-          AeronServer.create(
-              "server",
-              aeronResources,
-              options -> {
-                options.serverChannel("aeron:udp?endpoint=" + HOST + ":13000");
-              });
-
       Queue<Data> queue = new ConcurrentLinkedDeque<>();
       AtomicLong counter = new AtomicLong();
       Schedulers.single()
@@ -73,8 +65,9 @@ public class ServerThroughput {
               1,
               TimeUnit.SECONDS);
 
-      server
-          .newHandler(
+      AeronServer.create("server", aeronResources)
+          .options(options -> options.serverChannel("aeron:udp?endpoint=" + HOST + ":13000"))
+          .handle(
               (inbound, outbound) -> {
                 inbound
                     .receive()
@@ -87,6 +80,7 @@ public class ServerThroughput {
                     .subscribe();
                 return Mono.never();
               })
+          .bind()
           .block();
 
       Thread.currentThread().join();

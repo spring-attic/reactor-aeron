@@ -5,11 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.aeron.driver.AeronResources;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import reactor.core.Disposable;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.ReplayProcessor;
@@ -49,17 +50,12 @@ public class AeronServerTest extends BaseAeronTest {
   @Test
   public void testServerReceivesData() {
     ReplayProcessor<String> processor = ReplayProcessor.create();
-    AeronServer server =
-        AeronServer.create(
-            "server", aeronResources, options -> options.serverChannel(serverChannel));
-    addDisposable(
-        server
-            .newHandler(
-                (inbound, outbound) -> {
-                  inbound.receive().asString().log("receive").subscribe(processor);
-                  return Mono.never();
-                })
-            .block(TIMEOUT));
+
+    createServer(
+        (inbound, outbound) -> {
+          inbound.receive().asString().log("receive").subscribe(processor);
+          return Mono.never();
+        });
 
     createConnection()
         .outbound()
@@ -72,16 +68,18 @@ public class AeronServerTest extends BaseAeronTest {
 
   @Test
   public void testServerDisconnectsClientsUponShutdown() throws InterruptedException {
-    AeronServer server = createAeronServer("server");
     ReplayProcessor<ByteBuffer> processor = ReplayProcessor.create();
-    Disposable serverDisposable =
-        server
-            .newHandler(
+
+    OnDisposable server =
+        AeronServer.create(aeronResources)
+            .options(options -> options.serverChannel(serverChannel))
+            .handle(
                 (inbound, outbound) -> {
-                  inbound.receive().subscribe(processor);
+                  inbound.receive().log("receive").subscribe(processor);
                   return Mono.never();
                 })
-            .block();
+            .bind()
+            .block(TIMEOUT);
 
     createConnection()
         .outbound()
@@ -95,7 +93,7 @@ public class AeronServerTest extends BaseAeronTest {
 
     processor.blockFirst();
 
-    serverDisposable.dispose();
+    server.dispose();
 
     ThreadWatcher threadWatcher = new ThreadWatcher();
 
@@ -104,16 +102,13 @@ public class AeronServerTest extends BaseAeronTest {
 
   @Test
   public void testServerDisconnectsSessionUponHeartbeatLoss() {
-    AeronServer server = createAeronServer("server");
     ReplayProcessor<ByteBuffer> processor = ReplayProcessor.create();
-    Disposable serverDisposable =
-        server
-            .newHandler(
-                (inbound, outbound) -> {
-                  inbound.receive().subscribe(processor);
-                  return Mono.never();
-                })
-            .block();
+
+    createServer(
+        (inbound, outbound) -> {
+          inbound.receive().subscribe(processor);
+          return Mono.never();
+        });
 
     Connection connection = createConnection();
     connection
@@ -141,8 +136,13 @@ public class AeronServerTest extends BaseAeronTest {
     return addDisposable(connection);
   }
 
-  private AeronServer createAeronServer(String name) {
-    return AeronServer.create(
-        name, aeronResources, options -> options.serverChannel(serverChannel));
+  private OnDisposable createServer(
+      BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> handler) {
+    return addDisposable(
+        AeronServer.create(aeronResources)
+            .options(options -> options.serverChannel(serverChannel))
+            .handle(handler)
+            .bind()
+            .block(TIMEOUT));
   }
 }
