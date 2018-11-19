@@ -273,6 +273,11 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
       }
     }
 
+    @Override
+    public boolean isDisposed() {
+      return onClose.isDisposed();
+    }
+
     private void dispose0() {
       handlers.remove(this);
       heartbeatWatchdog.remove(sessionId);

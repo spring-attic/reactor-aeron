@@ -1,7 +1,11 @@
 package reactor.ipc.aeron;
 
+import org.reactivestreams.Subscription;
+import reactor.core.CoreSubscriber;
 import reactor.core.Disposable;
+import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.SignalType;
 
 public interface Connection extends Disposable {
 
@@ -43,4 +47,37 @@ public interface Connection extends Disposable {
    * @return a Mono succeeding when a {@link Connection} has been terminated
    */
   Mono<Void> onTerminate();
+
+  /**
+   * Assign a {@link Disposable} to be invoked when the channel is closed.
+   *
+   * @param onDispose the close event handler
+   * @return {@literal this}
+   */
+  default Connection onDispose(Disposable onDispose) {
+    onTerminate().doOnTerminate(onDispose::dispose).subscribe();
+    return this;
+  }
+
+  /**
+   * Return a {@link CoreSubscriber} that will dispose on complete or error.
+   *
+   * @return a {@link CoreSubscriber} that will dispose on complete or error
+   */
+  default CoreSubscriber<Void> disposeSubscriber() {
+    return new BaseSubscriber<Void>() {
+      @Override
+      protected void hookOnSubscribe(Subscription subscription) {
+        request(Long.MAX_VALUE);
+        onTerminate().subscribe(null, e -> this.dispose(), this::dispose);
+      }
+
+      @Override
+      protected void hookFinally(SignalType type) {
+        if (type != SignalType.CANCEL) {
+          dispose();
+        }
+      }
+    };
+  }
 }

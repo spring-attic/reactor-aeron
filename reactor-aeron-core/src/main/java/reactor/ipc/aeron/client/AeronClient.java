@@ -1,49 +1,16 @@
 package reactor.ipc.aeron.client;
 
-import io.aeron.Subscription;
 import io.aeron.driver.AeronResources;
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import org.reactivestreams.Publisher;
-import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.MonoProcessor;
-import reactor.ipc.aeron.AeronConnector;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOutbound;
 import reactor.ipc.aeron.Connection;
-import reactor.ipc.aeron.DefaultAeronOutbound;
-import reactor.ipc.aeron.HeartbeatSender;
-import reactor.ipc.aeron.HeartbeatWatchdog;
-import reactor.util.Logger;
-import reactor.util.Loggers;
 
-public final class AeronClient implements AeronConnector, Disposable {
-
-  private static final Logger logger = Loggers.getLogger(AeronClient.class);
-
-  private final AeronClientOptions options;
-
-  private final String name;
-
-  private static final AtomicInteger streamIdCounter = new AtomicInteger();
-
-  private final ClientControlMessageSubscriber controlMessageSubscriber;
-
-  private final Subscription controlSubscription;
-
-  private final int clientControlStreamId;
-
-  private final HeartbeatSender heartbeatSender;
-
-  private final List<ClientHandler> handlers = new CopyOnWriteArrayList<>();
-
-  private final HeartbeatWatchdog heartbeatWatchdog;
-
-  private final AeronResources aeronResources;
+public abstract class AeronClient {
 
   /**
    * Create aeron client.
@@ -52,178 +19,81 @@ public final class AeronClient implements AeronConnector, Disposable {
    * @return aeron client
    */
   public static AeronClient create(AeronResources aeronResources) {
-    return new AeronClient(
-        null,
-        aeronResources,
-        options -> {
-          // no-op
-        });
+    return create("client", aeronResources);
   }
 
-  public static AeronClient create(
-      String name, AeronResources aeronResources, Consumer<AeronClientOptions> optionsConfigurer) {
-    return new AeronClient(name, aeronResources, optionsConfigurer);
+  /**
+   * Create aeron client.
+   *
+   * @param name name
+   * @param aeronResources aeronResources
+   * @return aeron client
+   */
+  public static AeronClient create(String name, AeronResources aeronResources) {
+    AeronClientConnectionProvider connectionProvider =
+        new AeronClientConnectionProvider(name, aeronResources);
+    return new AeronClientConnect(connectionProvider);
   }
 
-  private AeronClient(
-      String name, AeronResources aeronResources, Consumer<AeronClientOptions> optionsConfigurer) {
-    AeronClientOptions options = new AeronClientOptions();
-    optionsConfigurer.accept(options);
-    this.options = options;
-    this.name = name == null ? "client" : name;
-    this.aeronResources = aeronResources;
-    this.heartbeatWatchdog = new HeartbeatWatchdog(options.heartbeatTimeoutMillis(), this.name);
-    this.controlMessageSubscriber =
-        new ClientControlMessageSubscriber(name, heartbeatWatchdog, this::dispose);
-    this.clientControlStreamId = streamIdCounter.incrementAndGet();
-    this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), this.name);
-    this.controlSubscription =
-        aeronResources.controlSubscription(
-            name,
-            options.clientChannel(),
-            clientControlStreamId,
-            "to receive control requests on",
-            0,
-            controlMessageSubscriber);
+  public final Mono<? extends Connection> connect() {
+    return connect(options());
   }
 
-  @Override
-  public Mono<? extends Disposable> newHandler(
-      BiFunction<AeronInbound, AeronOutbound, ? extends Publisher<Void>> ioHandler) {
-    ClientHandler handler = new ClientHandler(ioHandler);
-    return handler.initialise();
+  public abstract Mono<? extends Connection> connect(AeronClientOptions options);
+
+  protected AeronClientOptions options() {
+    return new AeronClientOptions();
   }
 
-  @Override
-  public void dispose() {
-    handlers.forEach(ClientHandler::dispose);
-    handlers.clear();
-    aeronResources.close(controlSubscription);
+  /**
+   * Apply {@link AeronClientOptions} on the given options consumer to be ultimately used for for
+   * invoking {@link #options()}.
+   *
+   * @param options a consumer aeron client options
+   * @return a new {@link AeronClient}
+   */
+  public AeronClient options(Consumer<AeronClientOptions> options) {
+    Objects.requireNonNull(options, "options");
+    AeronClientOptions aeronClientOptions = new AeronClientOptions();
+    options.accept(aeronClientOptions);
+    return new AeronClientOnOptions(this, aeronClientOptions);
   }
 
-  private void dispose(long sessionId) {
-    handlers
-        .stream()
-        .filter(handler -> handler.sessionId == sessionId)
-        .findFirst()
-        .ifPresent(ClientHandler::dispose);
+  /**
+   * Setup a callback called after {@link AeronClient} has been connected.
+   *
+   * @param doOnConnected a consumer observing connected events
+   * @return a new {@link AeronClient}
+   */
+  public final AeronClient doOnConnected(Consumer<? super Connection> doOnConnected) {
+    Objects.requireNonNull(doOnConnected, "doOnConnected");
+    return new AeronClientDoOn(this, doOnConnected, null);
   }
 
-  class ClientHandler implements Connection {
+  /**
+   * Setup a callback called after {@link Connection} has been disconnected.
+   *
+   * @param doOnDisconnected a consumer observing disconnected events
+   * @return a new {@link AeronClient}
+   */
+  public final AeronClient doOnDisconnected(Consumer<? super Connection> doOnDisconnected) {
+    Objects.requireNonNull(doOnDisconnected, "doOnDisconnected");
+    return new AeronClientDoOn(this, null, doOnDisconnected);
+  }
 
-    private final BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>>
-        ioHandler;
-
-    private final DefaultAeronOutbound outbound;
-
-    private final int clientSessionStreamId;
-
-    private final ClientConnector connector;
-
-    private volatile AeronClientInbound inbound;
-
-    private volatile long sessionId;
-
-    private final MonoProcessor<Void> onClose = MonoProcessor.create();
-
-
-    ClientHandler(
-        BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>>
-            ioHandler) {
-      this.ioHandler = ioHandler;
-      this.clientSessionStreamId = streamIdCounter.incrementAndGet();
-      this.outbound =
-          new DefaultAeronOutbound(name, aeronResources, options.serverChannel(), options);
-      this.connector =
-          new ClientConnector(
-              name,
-              aeronResources,
-              options,
-              controlMessageSubscriber,
-              heartbeatSender,
-              clientControlStreamId,
-              clientSessionStreamId);
-
-      this.onClose
-          .doOnTerminate(this::dispose0)
-          .subscribe(null, th -> logger.warn("SessionHandler disposed with error: {}", th));
-    }
-
-    Mono<Disposable> initialise() {
-      handlers.add(this);
-
-      return connector
-          .connect()
-          .flatMap(
-              connectAckResponse -> {
-                inbound =
-                    new AeronClientInbound(
-                        name,
-                        aeronResources,
-                        options.clientChannel(),
-                        clientSessionStreamId,
-                        connectAckResponse.sessionId,
-                        this::dispose);
-
-                this.sessionId = connectAckResponse.sessionId;
-                heartbeatWatchdog.add(
-                    connectAckResponse.sessionId,
-                    this::dispose,
-                    () -> inbound.getLastSignalTimeNs());
-
-                return outbound.initialise(
-                    connectAckResponse.sessionId, connectAckResponse.serverSessionStreamId);
-              })
-          .doOnSuccess(
-              avoid ->
-                  Mono.from(ioHandler.apply(inbound, outbound))
-                      .doOnTerminate(this::dispose)
-                      .subscribe())
-          .doOnError(
-              th -> {
-                logger.error(
-                    "[{}] Occurred exception for sessionId: {} clientSessionStreamId: {}, error: ",
-                    name,
-                    sessionId,
-                    clientSessionStreamId,
-                    th);
-                dispose();
-              })
-          .then(Mono.just(this));
-    }
-
-    @Override
-    public AeronInbound inbound() {
-      return inbound;
-    }
-
-    @Override
-    public AeronOutbound outbound() {
-      return outbound;
-    }
-
-    @Override
-    public Mono<Void> onTerminate() {
-      return onClose;
-    }
-
-    @Override
-    public void dispose() {
-      if (!onClose.isDisposed()) {
-        onClose.onComplete();
-      }
-    }
-
-    public void dispose0() {
-      handlers.remove(this);
-      heartbeatWatchdog.remove(sessionId);
-      connector.dispose();
-      if (inbound != null) {
-        inbound.dispose();
-      }
-      outbound.dispose();
-
-      logger.debug("[{}] Closed session with Id: {}", name, sessionId);
-    }
+  /**
+   * Attach an IO handler to react on connected client.
+   *
+   * @param handler an IO handler that can dispose underlying connection when {@link Publisher}
+   *     terminates.
+   * @return a new {@link AeronClient}
+   */
+  public final AeronClient handle(
+      BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> handler) {
+    Objects.requireNonNull(handler, "handler");
+    return doOnConnected(
+        connection ->
+            Mono.fromDirect(handler.apply(connection.inbound(), connection.outbound()))
+                .subscribe(connection.disposeSubscriber()));
   }
 }
