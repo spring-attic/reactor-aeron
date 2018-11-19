@@ -81,14 +81,10 @@ class PublisherSender implements CoreSubscriber<ByteBuffer>, Subscription {
 
     cancel();
 
-    try {
-      promise.error(
-          new Exception(
-              "Failed to publish signal into session with Id: " + sessionId + ", result: " + result,
-              cause));
-    } catch (Exception e) {
-      // no-op
-    }
+    promise.error(
+        new Exception(
+            "Failed to publish signal into session with Id: " + sessionId + ", result: " + result,
+            cause));
 
     sequencer.scheduleDrain();
   }
