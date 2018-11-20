@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.aeron.driver.AeronResources;
 import java.time.Duration;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -26,14 +27,12 @@ public class AeronClientTest extends BaseAeronTest {
 
   @BeforeAll
   static void beforeAll() {
-    aeronResources = new AeronResources("test");
+    aeronResources = AeronResources.start();
   }
 
   @AfterAll
   static void afterAll() {
-    if (aeronResources != null) {
-      aeronResources.dispose();
-    }
+    Optional.ofNullable(aeronResources).ifPresent(AeronResources::dispose);
   }
 
   @Test

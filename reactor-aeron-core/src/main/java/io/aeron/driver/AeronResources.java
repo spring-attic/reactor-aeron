@@ -1,16 +1,15 @@
 package io.aeron.driver;
 
 import io.aeron.Aeron;
+import io.aeron.CommonContext;
 import io.aeron.Publication;
 import io.aeron.Subscription;
-import java.io.File;
 import java.util.Optional;
-import org.agrona.IoUtil;
+import org.agrona.CloseHelper;
 import reactor.core.Disposable;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
-import reactor.ipc.aeron.AeronCounters;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.ControlMessageSubscriber;
 import reactor.ipc.aeron.DataMessageSubscriber;
@@ -28,11 +27,7 @@ public class AeronResources implements Disposable, AutoCloseable {
   private final MonoProcessor<Void> onClose = MonoProcessor.create();
 
   private Aeron aeron;
-  private MediaDriver driver;
-  private Aeron.Context aeronContext;
-  private MediaDriver.Context mediaContext;
-
-  private AeronCounters aeronCounters;
+  private MediaDriver mediaDriver;
 
   private Poller poller;
   private Scheduler sender;
@@ -57,10 +52,21 @@ public class AeronResources implements Disposable, AutoCloseable {
             th -> logger.warn("{} disposed with error: {}", this, th));
   }
 
+  /**
+   * Starts aeron resources with default config.
+   *
+   * @return started instance of aeron resources
+   */
   public static AeronResources start() {
     return start(AeronResourcesConfig.defaultConfig());
   }
 
+  /**
+   * Starts aeron resources with given config.
+   *
+   * @param config aeron config
+   * @return started instance of aeron resources
+   */
   public static AeronResources start(AeronResourcesConfig config) {
     AeronResources aeronResources = new AeronResources(config);
     aeronResources.start0();
@@ -74,17 +80,15 @@ public class AeronResources implements Disposable, AutoCloseable {
   }
 
   private void onStart() {
-    mediaContext = new MediaDriver.Context();
-    driver = MediaDriver.launchEmbedded(mediaContext);
+    MediaDriver.Context mediaContext = new MediaDriver.Context();
+    mediaContext.dirDeleteOnStart(config.isDirDeleteOnStart());
+    mediaDriver = MediaDriver.launchEmbedded(mediaContext);
 
-    aeronContext = new Aeron.Context();
-    String directoryName = driver.aeronDirectoryName();
+    Aeron.Context aeronContext = new Aeron.Context();
+    String directoryName = mediaDriver.aeronDirectoryName();
     aeronContext.aeronDirectoryName(directoryName);
 
     aeron = Aeron.connect(aeronContext);
-    aeronCounters = new AeronCounters(directoryName);
-
-    addShutdownHook();
 
     sender = Schedulers.newSingle("reactor-aeron-sender");
     receiver = Schedulers.newSingle("reactor-aeron-receiver");
@@ -92,7 +96,7 @@ public class AeronResources implements Disposable, AutoCloseable {
     receiver.schedule(poller = new Poller(() -> !receiver.isDisposed()));
 
     logger.info(
-        "{} has initialized embedded media driver, aeron directory: {}", this, directoryName);
+        "{} has initialized embedded media mediaDriver, aeron directory: {}", this, directoryName);
   }
 
   /**
@@ -173,7 +177,7 @@ public class AeronResources implements Disposable, AutoCloseable {
   public void close(Subscription subscription) {
     if (subscription != null) {
       poller.removeSubscription(subscription);
-      subscription.close();
+      CloseHelper.quietClose(subscription);
     }
   }
 
@@ -183,9 +187,7 @@ public class AeronResources implements Disposable, AutoCloseable {
    * @param publication publication
    */
   public void close(Publication publication) {
-    if (publication != null) {
-      publication.close();
-    }
+    CloseHelper.quietClose(publication);
   }
 
   @Override
@@ -201,6 +203,8 @@ public class AeronResources implements Disposable, AutoCloseable {
   }
 
   private void onClose() {
+    logger.info("{} shutdown initiated", this);
+
     Optional.ofNullable(sender) //
         .filter(s -> !s.isDisposed())
         .ifPresent(Scheduler::dispose);
@@ -209,11 +213,15 @@ public class AeronResources implements Disposable, AutoCloseable {
         .filter(s -> !s.isDisposed())
         .ifPresent(Scheduler::dispose);
 
-    aeron.close();
+    CloseHelper.quietClose(aeron);
 
+    CloseHelper.quietClose(mediaDriver);
 
+    Optional.ofNullable(mediaDriver) //
+        .map(MediaDriver::context)
+        .ifPresent(CommonContext::deleteAeronDirectory);
 
-    shutdownDriver();
+    logger.info("{} shutdown complete", this);
   }
 
   @Override
@@ -261,28 +269,6 @@ public class AeronResources implements Disposable, AutoCloseable {
           AeronUtils.format(channel, streamId));
     }
     return subscription;
-  }
-
-  private void addShutdownHook() {
-    if (!config.isDeleteAeronDirsOnExit()) {
-      return;
-    }
-
-    Runtime.getRuntime()
-        .addShutdownHook(
-            new Thread(
-                () -> {
-                  String directoryName = driver.aeronDirectoryName();
-                  try {
-                    IoUtil.delete(new File(directoryName), false);
-                  } catch (Exception ex) {
-                    logger.warn(
-                        "{} failed to delete aeron directory: {}, cause: {}",
-                        this,
-                        directoryName,
-                        ex);
-                  }
-                }));
   }
 
   @Override

@@ -8,12 +8,8 @@ import java.util.function.Supplier;
 import org.agrona.collections.ArrayUtil;
 import org.agrona.concurrent.BackoffIdleStrategy;
 import reactor.core.publisher.Operators;
-import reactor.util.Logger;
-import reactor.util.Loggers;
 
 public class Poller implements Runnable {
-
-  private static final Logger logger = Loggers.getLogger(Poller.class);
 
   private final Supplier<Boolean> runningCondition;
 
@@ -38,8 +34,6 @@ public class Poller implements Runnable {
 
   @Override
   public void run() {
-    logger.debug("[{}] Started", name);
-
     BackoffIdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
     while (runningCondition.get()) {
       InnerPoller[] pollers = innerPollers;
@@ -49,8 +43,6 @@ public class Poller implements Runnable {
       }
       idleStrategy.idle(numOfReceived);
     }
-
-    logger.debug("[{}] Terminated", name);
   }
 
   /**

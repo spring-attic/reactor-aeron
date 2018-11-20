@@ -1,21 +1,16 @@
 package io.aeron.driver;
 
-import java.time.Duration;
-
 public class AeronResourcesConfig {
 
-  public static final boolean DELETE_AERON_DIRS_ON_EXIT = true;
-  public static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
-  public static final Duration RETRY_SHUTDOWN_INTERVAL = Duration.ofMillis(250);
+  public static final boolean DELETE_AERON_DIR_ON_START = true;
+  public static final ThreadingMode THREADING_MODE = ThreadingMode.DEDICATED;
 
-  private final Duration retryShutdownInterval;
-  private final Duration shutdownTimeout;
-  private final boolean deleteAeronDirsOnExit;
+  private final ThreadingMode threadingMode;
+  private final boolean dirDeleteOnStart;
 
-  public AeronResourcesConfig(Builder builder) {
-    this.retryShutdownInterval = builder.retryShutdownInterval;
-    this.shutdownTimeout = builder.shutdownTimeout;
-    this.deleteAeronDirsOnExit = builder.deleteAeronDirsOnExit;
+  private AeronResourcesConfig(Builder builder) {
+    this.threadingMode = builder.threadingMode;
+    this.dirDeleteOnStart = builder.dirDeleteOnStart;
   }
 
   public static AeronResourcesConfig defaultConfig() {
@@ -26,48 +21,52 @@ public class AeronResourcesConfig {
     return new Builder();
   }
 
-  public Duration retryShutdownInterval() {
-    return retryShutdownInterval;
+  public boolean isDirDeleteOnStart() {
+    return dirDeleteOnStart;
   }
 
-  public Duration shutdownTimeout() {
-    return shutdownTimeout;
-  }
-
-  public boolean isDeleteAeronDirsOnExit() {
-    return deleteAeronDirsOnExit;
+  public ThreadingMode threadingMode() {
+    return threadingMode;
   }
 
   @Override
   public String toString() {
     final StringBuilder sb = new StringBuilder("AeronResourcesConfig{");
-    sb.append("retryShutdownInterval=").append(retryShutdownInterval);
-    sb.append(", shutdownTimeout=").append(shutdownTimeout);
-    sb.append(", deleteAeronDirsOnExit=").append(deleteAeronDirsOnExit);
+    sb.append(", threadingMode=").append(threadingMode);
+    sb.append(", dirDeleteOnStart=").append(dirDeleteOnStart);
     sb.append('}');
     return sb.toString();
   }
 
   public static class Builder {
 
-    private Duration retryShutdownInterval = RETRY_SHUTDOWN_INTERVAL;
-    private Duration shutdownTimeout = SHUTDOWN_TIMEOUT;
-    private boolean deleteAeronDirsOnExit = DELETE_AERON_DIRS_ON_EXIT;
+    private ThreadingMode threadingMode = THREADING_MODE;
+    private boolean dirDeleteOnStart = DELETE_AERON_DIR_ON_START;
 
     private Builder() {}
 
-    public Builder retryShutdownInterval(Duration retryShutdownInterval) {
-      this.retryShutdownInterval = retryShutdownInterval;
+    public Builder useThreadModeInvoker() {
+      threadingMode = ThreadingMode.INVOKER;
       return this;
     }
 
-    public Builder shutdownTimeout(Duration shutdownTimeout) {
-      this.shutdownTimeout = shutdownTimeout;
+    public Builder useThreadModeShared() {
+      threadingMode = ThreadingMode.SHARED;
       return this;
     }
 
-    public Builder deleteAeronDirsOnExit(boolean deleteAeronDirsOnExit) {
-      this.deleteAeronDirsOnExit = deleteAeronDirsOnExit;
+    public Builder useThreadModeSharedNetwork() {
+      threadingMode = ThreadingMode.SHARED_NETWORK;
+      return this;
+    }
+
+    public Builder useThreadModeDedicated() {
+      threadingMode = ThreadingMode.DEDICATED;
+      return this;
+    }
+
+    public Builder dirDeleteOnStart(boolean dirDeleteOnStart) {
+      this.dirDeleteOnStart = dirDeleteOnStart;
       return this;
     }
 

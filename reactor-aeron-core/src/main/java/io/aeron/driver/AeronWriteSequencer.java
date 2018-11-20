@@ -182,6 +182,8 @@ public class AeronWriteSequencer {
   }
 
   void scheduleDrain() {
-    scheduler.schedule(this::drain);
+    if (!scheduler.isDisposed()) {
+      scheduler.schedule(this::drain);
+    }
   }
 }

@@ -46,7 +46,7 @@ public class WriteSequencerTest {
   @Test
   public void itProvidesSignalsFromAddedPublishers() throws Exception {
 
-    WriteSequencerForTest sequencer = new WriteSequencerForTest(scheduler);
+    TestWriteSequencer sequencer = new TestWriteSequencer(scheduler);
 
     Flux<ByteBuffer> flux1 =
         Flux.just("Hello", "world").map(AeronUtils::stringToByteBuffer).publishOn(scheduler1);
@@ -62,14 +62,14 @@ public class WriteSequencerTest {
     assertThat(sequencer.getSignals(), hasItems("Hello", "world", "Everybody", "happy"));
   }
 
-  static class WriteSequencerForTest extends AeronWriteSequencer {
+  static class TestWriteSequencer extends AeronWriteSequencer {
 
     static final Consumer<Throwable> ERROR_HANDLER =
         th -> System.err.println("Unexpected exception: " + th);
 
     private final SubscriberForTest inner;
 
-    WriteSequencerForTest(Scheduler scheduler) {
+    TestWriteSequencer(Scheduler scheduler) {
       super(scheduler, "test", null, 1234);
       this.inner = new SubscriberForTest(this, null, 1234);
     }

@@ -14,7 +14,7 @@ public class ClientDemo {
    */
   public static void main(String[] args) {
 
-    try (AeronResources aeronResources = new AeronResources("test")) {
+    try (AeronResources aeronResources = AeronResources.start()) {
       AeronClient client =
           AeronClient.create(
               "client",
