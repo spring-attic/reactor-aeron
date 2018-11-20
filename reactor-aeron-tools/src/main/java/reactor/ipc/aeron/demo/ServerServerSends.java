@@ -15,7 +15,7 @@ public class ServerServerSends {
    * @param args program arguments.
    */
   public static void main(String[] args) throws Exception {
-    try (AeronResources aeronResources = new AeronResources("test")) {
+    try (AeronResources aeronResources = AeronResources.start()) {
 
       AeronServer server =
           AeronServer.create(
