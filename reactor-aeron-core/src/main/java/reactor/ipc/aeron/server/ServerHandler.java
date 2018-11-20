@@ -186,6 +186,8 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
     private final AeronServerInbound inbound;
 
+    private final String clientChannel;
+
     private final int clientSessionStreamId;
 
     private final int serverSessionStreamId;
@@ -206,6 +208,7 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
         long sessionId,
         int serverSessionStreamId) {
       this.clientSessionStreamId = clientSessionStreamId;
+      this.clientChannel = clientChannel;
       this.outbound = new DefaultAeronOutbound(category, aeronResources, clientChannel, options);
       this.connectRequestId = connectRequestId;
       this.sessionId = sessionId;
@@ -296,6 +299,18 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
     @Override
     public boolean isDisposed() {
       return onClose.isDisposed();
+    }
+
+    @Override
+    public String toString() {
+      final StringBuilder sb = new StringBuilder("ServerSession{");
+      sb.append("sessionId=").append(sessionId);
+      sb.append(", clientChannel=").append(clientChannel);
+      sb.append(", clientSessionStreamId=").append(clientSessionStreamId);
+      sb.append(", serverSessionStreamId=").append(serverSessionStreamId);
+      sb.append(", connectRequestId=").append(connectRequestId);
+      sb.append('}');
+      return sb.toString();
     }
 
     private void dispose0() {

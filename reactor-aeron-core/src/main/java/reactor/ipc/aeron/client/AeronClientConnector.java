@@ -97,6 +97,8 @@ public final class AeronClientConnector implements Disposable {
 
     private volatile long sessionId;
 
+    private volatile int serverSessionStreamId;
+
     private final MonoProcessor<Void> onClose = MonoProcessor.create();
 
     ClientHandler() {
@@ -125,23 +127,22 @@ public final class AeronClientConnector implements Disposable {
           .connect()
           .flatMap(
               connectAckResponse -> {
+                this.sessionId = connectAckResponse.sessionId;
+                this.serverSessionStreamId = connectAckResponse.serverSessionStreamId;
+
                 inbound =
                     new AeronClientInbound(
                         name,
                         aeronResources,
                         options.clientChannel(),
                         clientSessionStreamId,
-                        connectAckResponse.sessionId,
+                        sessionId,
                         this::dispose);
 
-                this.sessionId = connectAckResponse.sessionId;
                 heartbeatWatchdog.add(
-                    connectAckResponse.sessionId,
-                    this::dispose,
-                    () -> inbound.getLastSignalTimeNs());
+                    sessionId, this::dispose, () -> inbound.getLastSignalTimeNs());
 
-                return outbound.initialise(
-                    connectAckResponse.sessionId, connectAckResponse.serverSessionStreamId);
+                return outbound.initialise(sessionId, serverSessionStreamId);
               })
           .doOnError(
               th -> {
@@ -181,6 +182,18 @@ public final class AeronClientConnector implements Disposable {
     @Override
     public boolean isDisposed() {
       return onClose.isDisposed();
+    }
+
+    @Override
+    public String toString() {
+      final StringBuilder sb = new StringBuilder("ClientSession{");
+      sb.append("sessionId=").append(sessionId);
+      sb.append(", clientChannel=").append(options.clientChannel());
+      sb.append(", serverChannel=").append(options.serverChannel());
+      sb.append(", clientSessionStreamId=").append(clientSessionStreamId);
+      sb.append(", serverSessionStreamId=").append(serverSessionStreamId);
+      sb.append('}');
+      return sb.toString();
     }
 
     public void dispose0() {
