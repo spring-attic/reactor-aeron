@@ -35,7 +35,7 @@ public class ServerThroughput {
    */
   public static void main(String[] args) throws Exception {
 
-    try (AeronResources aeronResources = new AeronResources("test")) {
+    try (AeronResources aeronResources = AeronResources.start()) {
 
       Queue<Data> queue = new ConcurrentLinkedDeque<>();
       AtomicLong counter = new AtomicLong();

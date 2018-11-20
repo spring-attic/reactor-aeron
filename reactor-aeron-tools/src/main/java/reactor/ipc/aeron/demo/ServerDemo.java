@@ -12,7 +12,7 @@ public class ServerDemo {
    * @param args program arguments.
    */
   public static void main(String[] args) throws Exception {
-    try (AeronResources aeronResources = new AeronResources("test")) {
+    try (AeronResources aeronResources = AeronResources.start()) {
 
       AeronServer.create("server", aeronResources)
           .options(options -> options.serverChannel("aeron:udp?endpoint=localhost:13000"))

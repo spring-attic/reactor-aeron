@@ -17,7 +17,7 @@ public class ClientDemo {
   public static void main(String[] args) {
 
     Connection connection = null;
-    try (AeronResources aeronResources = new AeronResources("test")) {
+    try (AeronResources aeronResources = AeronResources.start()) {
 
       connection =
           AeronClient.create("client", aeronResources)

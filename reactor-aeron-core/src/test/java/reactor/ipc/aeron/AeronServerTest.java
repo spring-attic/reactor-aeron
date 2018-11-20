@@ -7,6 +7,7 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -37,14 +38,12 @@ public class AeronServerTest extends BaseAeronTest {
 
   @BeforeAll
   static void beforeAll() {
-    aeronResources = new AeronResources("test");
+    aeronResources = AeronResources.start();
   }
 
   @AfterAll
   static void afterAll() {
-    if (aeronResources != null) {
-      aeronResources.dispose();
-    }
+    Optional.ofNullable(aeronResources).ifPresent(AeronResources::dispose);
   }
 
   @Test

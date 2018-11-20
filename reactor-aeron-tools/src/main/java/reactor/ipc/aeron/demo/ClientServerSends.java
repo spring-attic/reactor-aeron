@@ -12,7 +12,7 @@ public class ClientServerSends {
    */
   public static void main(String[] args) throws Exception {
 
-    try (AeronResources aeronResources = new AeronResources("test")) {
+    try (AeronResources aeronResources = AeronResources.start()) {
 
       AeronClient.create("client", aeronResources)
           .options(
