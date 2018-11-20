@@ -15,14 +15,11 @@ public class Poller implements Runnable {
 
   private static final Logger logger = Loggers.getLogger(Poller.class);
 
-  private final String name;
-
   private final Supplier<Boolean> runningCondition;
 
   private volatile InnerPoller[] innerPollers = new InnerPoller[0];
 
-  public Poller(String name, Supplier<Boolean> runningCondition) {
-    this.name = name;
+  public Poller(Supplier<Boolean> runningCondition) {
     this.runningCondition = runningCondition;
   }
 
