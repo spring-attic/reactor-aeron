@@ -17,10 +17,6 @@ class AeronServerBind extends AeronServer {
 
   @Override
   public Mono<? extends OnDisposable> bind(AeronOptions options) {
-    return Mono.create(
-        sink -> {
-          ServerHandler handler = new ServerHandler(name, aeronResources, options);
-          sink.success(handler);
-        });
+    return Mono.fromCallable(() -> new ServerHandler(name, aeronResources, options));
   }
 }

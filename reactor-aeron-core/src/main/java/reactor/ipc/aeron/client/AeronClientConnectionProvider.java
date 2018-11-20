@@ -25,19 +25,23 @@ class AeronClientConnectionProvider implements Disposable {
    * @return a new {@link Mono} of {@link Connection}
    */
   public Mono<? extends Connection> acquire(AeronClientOptions options) {
-    AeronClientConnector aeronClient = new AeronClientConnector(name, aeronResources, options);
-    clients.add(aeronClient);
-    return aeronClient
-        .newHandler()
-        .doOnSuccess(
-            connection ->
-                connection
-                    .onDispose()
-                    .doOnTerminate(
-                        () -> {
-                          clients.removeIf(client -> client == aeronClient);
-                          aeronClient.dispose();
-                        }));
+    return Mono.defer(
+        () -> {
+          AeronClientConnector aeronClient =
+              new AeronClientConnector(name, aeronResources, options);
+          clients.add(aeronClient);
+          return aeronClient
+              .newHandler()
+              .doOnSuccess(
+                  connection ->
+                      connection
+                          .onDispose()
+                          .doOnTerminate(
+                              () -> {
+                                clients.removeIf(client -> client == aeronClient);
+                                aeronClient.dispose();
+                              }));
+        });
   }
 
   @Override
