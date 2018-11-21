@@ -1,17 +1,13 @@
 package reactor.ipc.aeron.client;
 
 import io.aeron.driver.AeronResources;
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.Connection;
 
-class AeronClientConnectionProvider implements Disposable {
+class AeronClientConnectionProvider {
 
   private final String name;
   private final AeronResources aeronResources;
-  private final List<AeronClientConnector> connectors = new CopyOnWriteArrayList<>();
 
   AeronClientConnectionProvider(String name, AeronResources aeronResources) {
     this.name = name;
@@ -27,30 +23,20 @@ class AeronClientConnectionProvider implements Disposable {
   public Mono<? extends Connection> acquire(AeronClientOptions options) {
     return Mono.defer(
         () -> {
-          AeronClientConnector connector =
-              new AeronClientConnector(name, aeronResources, options);
-          connectors.add(connector);
+          AeronClientConnector connector = new AeronClientConnector(name, aeronResources, options);
           return connector
               .newHandler()
+              .doOnError(th -> connector.dispose())
               .doOnSuccess(
                   connection ->
                       connection
                           .onDispose()
-                          .doOnTerminate(
-                              () -> {
-                                connectors.removeIf(client -> client == connector);
-                                connector.dispose();
+                          .doOnTerminate(connector::dispose)
+                          .subscribe(
+                              null,
+                              th -> {
+                                // no-op
                               }));
         });
-  }
-
-  @Override
-  public void dispose() {
-    connectors.forEach(AeronClientConnector::dispose);
-  }
-
-  @Override
-  public boolean isDisposed() {
-    return connectors.isEmpty();
   }
 }
