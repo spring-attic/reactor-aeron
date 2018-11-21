@@ -1,5 +1,7 @@
 package reactor.ipc.aeron.client;
 
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedGenerator;
 import io.aeron.Publication;
 import io.aeron.driver.AeronResources;
 import java.nio.ByteBuffer;
@@ -20,6 +22,8 @@ import reactor.util.Loggers;
 final class ClientConnector implements Disposable {
 
   private static final Logger logger = Loggers.getLogger(ClientConnector.class);
+
+  private static final TimeBasedGenerator uuidGenerator = Generators.timeBasedGenerator();
 
   private final String category;
 
@@ -61,7 +65,7 @@ final class ClientConnector implements Disposable {
     this.clientControlStreamId = clientControlStreamId;
     this.clientSessionStreamId = clientSessionStreamId;
     this.heartbeatSender = heartbeatSender;
-    this.connectRequestId = UuidUtils.create();
+    this.connectRequestId = uuidGenerator.generate();
     this.serverControlPublication =
         aeronResources.publication(
             category,
