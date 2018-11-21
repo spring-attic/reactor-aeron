@@ -18,19 +18,15 @@ public class ClientThroughput {
   public static void main(String[] args) throws Exception {
     try (AeronResources aeronResources = AeronResources.start()) {
 
-      AeronClient client =
-          AeronClient.create(
-              "client",
-              aeronResources,
+      ByteBuffer buffer = ByteBuffer.allocate(1024);
+
+      AeronClient.create("client", aeronResources)
+          .options(
               options -> {
                 options.serverChannel("aeron:udp?endpoint=" + HOST + ":13000");
                 options.clientChannel("aeron:udp?endpoint=" + HOST + ":12001");
-              });
-
-      ByteBuffer buffer = ByteBuffer.allocate(1024);
-
-      client
-          .newHandler(
+              })
+          .handle(
               (inbound, outbound) -> {
                 outbound
                     .send(
@@ -52,6 +48,7 @@ public class ClientThroughput {
 
                 return Mono.never();
               })
+          .connect()
           .block();
 
       System.out.println("main completed");

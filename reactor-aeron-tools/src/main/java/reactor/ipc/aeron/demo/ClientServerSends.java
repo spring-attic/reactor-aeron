@@ -1,7 +1,6 @@
 package reactor.ipc.aeron.demo;
 
 import io.aeron.driver.AeronResources;
-import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.client.AeronClient;
 
 public class ClientServerSends {
@@ -14,20 +13,20 @@ public class ClientServerSends {
   public static void main(String[] args) throws Exception {
 
     try (AeronResources aeronResources = AeronResources.start()) {
-      AeronClient client =
-          AeronClient.create(
-              "client",
-              aeronResources,
+
+      AeronClient.create("client", aeronResources)
+          .options(
               options -> {
                 options.serverChannel("aeron:udp?endpoint=localhost:13000");
                 options.clientChannel("aeron:udp?endpoint=localhost:12001");
-              });
-      client
-          .newHandler(
-              (inbound, outbound) -> {
-                System.out.println("Handler invoked");
-                inbound.receive().asString().log("receive").subscribe();
-                return Mono.never();
+              })
+          .doOnConnected(
+              connection -> System.out.println(connection + " was connected successfully"))
+          .doOnDisconnected(connection -> System.out.println(connection + " was disconnected"))
+          .connect()
+          .doOnSuccess(
+              connection -> {
+                connection.inbound().receive().asString().log("receive").subscribe();
               })
           .block();
 
