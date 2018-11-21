@@ -29,7 +29,7 @@ public class BaseAeronTest {
     return disposable;
   }
 
-  Disposable addDisposable(Disposable disposable) {
+  <T extends Disposable> T addDisposable(T disposable) {
     disposables.add(disposable);
     return disposable;
   }

@@ -14,19 +14,14 @@ public class ServerDemo {
   public static void main(String[] args) throws Exception {
     try (AeronResources aeronResources = AeronResources.start()) {
 
-      AeronServer server =
-          AeronServer.create(
-              "server",
-              aeronResources,
-              options -> {
-                options.serverChannel("aeron:udp?endpoint=localhost:13000");
-              });
-      server
-          .newHandler(
+      AeronServer.create("server", aeronResources)
+          .options(options -> options.serverChannel("aeron:udp?endpoint=localhost:13000"))
+          .handle(
               (inbound, outbound) -> {
                 inbound.receive().asString().log("receive").subscribe();
                 return Mono.never();
               })
+          .bind()
           .block();
 
       Thread.currentThread().join();

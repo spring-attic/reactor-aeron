@@ -6,24 +6,33 @@ import io.aeron.driver.AeronResources;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import reactor.core.Disposable;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.ipc.aeron.client.AeronClient;
+import reactor.ipc.aeron.client.AeronClientOptions;
 import reactor.ipc.aeron.server.AeronServer;
 import reactor.test.StepVerifier;
 
 public class AeronServerTest extends BaseAeronTest {
 
-  private String serverChannel =
+  private static String serverChannel =
       "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort(13000);
 
-  private String clientChannel =
+  private static String clientChannel =
       "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort();
+
+  private static final Consumer<AeronClientOptions> DEFAULT_CLIENT_OPTIONS =
+      options -> {
+        options.clientChannel(clientChannel);
+        options.serverChannel(serverChannel);
+      };
 
   private static AeronResources aeronResources;
 
@@ -38,65 +47,52 @@ public class AeronServerTest extends BaseAeronTest {
   }
 
   @Test
-  public void testServerReceivesData() throws InterruptedException {
-    AeronServer server = AeronServer.create(aeronResources);
+  public void testServerReceivesData() {
     ReplayProcessor<String> processor = ReplayProcessor.create();
-    Disposable serverHandlerDisposable =
-        server
-            .newHandler(
-                (inbound, outbound) -> {
-                  inbound.receive().asString().log("receive").subscribe(processor);
-                  return Mono.never();
-                })
-            .block(TIMEOUT);
 
-    AeronClient client = AeronClient.create(aeronResources);
-    try {
-      client
-          .newHandler(
-              (inbound, outbound) -> {
-                outbound
-                    .send(ByteBufferFlux.from("Hello", "world!").log("send"))
-                    .then()
-                    .subscribe();
-                return Mono.never();
-              })
-          .block(TIMEOUT);
+    createServer(
+        (inbound, outbound) -> {
+          inbound.receive().asString().log("receive").subscribe(processor);
+          return Mono.never();
+        });
 
-      StepVerifier.create(processor).expectNext("Hello", "world!").thenCancel().verify();
-    } finally {
-      serverHandlerDisposable.dispose();
-      client.dispose();
-    }
+    createConnection()
+        .outbound()
+        .send(ByteBufferFlux.from("Hello", "world!").log("send"))
+        .then()
+        .subscribe();
+
+    StepVerifier.create(processor).expectNext("Hello", "world!").thenCancel().verify();
   }
 
   @Test
   public void testServerDisconnectsClientsUponShutdown() throws InterruptedException {
-    AeronServer server = createAeronServer("server");
     ReplayProcessor<ByteBuffer> processor = ReplayProcessor.create();
-    Disposable serverDisposable =
-        server
-            .newHandler(
+
+    OnDisposable server =
+        AeronServer.create(aeronResources)
+            .options(options -> options.serverChannel(serverChannel))
+            .handle(
                 (inbound, outbound) -> {
-                  inbound.receive().subscribe(processor);
+                  inbound.receive().log("receive").subscribe(processor);
                   return Mono.never();
                 })
-            .block();
+            .bind()
+            .block(TIMEOUT);
 
-    AeronClient client = createAeronClient("client");
-    client
-        .newHandler(
-            (inbound, outbound) ->
-                outbound.send(
-                    Flux.range(1, 100)
-                        .delayElements(Duration.ofSeconds(1))
-                        .map(i -> AeronUtils.stringToByteBuffer("" + i))))
-        .block();
+    createConnection()
+        .outbound()
+        .send(
+            Flux.range(1, 100)
+                .delayElements(Duration.ofSeconds(1))
+                .map(i -> AeronUtils.stringToByteBuffer("" + i))
+                .log("send"))
+        .then()
+        .subscribe();
 
     processor.blockFirst();
 
-    serverDisposable.dispose();
-    client.dispose();
+    server.dispose();
 
     ThreadWatcher threadWatcher = new ThreadWatcher();
 
@@ -104,45 +100,48 @@ public class AeronServerTest extends BaseAeronTest {
   }
 
   @Test
-  public void testServerDisconnectsSessionUponHeartbeatLoss() throws InterruptedException {
-    AeronServer server = createAeronServer("server");
+  public void testServerDisconnectsSessionUponHeartbeatLoss() {
     ReplayProcessor<ByteBuffer> processor = ReplayProcessor.create();
-    Disposable serverDisposable =
-        server
-            .newHandler(
-                (inbound, outbound) -> {
-                  inbound.receive().subscribe(processor);
-                  return Mono.never();
-                })
-            .block();
 
-    AeronClient client = createAeronClient("client");
-    client
-        .newHandler(
-            (inbound, outbound) ->
-                outbound.send(
-                    Flux.range(1, 100)
-                        .delayElements(Duration.ofSeconds(1))
-                        .map(i -> AeronUtils.stringToByteBuffer("" + i))))
-        .block();
+    createServer(
+        (inbound, outbound) -> {
+          inbound.receive().subscribe(processor);
+          return Mono.never();
+        });
+
+    Connection connection = createConnection();
+    connection
+        .outbound()
+        .send(
+            Flux.range(1, 100)
+                .delayElements(Duration.ofSeconds(1))
+                .map(i -> AeronUtils.stringToByteBuffer("" + i))
+                .log("send"))
+        .then()
+        .subscribe();
 
     processor.blockFirst();
 
-    client.dispose();
+    connection.dispose();
   }
 
-  private AeronClient createAeronClient(String name) {
-    return AeronClient.create(
-        name,
-        aeronResources,
-        options -> {
-          options.clientChannel(clientChannel);
-          options.serverChannel(serverChannel);
-        });
+  private Connection createConnection() {
+    return createConnection(DEFAULT_CLIENT_OPTIONS);
   }
 
-  private AeronServer createAeronServer(String name) {
-    return AeronServer.create(
-        name, aeronResources, options -> options.serverChannel(serverChannel));
+  private Connection createConnection(Consumer<AeronClientOptions> options) {
+    Connection connection =
+        AeronClient.create(aeronResources).options(options).connect().block(TIMEOUT);
+    return addDisposable(connection);
+  }
+
+  private OnDisposable createServer(
+      BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> handler) {
+    return addDisposable(
+        AeronServer.create(aeronResources)
+            .options(options -> options.serverChannel(serverChannel))
+            .handle(handler)
+            .bind()
+            .block(TIMEOUT));
   }
 }

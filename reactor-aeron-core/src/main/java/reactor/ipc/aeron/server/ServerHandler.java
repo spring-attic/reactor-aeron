@@ -6,34 +6,34 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.BiFunction;
-import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
-import reactor.core.Disposable;
+import reactor.core.publisher.DirectProcessor;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoProcessor;
 import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.AeronInbound;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronOutbound;
 import reactor.ipc.aeron.AeronUtils;
+import reactor.ipc.aeron.Connection;
 import reactor.ipc.aeron.ControlMessageSubscriber;
 import reactor.ipc.aeron.DefaultAeronOutbound;
 import reactor.ipc.aeron.HeartbeatSender;
 import reactor.ipc.aeron.HeartbeatWatchdog;
 import reactor.ipc.aeron.MessageType;
+import reactor.ipc.aeron.OnDisposable;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-final class ServerHandler implements ControlMessageSubscriber, Disposable {
+final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
   private static final Logger logger = Loggers.getLogger(ServerHandler.class);
 
   private final String category;
 
   private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
-
-  private final BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>>
-      ioHandler;
 
   private final AeronOptions options;
 
@@ -49,11 +49,12 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
   private final io.aeron.Subscription controlSubscription;
 
-  ServerHandler(
-      String category,
-      BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> ioHandler,
-      AeronResources aeronResources,
-      AeronOptions options) {
+  private final MonoProcessor<Void> onClose = MonoProcessor.create();
+
+  private final DirectProcessor<Connection> connections = DirectProcessor.create();
+  private final FluxSink<Connection> connectionSink = connections.sink();
+
+  ServerHandler(String category, AeronResources aeronResources, AeronOptions options) {
     this.aeronResources = aeronResources;
     this.controlSubscription =
         aeronResources.controlSubscription(
@@ -65,17 +66,17 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
             this);
 
     this.category = category;
-    this.ioHandler = ioHandler;
     this.options = options;
     this.heartbeatWatchdog = new HeartbeatWatchdog(options.heartbeatTimeoutMillis(), category);
     this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), category);
+
+    this.onClose
+        .doOnTerminate(this::dispose0)
+        .subscribe(null, th -> logger.warn("ServerHandler disposed with error: {}", th));
   }
 
-  @Override
-  public void dispose() {
-    handlers.forEach(SessionHandler::dispose);
-    handlers.clear();
-    aeronResources.close(controlSubscription);
+  Flux<Connection> connections() {
+    return connections.onBackpressureBuffer();
   }
 
   @Override
@@ -114,7 +115,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
         .initialise()
         .subscribeOn(Schedulers.newSingle("ds"))
         .subscribe(
-            null,
+            connectionSink::next,
             th ->
                 logger.error(
                     "[{}] Occurred exception on connect to {}, sessionId: {}, "
@@ -154,13 +155,38 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
         .ifPresent(SessionHandler::dispose);
   }
 
-  class SessionHandler implements Disposable {
+  @Override
+  public void dispose() {
+    if (!isDisposed()) {
+      onClose.onComplete();
+    }
+  }
+
+  @Override
+  public boolean isDisposed() {
+    return onClose.isDisposed();
+  }
+
+  @Override
+  public Mono<Void> onDispose() {
+    return onClose;
+  }
+
+  private void dispose0() {
+    handlers.forEach(SessionHandler::dispose);
+    handlers.clear();
+    aeronResources.close(controlSubscription);
+  }
+
+  class SessionHandler implements Connection {
 
     private final Logger logger = Loggers.getLogger(SessionHandler.class);
 
     private final DefaultAeronOutbound outbound;
 
     private final AeronServerInbound inbound;
+
+    private final String clientChannel;
 
     private final int clientSessionStreamId;
 
@@ -172,6 +198,8 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
 
     private final ServerConnector connector;
 
+    private final MonoProcessor<Void> onClose = MonoProcessor.create();
+
     SessionHandler(
         String clientChannel,
         int clientSessionStreamId,
@@ -180,6 +208,7 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
         long sessionId,
         int serverSessionStreamId) {
       this.clientSessionStreamId = clientSessionStreamId;
+      this.clientChannel = clientChannel;
       this.outbound = new DefaultAeronOutbound(category, aeronResources, clientChannel, options);
       this.connectRequestId = connectRequestId;
       this.sessionId = sessionId;
@@ -196,9 +225,13 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
               connectRequestId,
               options,
               heartbeatSender);
+
+      this.onClose
+          .doOnTerminate(this::dispose0)
+          .subscribe(null, th -> logger.warn("SessionHandler disposed with error: {}", th));
     }
 
-    Mono<Void> initialise() {
+    Mono<? extends Connection> initialise() {
 
       return connector
           .connect()
@@ -210,8 +243,9 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
                   serverSessionStreamId,
                   sessionId,
                   this::dispose))
+          .thenReturn(this)
           .doOnSuccess(
-              avoid -> {
+              connection -> {
                 heartbeatWatchdog.add(
                     sessionId,
                     () -> {
@@ -227,9 +261,6 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
                     category,
                     connectRequestId,
                     sessionId);
-
-                Publisher<Void> publisher = ioHandler.apply(inbound, outbound);
-                Mono.from(publisher).doOnTerminate(this::dispose).subscribe();
               })
           .doOnError(
               th -> {
@@ -244,13 +275,48 @@ final class ServerHandler implements ControlMessageSubscriber, Disposable {
     }
 
     @Override
+    public AeronInbound inbound() {
+      return inbound;
+    }
+
+    @Override
+    public AeronOutbound outbound() {
+      return outbound;
+    }
+
+    @Override
+    public Mono<Void> onDispose() {
+      return onClose;
+    }
+
+    @Override
     public void dispose() {
+      if (!onClose.isDisposed()) {
+        onClose.onComplete();
+      }
+    }
+
+    @Override
+    public boolean isDisposed() {
+      return onClose.isDisposed();
+    }
+
+    @Override
+    public String toString() {
+      final StringBuilder sb = new StringBuilder("ServerSession{");
+      sb.append("sessionId=").append(sessionId);
+      sb.append(", clientChannel=").append(clientChannel);
+      sb.append(", clientSessionStreamId=").append(clientSessionStreamId);
+      sb.append(", serverSessionStreamId=").append(serverSessionStreamId);
+      sb.append(", connectRequestId=").append(connectRequestId);
+      sb.append('}');
+      return sb.toString();
+    }
+
+    private void dispose0() {
       handlers.remove(this);
-
       heartbeatWatchdog.remove(sessionId);
-
       connector.dispose();
-
       outbound.dispose();
       inbound.dispose();
 
