@@ -1,5 +1,6 @@
 package reactor.ipc.aeron.server;
 
+import io.aeron.Image;
 import io.aeron.driver.AeronResources;
 import java.util.List;
 import java.util.UUID;
@@ -20,8 +21,6 @@ import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.Connection;
 import reactor.ipc.aeron.ControlMessageSubscriber;
 import reactor.ipc.aeron.DefaultAeronOutbound;
-import reactor.ipc.aeron.HeartbeatSender;
-import reactor.ipc.aeron.HeartbeatWatchdog;
 import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.OnDisposable;
 import reactor.util.Logger;
@@ -30,6 +29,8 @@ import reactor.util.Loggers;
 final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
   private static final Logger logger = Loggers.getLogger(ServerHandler.class);
+
+  private static final int CONTROL_SESSION_ID = 0;
 
   private final String category;
 
@@ -41,11 +42,7 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
   private final AtomicLong nextSessionId = new AtomicLong(0);
 
-  private final HeartbeatWatchdog heartbeatWatchdog;
-
   private final List<SessionHandler> handlers = new CopyOnWriteArrayList<>();
-
-  private final HeartbeatSender heartbeatSender;
 
   private final io.aeron.Subscription controlSubscription;
 
@@ -62,13 +59,13 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
             options.serverChannel(),
             options.serverStreamId(),
             "to receive control requests on",
-            0,
-            this);
+            CONTROL_SESSION_ID,
+            this,
+            null,
+            null);
 
     this.category = category;
     this.options = options;
-    this.heartbeatWatchdog = new HeartbeatWatchdog(options.heartbeatTimeoutMillis(), category);
-    this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), category);
 
     this.onClose
         .doOnTerminate(this::dispose0)
@@ -138,11 +135,6 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
         category,
         MessageType.CONNECT_ACK,
         connectRequestId);
-  }
-
-  @Override
-  public void onHeartbeat(long sessionId) {
-    heartbeatWatchdog.heartbeatReceived(sessionId);
   }
 
   @Override
@@ -223,8 +215,7 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
               sessionId,
               serverSessionStreamId,
               connectRequestId,
-              options,
-              heartbeatSender);
+              options);
 
       this.onClose
           .doOnTerminate(this::dispose0)
@@ -246,14 +237,6 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
           .thenReturn(this)
           .doOnSuccess(
               connection -> {
-                heartbeatWatchdog.add(
-                    sessionId,
-                    () -> {
-                      heartbeatWatchdog.remove(sessionId);
-                      dispose();
-                    },
-                    inbound::lastSignalTimeNs);
-
                 handlers.add(this);
 
                 logger.debug(
@@ -315,7 +298,6 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
     private void dispose0() {
       handlers.remove(this);
-      heartbeatWatchdog.remove(sessionId);
       connector.dispose();
       outbound.dispose();
       inbound.dispose();

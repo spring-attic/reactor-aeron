@@ -134,32 +134,10 @@ public class AeronResources implements Disposable, AutoCloseable {
    * @param purpose purpose
    * @param sessionId session id
    * @param controlMessageSubscriber control message subscriber
-   * @return control subscription
-   */
-  public Subscription controlSubscription(
-      String category,
-      String channel,
-      int streamId,
-      String purpose,
-      long sessionId,
-      ControlMessageSubscriber controlMessageSubscriber) {
-    return controlSubscription(
-        category, channel, streamId, purpose, sessionId, controlMessageSubscriber, null, null);
-  }
-
-  /**
-   * Adds control subscription and register it in the {@link Poller}. Also see {@link
-   * #close(Subscription)}}.
-   *
-   * @param channel channel
-   * @param streamId stream id
-   * @param purpose purpose
-   * @param sessionId session id
-   * @param controlMessageSubscriber control message subscriber
-   * @param availableImageHandler called when {@link Image}s become available for consumption. Null
-   *     is valid if no action is to be taken.
-   * @param unavailableImageHandler called when {@link Image}s go unavailable for consumption. Null
-   *     is valid if no * action is to be taken.
+   * @param onAvailableImage called when {@link Image}s become available for consumption. Null is
+   *     valid if no action is to be taken.
+   * @param onUnavailableImage called when {@link Image}s go unavailable for consumption. Null is
+   *     valid if no action is to be taken.
    * @return control subscription
    */
   public Subscription controlSubscription(
@@ -169,8 +147,8 @@ public class AeronResources implements Disposable, AutoCloseable {
       String purpose,
       long sessionId,
       ControlMessageSubscriber controlMessageSubscriber,
-      Consumer<Image> availableImageHandler,
-      Consumer<Image> unavailableImageHandler) {
+      Consumer<Image> onAvailableImage,
+      Consumer<Image> onUnavailableImage) {
     Subscription subscription =
         addSubscription(
             category + "-control",
@@ -178,8 +156,8 @@ public class AeronResources implements Disposable, AutoCloseable {
             streamId,
             purpose,
             sessionId,
-            availableImageHandler,
-            unavailableImageHandler);
+            onAvailableImage,
+            onUnavailableImage);
     poller.addControlSubscription(subscription, controlMessageSubscriber);
     return subscription;
   }
@@ -193,32 +171,10 @@ public class AeronResources implements Disposable, AutoCloseable {
    * @param purpose purpose
    * @param sessionId session id
    * @param dataMessageSubscriber data message subscriber
-   * @return control subscription
-   */
-  public Subscription dataSubscription(
-      String category,
-      String channel,
-      int streamId,
-      String purpose,
-      long sessionId,
-      DataMessageSubscriber dataMessageSubscriber) {
-    return dataSubscription(
-        category, channel, streamId, purpose, sessionId, dataMessageSubscriber, null, null);
-  }
-
-  /**
-   * Adds data subscription and register it in the {@link Poller}. Also see {@link
-   * #close(Subscription)}}.
-   *
-   * @param channel channel
-   * @param streamId stream id
-   * @param purpose purpose
-   * @param sessionId session id
-   * @param dataMessageSubscriber data message subscriber
-   * @param availableImageHandler called when {@link Image}s become available for consumption. Null
-   *     is valid if no action is to be taken.
-   * @param unavailableImageHandler called when {@link Image}s go unavailable for consumption. Null
-   *     is valid if no * action is to be taken.
+   * @param onAvailableImage called when {@link Image}s become available for consumption. Null is
+   *     valid if no action is to be taken.
+   * @param onUnavailableImage called when {@link Image}s go unavailable for consumption. Null is
+   *     valid if no action is to be taken.
    * @return control subscription
    */
   public Subscription dataSubscription(
@@ -228,8 +184,8 @@ public class AeronResources implements Disposable, AutoCloseable {
       String purpose,
       long sessionId,
       DataMessageSubscriber dataMessageSubscriber,
-      Consumer<Image> availableImageHandler,
-      Consumer<Image> unavailableImageHandler) {
+      Consumer<Image> onAvailableImage,
+      Consumer<Image> onUnavailableImage) {
     Subscription subscription =
         addSubscription(
             category + "data",
@@ -237,8 +193,8 @@ public class AeronResources implements Disposable, AutoCloseable {
             streamId,
             purpose,
             sessionId,
-            availableImageHandler,
-            unavailableImageHandler);
+            onAvailableImage,
+            onUnavailableImage);
     poller.addDataSubscription(subscription, dataMessageSubscriber);
     return subscription;
   }

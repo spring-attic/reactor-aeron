@@ -8,7 +8,6 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.ipc.aeron.ControlMessageSubscriber;
-import reactor.ipc.aeron.HeartbeatWatchdog;
 import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.Protocol;
 import reactor.ipc.aeron.client.AeronClientInbound.ClientDataMessageProcessor;
@@ -21,7 +20,6 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
 
   private final String category;
 
-  private final HeartbeatWatchdog heartbeatWatchdog;
 
   private final Consumer<Long> onCompleteHandler;
 
@@ -29,9 +27,8 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
       new ConcurrentHashMap<>();
 
   ClientControlMessageSubscriber(
-      String category, HeartbeatWatchdog heartbeatWatchdog, Consumer<Long> onCompleteHandler) {
+      String category, Consumer<Long> onCompleteHandler) {
     this.category = category;
-    this.heartbeatWatchdog = heartbeatWatchdog;
     this.onCompleteHandler = onCompleteHandler;
   }
 
@@ -54,11 +51,6 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
       processor.onNext(new ConnectAckResponse(sessionId, serverSessionStreamId));
       processor.onComplete();
     }
-  }
-
-  @Override
-  public void onHeartbeat(long sessionId) {
-    heartbeatWatchdog.heartbeatReceived(sessionId);
   }
 
   /**

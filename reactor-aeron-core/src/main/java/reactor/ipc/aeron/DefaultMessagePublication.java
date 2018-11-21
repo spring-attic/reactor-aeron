@@ -3,6 +3,7 @@ package reactor.ipc.aeron;
 import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
 import java.nio.ByteBuffer;
+import org.agrona.CloseHelper;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.IdleStrategy;
 import reactor.core.Disposable;
@@ -117,7 +118,9 @@ public final class DefaultMessagePublication implements Disposable, MessagePubli
 
   @Override
   public void dispose() {
-    publication.close();
+    if (!isDisposed()) {
+      CloseHelper.quietClose(publication);
+    }
   }
 
   @Override

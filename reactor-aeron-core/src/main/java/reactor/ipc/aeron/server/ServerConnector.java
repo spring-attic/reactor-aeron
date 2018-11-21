@@ -11,7 +11,6 @@ import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.AeronUtils;
 import reactor.ipc.aeron.DefaultMessagePublication;
-import reactor.ipc.aeron.HeartbeatSender;
 import reactor.ipc.aeron.MessagePublication;
 import reactor.ipc.aeron.MessageType;
 import reactor.ipc.aeron.Protocol;
@@ -35,14 +34,7 @@ public class ServerConnector implements Disposable {
 
   private final long sessionId;
 
-  private final HeartbeatSender heartbeatSender;
-
   private final AeronResources aeronResources;
-
-  private volatile Disposable heartbeatSenderDisposable =
-      () -> {
-        // no-op
-      };
 
   ServerConnector(
       String category,
@@ -52,14 +44,12 @@ public class ServerConnector implements Disposable {
       long sessionId,
       int serverSessionStreamId,
       UUID connectRequestId,
-      AeronOptions options,
-      HeartbeatSender heartbeatSender) {
+      AeronOptions options) {
     this.category = category;
     this.serverSessionStreamId = serverSessionStreamId;
     this.connectRequestId = connectRequestId;
     this.options = options;
     this.sessionId = sessionId;
-    this.heartbeatSender = heartbeatSender;
     this.aeronResources = aeronResources;
     this.clientControlPublication =
         aeronResources.publication(
@@ -71,23 +61,10 @@ public class ServerConnector implements Disposable {
   }
 
   Mono<Void> connect() {
-    return Mono.create(sink -> createConnectRetryTask(sink).schedule())
-        .then(Mono.fromRunnable(() -> this.heartbeatSenderDisposable = scheduleHearbeats()));
+    return Mono.create(sink -> createConnectRetryTask(sink).schedule());
   }
 
-  private Disposable scheduleHearbeats() {
-    return heartbeatSender
-        .scheduleHeartbeats(clientControlPublication, sessionId)
-        .subscribe(
-            ignore -> {
-              // no-op
-            },
-            th -> {
-              // no-op
-            });
-  }
-
-  private RetryTask createConnectRetryTask(MonoSink<Object> sink) {
+  private RetryTask createConnectRetryTask(MonoSink<Void> sink) {
     return new RetryTask(
         Schedulers.single(),
         100,
@@ -105,7 +82,6 @@ public class ServerConnector implements Disposable {
 
   @Override
   public void dispose() {
-    heartbeatSenderDisposable.dispose();
     aeronResources.close(clientControlPublication);
   }
 
@@ -113,9 +89,9 @@ public class ServerConnector implements Disposable {
 
     private final MessagePublication publication;
 
-    private final MonoSink<?> sink;
+    private final MonoSink<Void> sink;
 
-    SendConnectAckTask(MonoSink<?> sink) {
+    SendConnectAckTask(MonoSink<Void> sink) {
       this.sink = sink;
       this.publication = new DefaultMessagePublication(clientControlPublication, category, 0, 0);
     }

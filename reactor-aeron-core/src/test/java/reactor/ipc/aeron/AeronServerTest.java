@@ -10,6 +10,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
@@ -100,6 +101,7 @@ public class AeronServerTest extends BaseAeronTest {
   }
 
   @Test
+  @Disabled //todo
   public void testServerDisconnectsSessionUponHeartbeatLoss() {
     ReplayProcessor<ByteBuffer> processor = ReplayProcessor.create();
 

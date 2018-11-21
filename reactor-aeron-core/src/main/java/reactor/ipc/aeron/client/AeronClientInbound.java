@@ -1,5 +1,6 @@
 package reactor.ipc.aeron.client;
 
+import io.aeron.Image;
 import io.aeron.driver.AeronResources;
 import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
@@ -21,9 +22,11 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
   private final io.aeron.Subscription serverDataSubscription;
 
-  private final ClientDataMessageProcessor processor;
-
   private final AeronResources aeronResources;
+
+  private final long sessionId;
+
+  private final Runnable onComplete;
 
   AeronClientInbound(
       String name,
@@ -31,13 +34,23 @@ final class AeronClientInbound implements AeronInbound, Disposable {
       String channel,
       int streamId,
       long sessionId,
-      Runnable onCompleteHandler) {
+      Runnable onComplete) {
     this.aeronResources = aeronResources;
-    this.processor = new ClientDataMessageProcessor(name, sessionId, onCompleteHandler);
+    this.onComplete = onComplete;
+    ClientDataMessageProcessor processor =
+        new ClientDataMessageProcessor(name, sessionId, onComplete);
     this.flux = new ByteBufferFlux(processor);
+    this.sessionId = sessionId;
     this.serverDataSubscription =
         aeronResources.dataSubscription(
-            name, channel, streamId, "to receive data from server on", sessionId, processor);
+            name,
+            channel,
+            streamId,
+            "to receive data from server on",
+            sessionId,
+            processor,
+            null,
+            this::onUnavailableDataImage);
   }
 
   @Override
@@ -50,8 +63,10 @@ final class AeronClientInbound implements AeronInbound, Disposable {
     aeronResources.close(serverDataSubscription);
   }
 
-  long getLastSignalTimeNs() {
-    return processor.lastSignalTimeNs;
+  private void onUnavailableDataImage(Image image) {
+    if (image.subscription() == serverDataSubscription && serverDataSubscription.hasNoImages()) {
+      onComplete.run();
+    }
   }
 
   static class ClientDataMessageProcessor implements DataMessageSubscriber, Publisher<ByteBuffer> {
@@ -59,8 +74,6 @@ final class AeronClientInbound implements AeronInbound, Disposable {
     private final String category;
 
     private final long sessionId;
-
-    private volatile long lastSignalTimeNs = 0;
 
     private volatile Subscription subscription;
 
@@ -81,7 +94,6 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
     @Override
     public void onNext(long sessionId, ByteBuffer buffer) {
-      lastSignalTimeNs = System.nanoTime();
       if (sessionId != this.sessionId) {
         throw new RuntimeException(
             "Received " + MessageType.NEXT + " for unknown sessionId: " + sessionId);

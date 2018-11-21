@@ -84,10 +84,6 @@ public class Protocol {
     return ByteBuffer.wrap(array);
   }
 
-  public static ByteBuffer createHeartbeatBody() {
-    return ByteBuffer.wrap(new byte[0]);
-  }
-
   /**
    * Factory for disconnect body bytebuffer.
    *
