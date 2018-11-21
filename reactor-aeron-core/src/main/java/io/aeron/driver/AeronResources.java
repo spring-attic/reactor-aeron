@@ -2,9 +2,11 @@ package io.aeron.driver;
 
 import io.aeron.Aeron;
 import io.aeron.CommonContext;
+import io.aeron.Image;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.agrona.CloseHelper;
 import reactor.core.Disposable;
 import reactor.core.publisher.MonoProcessor;
@@ -141,7 +143,43 @@ public class AeronResources implements Disposable, AutoCloseable {
       String purpose,
       long sessionId,
       ControlMessageSubscriber controlMessageSubscriber) {
-    Subscription subscription = addSubscription(category, channel, streamId, purpose, sessionId);
+    return controlSubscription(
+        category, channel, streamId, purpose, sessionId, controlMessageSubscriber, null, null);
+  }
+
+  /**
+   * Adds control subscription and register it in the {@link Poller}. Also see {@link
+   * #close(Subscription)}}.
+   *
+   * @param channel channel
+   * @param streamId stream id
+   * @param purpose purpose
+   * @param sessionId session id
+   * @param controlMessageSubscriber control message subscriber
+   * @param availableImageHandler called when {@link Image}s become available for consumption. Null
+   *     is valid if no action is to be taken.
+   * @param unavailableImageHandler called when {@link Image}s go unavailable for consumption. Null
+   *     is valid if no * action is to be taken.
+   * @return control subscription
+   */
+  public Subscription controlSubscription(
+      String category,
+      String channel,
+      int streamId,
+      String purpose,
+      long sessionId,
+      ControlMessageSubscriber controlMessageSubscriber,
+      Consumer<Image> availableImageHandler,
+      Consumer<Image> unavailableImageHandler) {
+    Subscription subscription =
+        addSubscription(
+            category + "-control",
+            channel,
+            streamId,
+            purpose,
+            sessionId,
+            availableImageHandler,
+            unavailableImageHandler);
     poller.addControlSubscription(subscription, controlMessageSubscriber);
     return subscription;
   }
@@ -164,7 +202,43 @@ public class AeronResources implements Disposable, AutoCloseable {
       String purpose,
       long sessionId,
       DataMessageSubscriber dataMessageSubscriber) {
-    Subscription subscription = addSubscription(category, channel, streamId, purpose, sessionId);
+    return dataSubscription(
+        category, channel, streamId, purpose, sessionId, dataMessageSubscriber, null, null);
+  }
+
+  /**
+   * Adds data subscription and register it in the {@link Poller}. Also see {@link
+   * #close(Subscription)}}.
+   *
+   * @param channel channel
+   * @param streamId stream id
+   * @param purpose purpose
+   * @param sessionId session id
+   * @param dataMessageSubscriber data message subscriber
+   * @param availableImageHandler called when {@link Image}s become available for consumption. Null
+   *     is valid if no action is to be taken.
+   * @param unavailableImageHandler called when {@link Image}s go unavailable for consumption. Null
+   *     is valid if no * action is to be taken.
+   * @return control subscription
+   */
+  public Subscription dataSubscription(
+      String category,
+      String channel,
+      int streamId,
+      String purpose,
+      long sessionId,
+      DataMessageSubscriber dataMessageSubscriber,
+      Consumer<Image> availableImageHandler,
+      Consumer<Image> unavailableImageHandler) {
+    Subscription subscription =
+        addSubscription(
+            category + "data",
+            channel,
+            streamId,
+            purpose,
+            sessionId,
+            availableImageHandler,
+            unavailableImageHandler);
     poller.addDataSubscription(subscription, dataMessageSubscriber);
     return subscription;
   }
@@ -255,11 +329,51 @@ public class AeronResources implements Disposable, AutoCloseable {
    * @param streamId stream id
    * @param purpose purpose
    * @param sessionId session id
+   * @param availableImageConsumer called when {@link Image}s become available for consumption. Null
+   *     is valid if no action is to be taken.
+   * @param unavailableImageConsumer called when {@link Image}s go unavailable for consumption. Null
+   *     is valid if no action is to be taken.
    * @return subscription for channel and stream id
    */
   Subscription addSubscription(
-      String category, String channel, int streamId, String purpose, long sessionId) {
-    Subscription subscription = aeron.addSubscription(channel, streamId);
+      String category,
+      String channel,
+      int streamId,
+      String purpose,
+      long sessionId,
+      Consumer<Image> availableImageConsumer,
+      Consumer<Image> unavailableImageConsumer) {
+
+    Subscription subscription =
+        aeron.addSubscription(
+            channel,
+            streamId,
+            image -> {
+              if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "[{}] {} available image, sessionId={}, source={}",
+                    category,
+                    AeronUtils.format(channel, streamId),
+                    image.sessionId(),
+                    image.sourceIdentity());
+              }
+              if (availableImageConsumer != null) {
+                availableImageConsumer.accept(image);
+              }
+            },
+            image -> {
+              if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "[{}] {} unavailable image, sessionId={}, source={}",
+                    category,
+                    AeronUtils.format(channel, streamId),
+                    image.sessionId(),
+                    image.sourceIdentity());
+              }
+              if (unavailableImageConsumer != null) {
+                unavailableImageConsumer.accept(image);
+              }
+            });
     if (logger.isDebugEnabled()) {
       logger.debug(
           "[{}] Added subscription, sessionId={} {} {}",

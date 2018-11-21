@@ -42,7 +42,7 @@ public class AeronWriteSequencerBenchmark {
     AeronResources aeronResources = AeronResources.start();
 
     io.aeron.Subscription subscription =
-        aeronResources.addSubscription("benchmark", channel, 1, "benchmark", 0);
+        aeronResources.addSubscription("benchmark", channel, 1, "benchmark", 0, null, null);
 
     BenchmarkPoller poller = new BenchmarkPoller(subscription);
     poller.schedulePoll();
