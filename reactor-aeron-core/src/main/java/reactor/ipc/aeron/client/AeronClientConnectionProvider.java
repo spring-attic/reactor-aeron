@@ -11,7 +11,7 @@ class AeronClientConnectionProvider implements Disposable {
 
   private final String name;
   private final AeronResources aeronResources;
-  private final List<AeronClientConnector> clients = new CopyOnWriteArrayList<>();
+  private final List<AeronClientConnector> connectors = new CopyOnWriteArrayList<>();
 
   AeronClientConnectionProvider(String name, AeronResources aeronResources) {
     this.name = name;
@@ -27,10 +27,10 @@ class AeronClientConnectionProvider implements Disposable {
   public Mono<? extends Connection> acquire(AeronClientOptions options) {
     return Mono.defer(
         () -> {
-          AeronClientConnector aeronClient =
+          AeronClientConnector connector =
               new AeronClientConnector(name, aeronResources, options);
-          clients.add(aeronClient);
-          return aeronClient
+          connectors.add(connector);
+          return connector
               .newHandler()
               .doOnSuccess(
                   connection ->
@@ -38,19 +38,19 @@ class AeronClientConnectionProvider implements Disposable {
                           .onDispose()
                           .doOnTerminate(
                               () -> {
-                                clients.removeIf(client -> client == aeronClient);
-                                aeronClient.dispose();
+                                connectors.removeIf(client -> client == connector);
+                                connector.dispose();
                               }));
         });
   }
 
   @Override
   public void dispose() {
-    clients.forEach(AeronClientConnector::dispose);
+    connectors.forEach(AeronClientConnector::dispose);
   }
 
   @Override
   public boolean isDisposed() {
-    return clients.isEmpty();
+    return connectors.isEmpty();
   }
 }

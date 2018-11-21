@@ -4,9 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.aeron.driver.AeronResources;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
-import java.util.Optional;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
