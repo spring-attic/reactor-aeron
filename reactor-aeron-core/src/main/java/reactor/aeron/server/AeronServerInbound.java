@@ -37,17 +37,19 @@ final class AeronServerInbound implements AeronInbound, Disposable {
       int serverSessionStreamId,
       long sessionId,
       Runnable onCompleteHandler) {
-    messageProcessor = new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
-    serverDataSubscription =
-        aeronResources.dataSubscription(
-            name,
-            channel,
-            serverSessionStreamId,
-            "to receive client data on",
-            sessionId,
-            messageProcessor);
-    messageProcessor.subscribe(processor);
-    return Mono.empty(); // FIXME Mono.fromRunnable()
+    return Mono.fromRunnable(
+        () -> {
+          messageProcessor = new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
+          serverDataSubscription =
+              aeronResources.dataSubscription(
+                  name,
+                  channel,
+                  serverSessionStreamId,
+                  "to receive client data on",
+                  sessionId,
+                  messageProcessor);
+          messageProcessor.subscribe(processor);
+        });
   }
 
   @Override

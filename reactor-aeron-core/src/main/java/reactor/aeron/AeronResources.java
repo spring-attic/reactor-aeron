@@ -91,6 +91,20 @@ public class AeronResources implements Disposable, AutoCloseable {
 
     receiver.schedule(poller = new Poller(() -> !receiver.isDisposed()));
 
+    Runtime.getRuntime()
+        .addShutdownHook(
+            new Thread(
+                () -> {
+                  try {
+                    aeronContext.deleteAeronDirectory();
+                  } catch (Throwable th) {
+                    logger.warn(
+                        "Exception occurred at deleting aeron directory: {}, cause: {}",
+                        directoryName,
+                        th);
+                  }
+                }));
+
     logger.info(
         "{} has initialized embedded media mediaDriver, aeron directory: {}", this, directoryName);
   }
