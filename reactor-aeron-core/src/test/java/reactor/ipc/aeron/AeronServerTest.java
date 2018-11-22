@@ -118,9 +118,10 @@ public class AeronServerTest extends BaseAeronTest {
     addDisposable(
         AeronServer.create(aeronResources)
             .options(options -> options.serverChannel(serverChannel))
-            .doOnConnection(connection -> {
+            .handle(connection -> {
               connection.onDispose().doOnSuccess(aVoid -> latch.countDown()).subscribe();
               connection.inbound().receive().subscribe(processor);
+              return connection.onDispose();
             })
             .bind()
             .block(TIMEOUT));
