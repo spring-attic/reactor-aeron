@@ -50,8 +50,7 @@ final class AeronServerInbound implements AeronInbound, Disposable {
                   messageProcessor,
                   null,
                   dataImage -> {
-                    if (dataImage.subscription() == serverDataSubscription
-                        && serverDataSubscription.hasNoImages()) {
+                    if (serverDataSubscription.hasNoImages()) {
                       onCompleteHandler.run();
                     }
                   });

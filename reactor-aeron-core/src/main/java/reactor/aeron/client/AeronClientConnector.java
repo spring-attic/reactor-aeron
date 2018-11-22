@@ -57,7 +57,7 @@ public final class AeronClientConnector implements Disposable {
   }
 
   private void onUnavailableControlImage(Image image) {
-    if (image.subscription() == controlSubscription && controlSubscription.hasNoImages()) {
+    if (controlSubscription.hasNoImages()) {
       dispose();
     }
   }

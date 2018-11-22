@@ -64,7 +64,7 @@ final class AeronClientInbound implements AeronInbound, Disposable {
   }
 
   private void onUnavailableDataImage(Image image) {
-    if (image.subscription() == serverDataSubscription && serverDataSubscription.hasNoImages()) {
+    if (serverDataSubscription.hasNoImages()) {
       onComplete.run();
     }
   }
