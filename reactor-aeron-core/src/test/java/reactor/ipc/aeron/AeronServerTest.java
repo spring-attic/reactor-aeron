@@ -1,11 +1,15 @@
 package reactor.ipc.aeron;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.aeron.driver.AeronResources;
+import io.aeron.driver.AeronResourcesConfig;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterAll;
@@ -29,6 +33,8 @@ public class AeronServerTest extends BaseAeronTest {
   private static String clientChannel =
       "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort();
 
+  private static int imageLivenessTimeoutSec = 1;
+
   private static final Consumer<AeronClientOptions> DEFAULT_CLIENT_OPTIONS =
       options -> {
         options.clientChannel(clientChannel);
@@ -39,7 +45,11 @@ public class AeronServerTest extends BaseAeronTest {
 
   @BeforeAll
   static void beforeAll() {
-    aeronResources = AeronResources.start();
+    aeronResources =
+        AeronResources.start(
+            AeronResourcesConfig.builder()
+                .imageLivenessTimeoutNs(TimeUnit.SECONDS.toNanos(imageLivenessTimeoutSec))
+                .build());
   }
 
   @AfterAll
@@ -101,9 +111,19 @@ public class AeronServerTest extends BaseAeronTest {
   }
 
   @Test
-  @Disabled //todo
-  public void testServerDisconnectsSessionUponHeartbeatLoss() {
+  public void testServerDisconnectsSessionAndClientHandleUnavailableImage() throws InterruptedException {
     ReplayProcessor<ByteBuffer> processor = ReplayProcessor.create();
+    CountDownLatch latch = new CountDownLatch(1);
+
+    addDisposable(
+        AeronServer.create(aeronResources)
+            .options(options -> options.serverChannel(serverChannel))
+            .doOnConnection(connection -> {
+              connection.onDispose().doOnSuccess(aVoid -> latch.countDown()).subscribe();
+              connection.inbound().receive().subscribe(processor);
+            })
+            .bind()
+            .block(TIMEOUT));
 
     createServer(
         (inbound, outbound) -> {
@@ -125,6 +145,10 @@ public class AeronServerTest extends BaseAeronTest {
     processor.blockFirst();
 
     connection.dispose();
+
+    latch.await(imageLivenessTimeoutSec, TimeUnit.SECONDS);
+
+    assertEquals(0, latch.getCount());
   }
 
   private Connection createConnection() {

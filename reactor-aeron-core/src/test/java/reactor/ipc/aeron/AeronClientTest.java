@@ -1,15 +1,18 @@
 package reactor.ipc.aeron;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.aeron.driver.AeronResources;
+import io.aeron.driver.AeronResourcesConfig;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
@@ -27,6 +30,8 @@ public class AeronClientTest extends BaseAeronTest {
   private static String clientChannel =
       "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort();
 
+  private static int imageLivenessTimeoutSec = 1;
+
   private static AeronResources aeronResources;
 
   private static final Consumer<AeronClientOptions> DEFAULT_CLIENT_OPTIONS =
@@ -37,7 +42,11 @@ public class AeronClientTest extends BaseAeronTest {
 
   @BeforeAll
   static void beforeAll() {
-    aeronResources = AeronResources.start();
+    aeronResources =
+        AeronResources.start(
+            AeronResourcesConfig.builder()
+                .imageLivenessTimeoutNs(TimeUnit.SECONDS.toNanos(imageLivenessTimeoutSec))
+                .build());
   }
 
   @AfterAll
@@ -141,26 +150,20 @@ public class AeronClientTest extends BaseAeronTest {
   }
 
   @Test
-  @Disabled //todo
-  public void testClientClosesSessionUponHeartbeatLoss() throws Exception {
-    OnDisposable onDisposable =
+  public void testClientClosesSessionAndServerHandleUnavailableImage() throws Exception {
+    OnDisposable server =
         AeronServer.create(aeronResources)
-            .options(
-                options -> {
-                  options.serverChannel(serverChannel);
-//                  options.heartbeatTimeoutMillis(500);
-                })
+            .options(options -> options.serverChannel(serverChannel))
             .doOnConnection(
-                connection -> {
-                  connection
-                      .outbound()
-                      .send(
-                          ByteBufferFlux.from("hello1", "2", "3")
-                              .delayElements(Duration.ofSeconds(1))
-                              .log("server"))
-                      .then()
-                      .subscribe();
-                })
+                connection ->
+                    connection
+                        .outbound()
+                        .send(
+                            ByteBufferFlux.from("hello1", "2", "3")
+                                .delayElements(Duration.ofMillis(100))
+                                .log("server"))
+                        .then()
+                        .subscribe())
             .bind()
             .block(TIMEOUT);
 
@@ -171,16 +174,20 @@ public class AeronClientTest extends BaseAeronTest {
             options -> {
               options.clientChannel(clientChannel);
               options.serverChannel(serverChannel);
-//              options.heartbeatTimeoutMillis(500);
             });
+
+    CountDownLatch latch = new CountDownLatch(1);
+    connection.onDispose().doOnSuccess(aVoid -> latch.countDown()).subscribe();
 
     connection.inbound().receive().asString().log("client").subscribe(processor);
 
-    processor.elementAt(2).block(Duration.ofSeconds(4));
+    processor.take(1).blockLast(Duration.ofSeconds(1));
 
-    onDisposable.dispose();
+    server.dispose();
 
-    Thread.sleep(1500);
+    latch.await(imageLivenessTimeoutSec, TimeUnit.SECONDS);
+
+    assertEquals(0, latch.getCount());
   }
 
   private Connection createConnection() {
