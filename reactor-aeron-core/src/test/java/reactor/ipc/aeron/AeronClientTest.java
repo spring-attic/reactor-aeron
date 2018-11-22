@@ -182,7 +182,7 @@ public class AeronClientTest extends BaseAeronTest {
 
     connection.inbound().receive().asString().log("client").subscribe(processor);
 
-    processor.take(1).blockLast(Duration.ofSeconds(1));
+    processor.take(1).blockLast(Duration.ofSeconds(4));
 
     server.dispose();
 
