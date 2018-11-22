@@ -1,7 +1,6 @@
 package reactor.aeron.client;
 
 import io.aeron.Image;
-import io.aeron.driver.AeronResources;
 import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;

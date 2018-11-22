@@ -1,7 +1,5 @@
 package reactor.aeron.server;
 
-import io.aeron.Image;
-import io.aeron.driver.AeronResources;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -16,22 +14,11 @@ import reactor.aeron.AeronUtils;
 import reactor.aeron.Connection;
 import reactor.aeron.ControlMessageSubscriber;
 import reactor.aeron.DefaultAeronOutbound;
-import reactor.aeron.HeartbeatSender;
-import reactor.aeron.HeartbeatWatchdog;
 import reactor.aeron.MessageType;
 import reactor.aeron.OnDisposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.scheduler.Schedulers;
-import reactor.ipc.aeron.AeronInbound;
-import reactor.ipc.aeron.AeronOptions;
-import reactor.ipc.aeron.AeronOutbound;
-import reactor.ipc.aeron.AeronUtils;
-import reactor.ipc.aeron.Connection;
-import reactor.ipc.aeron.ControlMessageSubscriber;
-import reactor.ipc.aeron.DefaultAeronOutbound;
-import reactor.ipc.aeron.MessageType;
-import reactor.ipc.aeron.OnDisposable;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 

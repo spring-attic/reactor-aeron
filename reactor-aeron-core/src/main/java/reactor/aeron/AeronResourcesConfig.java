@@ -1,8 +1,8 @@
 package reactor.aeron;
 
-import io.aeron.driver.ThreadingMode;
-
 import static io.aeron.driver.Configuration.IMAGE_LIVENESS_TIMEOUT_NS;
+
+import io.aeron.driver.ThreadingMode;
 
 public class AeronResourcesConfig {
 

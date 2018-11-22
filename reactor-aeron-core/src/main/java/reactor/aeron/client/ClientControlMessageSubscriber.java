@@ -5,17 +5,12 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import reactor.aeron.ControlMessageSubscriber;
-import reactor.aeron.HeartbeatWatchdog;
 import reactor.aeron.MessageType;
 import reactor.aeron.Protocol;
 import reactor.aeron.client.AeronClientInbound.ClientDataMessageProcessor;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.ipc.aeron.ControlMessageSubscriber;
-import reactor.ipc.aeron.MessageType;
-import reactor.ipc.aeron.Protocol;
-import reactor.ipc.aeron.client.AeronClientInbound.ClientDataMessageProcessor;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 

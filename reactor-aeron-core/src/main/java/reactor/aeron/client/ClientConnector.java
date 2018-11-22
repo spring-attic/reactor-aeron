@@ -9,17 +9,11 @@ import java.util.concurrent.TimeoutException;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronUtils;
 import reactor.aeron.DefaultMessagePublication;
-import reactor.aeron.HeartbeatSender;
 import reactor.aeron.MessagePublication;
 import reactor.aeron.MessageType;
 import reactor.aeron.Protocol;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
-import reactor.ipc.aeron.AeronUtils;
-import reactor.ipc.aeron.DefaultMessagePublication;
-import reactor.ipc.aeron.MessagePublication;
-import reactor.ipc.aeron.MessageType;
-import reactor.ipc.aeron.Protocol;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 

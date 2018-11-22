@@ -38,7 +38,8 @@ final class AeronServerInbound implements AeronInbound, Disposable {
       Runnable onCompleteHandler) {
     return Mono.fromRunnable(
         () -> {
-          messageProcessor = new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
+          ServerDataMessageProcessor messageProcessor =
+              new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
           serverDataSubscription =
               aeronResources.dataSubscription(
                   name,

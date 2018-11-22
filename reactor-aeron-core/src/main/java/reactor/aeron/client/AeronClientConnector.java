@@ -11,15 +11,9 @@ import reactor.aeron.AeronOutbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
 import reactor.aeron.DefaultAeronOutbound;
-import reactor.aeron.HeartbeatSender;
-import reactor.aeron.HeartbeatWatchdog;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.ipc.aeron.AeronInbound;
-import reactor.ipc.aeron.AeronOutbound;
-import reactor.ipc.aeron.Connection;
-import reactor.ipc.aeron.DefaultAeronOutbound;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
