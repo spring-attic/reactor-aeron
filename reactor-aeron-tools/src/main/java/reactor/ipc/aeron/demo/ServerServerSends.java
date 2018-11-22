@@ -18,7 +18,7 @@ public class ServerServerSends {
 
       AeronServer.create("server", aeronResources)
           .options(options -> options.serverChannel("aeron:udp?endpoint=localhost:13000"))
-          .doOnConnection(
+          .handle(
               connection ->
                   connection
                       .outbound()
@@ -27,8 +27,7 @@ public class ServerServerSends {
                               .delayElements(Duration.ofMillis(250))
                               .map(i -> AeronUtils.stringToByteBuffer("" + i))
                               .log("send"))
-                      .then()
-                      .subscribe())
+                      .then(connection.onDispose()))
           .bind()
           .block();
 

@@ -25,9 +25,7 @@ public class ClientServerSends {
           .doOnDisconnected(connection -> System.out.println(connection + " was disconnected"))
           .connect()
           .doOnSuccess(
-              connection -> {
-                connection.inbound().receive().asString().log("receive").subscribe();
-              })
+              connection -> connection.inbound().receive().asString().log("receive").subscribe())
           .block();
 
       System.out.println("main completed");

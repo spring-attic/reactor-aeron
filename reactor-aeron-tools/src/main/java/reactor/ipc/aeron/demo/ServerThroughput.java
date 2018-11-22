@@ -6,7 +6,6 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.ipc.aeron.server.AeronServer;
 
@@ -68,18 +67,17 @@ public class ServerThroughput {
       AeronServer.create("server", aeronResources)
           .options(options -> options.serverChannel("aeron:udp?endpoint=" + HOST + ":13000"))
           .handle(
-              (inbound, outbound) -> {
-                inbound
-                    .receive()
-                    .doOnNext(
-                        buffer -> {
-                          int size = buffer.remaining();
-                          queue.add(new Data(now(), size));
-                          counter.addAndGet(size);
-                        })
-                    .subscribe();
-                return Mono.never();
-              })
+              connection ->
+                  connection
+                      .inbound()
+                      .receive()
+                      .doOnNext(
+                          buffer -> {
+                            int size = buffer.remaining();
+                            queue.add(new Data(now(), size));
+                            counter.addAndGet(size);
+                          })
+                      .then(connection.onDispose()))
           .bind()
           .block();
 

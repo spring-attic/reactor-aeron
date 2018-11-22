@@ -7,9 +7,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.reactivestreams.Subscription;
-import reactor.core.publisher.DirectProcessor;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.scheduler.Schedulers;
@@ -31,12 +28,11 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
   private static final Logger logger = Loggers.getLogger(ServerHandler.class);
 
-  private final String category;
-
   private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
+  private final AeronServerSettings settings;
+  private final String category;
   private final AeronOptions options;
-
   private final AeronResources aeronResources;
 
   private final AtomicLong nextSessionId = new AtomicLong(0);
@@ -51,32 +47,30 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
   private final MonoProcessor<Void> onClose = MonoProcessor.create();
 
-  private final DirectProcessor<Connection> connections = DirectProcessor.create();
-  private final FluxSink<Connection> connectionSink = connections.sink();
+  ServerHandler(AeronServerSettings settings) {
+    this.settings = settings;
+    this.category = settings.name();
+    this.options = settings.options();
+    this.aeronResources = settings.aeronResources();
 
-  ServerHandler(String category, AeronResources aeronResources, AeronOptions options) {
-    this.aeronResources = aeronResources;
     this.controlSubscription =
-        aeronResources.controlSubscription(
-            category,
-            options.serverChannel(),
-            options.serverStreamId(),
-            "to receive control requests on",
-            0,
-            this);
+        settings
+            .aeronResources()
+            .controlSubscription(
+                category,
+                options.serverChannel(),
+                options.serverStreamId(),
+                "to receive control requests on",
+                0,
+                this);
 
-    this.category = category;
-    this.options = options;
     this.heartbeatWatchdog = new HeartbeatWatchdog(options.heartbeatTimeoutMillis(), category);
+
     this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), category);
 
     this.onClose
         .doOnTerminate(this::dispose0)
         .subscribe(null, th -> logger.warn("ServerHandler disposed with error: {}", th));
-  }
-
-  Flux<Connection> connections() {
-    return connections.onBackpressureBuffer();
   }
 
   @Override
@@ -90,15 +84,18 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
       String clientChannel,
       int clientControlStreamId,
       int clientSessionStreamId) {
-    logger.debug(
-        "[{}] Received {} for connectRequestId: {}, channel={}, "
-            + "clientControlStreamId={}, clientSessionStreamId={}",
-        category,
-        MessageType.CONNECT,
-        connectRequestId,
-        AeronUtils.minifyChannel(clientChannel),
-        clientControlStreamId,
-        clientSessionStreamId);
+
+    if (logger.isDebugEnabled()) {
+      logger.debug(
+          "[{}] Received {} for connectRequestId: {}, channel={}, "
+              + "clientControlStreamId={}, clientSessionStreamId={}",
+          category,
+          MessageType.CONNECT,
+          connectRequestId,
+          AeronUtils.minifyChannel(clientChannel),
+          clientControlStreamId,
+          clientSessionStreamId);
+    }
 
     int serverSessionStreamId = streamIdCounter.incrementAndGet();
     long sessionId = nextSessionId.incrementAndGet();
@@ -115,7 +112,8 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
         .initialise()
         .subscribeOn(Schedulers.newSingle("ds"))
         .subscribe(
-            connectionSink::next,
+            connection ->
+                settings.handler().apply(connection).subscribe(connection.disposeSubscriber()),
             th ->
                 logger.error(
                     "[{}] Occurred exception on connect to {}, sessionId: {}, "
