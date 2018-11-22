@@ -3,6 +3,7 @@ package reactor.ipc.aeron.client;
 import io.aeron.Subscription;
 import io.aeron.driver.AeronResources;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import reactor.core.Disposable;
@@ -21,9 +22,9 @@ public final class AeronClientConnector implements Disposable {
 
   private static final Logger logger = Loggers.getLogger(AeronClientConnector.class);
 
-  private final AeronClientOptions options;
-
   private final String name;
+  private final AeronClientOptions options;
+  private final AeronResources aeronResources;
 
   private static final AtomicInteger streamIdCounter = new AtomicInteger();
 
@@ -39,12 +40,10 @@ public final class AeronClientConnector implements Disposable {
 
   private final HeartbeatWatchdog heartbeatWatchdog;
 
-  private final AeronResources aeronResources;
-
-  AeronClientConnector(String name, AeronResources aeronResources, AeronClientOptions options) {
-    this.options = options;
-    this.name = name == null ? "client" : name;
-    this.aeronResources = aeronResources;
+  AeronClientConnector(AeronClientSettings settings) {
+    this.options = settings.options();
+    this.name = Optional.ofNullable(settings.name()).orElse("client");
+    this.aeronResources = settings.aeronResources();
     this.heartbeatWatchdog = new HeartbeatWatchdog(options.heartbeatTimeoutMillis(), this.name);
     this.controlMessageSubscriber =
         new ClientControlMessageSubscriber(name, heartbeatWatchdog, this::dispose);

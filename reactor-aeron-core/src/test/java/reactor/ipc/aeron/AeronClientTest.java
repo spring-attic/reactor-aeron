@@ -5,13 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import io.aeron.driver.AeronResources;
 import java.time.Duration;
 import java.util.Optional;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
-import reactor.core.publisher.Mono;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.ipc.aeron.client.AeronClient;
 import reactor.ipc.aeron.client.AeronClientOptions;
@@ -52,12 +51,11 @@ public class AeronClientTest extends BaseAeronTest {
   @Test
   public void testClientReceivesDataFromServer() {
     createServer(
-        (connection ->
+        connection ->
             connection
                 .outbound()
                 .send(ByteBufferFlux.from("hello1", "2", "3").log("server"))
-                .then()
-                .subscribe()));
+                .then(connection.onDispose()));
 
     Connection connection = createConnection();
     StepVerifier.create(connection.inbound().receive().asString().log("client"))
@@ -70,12 +68,11 @@ public class AeronClientTest extends BaseAeronTest {
   @Test
   public void testTwoClientsReceiveDataFromServer() {
     createServer(
-        (connection ->
+        connection ->
             connection
                 .outbound()
                 .send(ByteBufferFlux.from("1", "2", "3").log("server"))
-                .then()
-                .subscribe()));
+                .then(connection.onDispose()));
 
     Connection connection1 = createConnection();
     Connection connection2 = createConnection();
@@ -96,10 +93,11 @@ public class AeronClientTest extends BaseAeronTest {
   @Test
   public void testClientWith2HandlersReceiveData() {
     createServer(
-        (inbound, outbound) -> {
-          Mono.from(outbound.send(ByteBufferFlux.from("1", "2", "3").log("server"))).subscribe();
-          return Mono.never();
-        });
+        connection ->
+            connection
+                .outbound()
+                .send(ByteBufferFlux.from("1", "2", "3").log("server"))
+                .then(connection.onDispose()));
 
     ReplayProcessor<String> processor1 = ReplayProcessor.create();
     ReplayProcessor<String> processor2 = ReplayProcessor.create();
@@ -108,9 +106,9 @@ public class AeronClientTest extends BaseAeronTest {
         AeronClient.create(aeronResources)
             .options(DEFAULT_CLIENT_OPTIONS)
             .handle(
-                (inbound, outbound) -> {
-                  inbound.receive().asString().log("client-1").subscribe(processor1);
-                  return Mono.never();
+                connection -> {
+                  connection.inbound().receive().asString().log("client-1").subscribe(processor1);
+                  return connection.onDispose();
                 })
             .connect()
             .block(TIMEOUT));
@@ -119,9 +117,9 @@ public class AeronClientTest extends BaseAeronTest {
         AeronClient.create(aeronResources)
             .options(DEFAULT_CLIENT_OPTIONS)
             .handle(
-                (inbound, outbound) -> {
-                  inbound.receive().asString().log("client-2").subscribe(processor2);
-                  return Mono.never();
+                connection -> {
+                  connection.inbound().receive().asString().log("client-2").subscribe(processor2);
+                  return connection.onDispose();
                 })
             .connect()
             .block(TIMEOUT));
@@ -148,17 +146,15 @@ public class AeronClientTest extends BaseAeronTest {
                   options.serverChannel(serverChannel);
                   options.heartbeatTimeoutMillis(500);
                 })
-            .doOnConnection(
-                connection -> {
-                  connection
-                      .outbound()
-                      .send(
-                          ByteBufferFlux.from("hello1", "2", "3")
-                              .delayElements(Duration.ofSeconds(1))
-                              .log("server"))
-                      .then()
-                      .subscribe();
-                })
+            .handle(
+                connection ->
+                    connection
+                        .outbound()
+                        .send(
+                            ByteBufferFlux.from("hello1", "2", "3")
+                                .delayElements(Duration.ofSeconds(1))
+                                .log("server"))
+                        .then(connection.onDispose()))
             .bind()
             .block(TIMEOUT);
 
@@ -192,20 +188,11 @@ public class AeronClientTest extends BaseAeronTest {
   }
 
   private OnDisposable createServer(
-      BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> handler) {
+      Function<? super Connection, ? extends Publisher<Void>> handler) {
     return addDisposable(
         AeronServer.create(aeronResources)
             .options(options -> options.serverChannel(serverChannel))
             .handle(handler)
-            .bind()
-            .block(TIMEOUT));
-  }
-
-  private OnDisposable createServer(Consumer<? super Connection> doOnConnection) {
-    return addDisposable(
-        AeronServer.create(aeronResources)
-            .options(options -> options.serverChannel(serverChannel))
-            .doOnConnection(doOnConnection)
             .bind()
             .block(TIMEOUT));
   }

@@ -3,7 +3,6 @@ package reactor.ipc.aeron.demo;
 import io.aeron.driver.AeronResources;
 import java.nio.ByteBuffer;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.client.AeronClient;
 
 public class ClientThroughput {
@@ -27,27 +26,20 @@ public class ClientThroughput {
                 options.clientChannel("aeron:udp?endpoint=" + HOST + ":12001");
               })
           .handle(
-              (inbound, outbound) -> {
-                outbound
-                    .send(
-                        Flux.create(
-                            sink -> {
-                              System.out.println("About to send");
-                              for (int i = 0; i < 1000 * 1024; i++) {
-                                sink.next(buffer);
-                              }
-                              sink.complete();
-                              System.out.println("Send complete");
-                            }))
-                    .then()
-                    .subscribe(
-                        avoid -> {
-                          // no-op
-                        },
-                        th -> System.err.printf("Failed to send flux due to: %s\n", th));
-
-                return Mono.never();
-              })
+              connection ->
+                  connection
+                      .outbound()
+                      .send(
+                          Flux.create(
+                              sink -> {
+                                System.out.println("About to send");
+                                for (int i = 0; i < 1000 * 1024; i++) {
+                                  sink.next(buffer);
+                                }
+                                sink.complete();
+                                System.out.println("Send complete");
+                              }))
+                      .then(connection.onDispose()))
           .connect()
           .block();
 
