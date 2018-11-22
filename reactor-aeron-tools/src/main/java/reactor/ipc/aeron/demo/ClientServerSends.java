@@ -20,14 +20,15 @@ public class ClientServerSends {
                 options.serverChannel("aeron:udp?endpoint=localhost:13000");
                 options.clientChannel("aeron:udp?endpoint=localhost:12001");
               })
-          .doOnConnected(
-              connection -> System.out.println(connection + " was connected successfully"))
-          .doOnDisconnected(connection -> System.out.println(connection + " was disconnected"))
+          .handle(
+              connection ->
+                  connection
+                      .inbound()
+                      .receive()
+                      .asString()
+                      .log("receive")
+                      .then(connection.onDispose()))
           .connect()
-          .doOnSuccess(
-              connection -> {
-                connection.inbound().receive().asString().log("receive").subscribe();
-              })
           .block();
 
       System.out.println("main completed");

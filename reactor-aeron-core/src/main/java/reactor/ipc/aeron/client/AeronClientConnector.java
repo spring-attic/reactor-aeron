@@ -4,6 +4,7 @@ import io.aeron.Image;
 import io.aeron.Subscription;
 import io.aeron.driver.AeronResources;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import reactor.core.Disposable;
@@ -22,9 +23,9 @@ public final class AeronClientConnector implements Disposable {
 
   private static final int CONTROL_SESSION_ID = 0;
 
-  private final AeronClientOptions options;
-
   private final String name;
+  private final AeronClientOptions options;
+  private final AeronResources aeronResources;
 
   private static final AtomicInteger streamIdCounter = new AtomicInteger();
 
@@ -36,13 +37,12 @@ public final class AeronClientConnector implements Disposable {
 
   private final List<ClientHandler> handlers = new CopyOnWriteArrayList<>();
 
-  private final AeronResources aeronResources;
-
-  AeronClientConnector(String name, AeronResources aeronResources, AeronClientOptions options) {
-    this.options = options;
-    this.name = name == null ? "client" : name;
-    this.aeronResources = aeronResources;
-    this.controlMessageSubscriber = new ClientControlMessageSubscriber(name, this::dispose);
+  AeronClientConnector(AeronClientSettings settings) {
+    this.options = settings.options();
+    this.name = Optional.ofNullable(settings.name()).orElse("client");
+    this.aeronResources = settings.aeronResources();
+    this.controlMessageSubscriber =
+        new ClientControlMessageSubscriber(name, this::dispose);
     this.clientControlStreamId = streamIdCounter.incrementAndGet();
     this.controlSubscription =
         aeronResources.controlSubscription(

@@ -12,13 +12,13 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.ipc.aeron.client.AeronClient;
 import reactor.ipc.aeron.client.AeronClientOptions;
@@ -62,9 +62,9 @@ public class AeronServerTest extends BaseAeronTest {
     ReplayProcessor<String> processor = ReplayProcessor.create();
 
     createServer(
-        (inbound, outbound) -> {
-          inbound.receive().asString().log("receive").subscribe(processor);
-          return Mono.never();
+        connection -> {
+          connection.inbound().receive().asString().log("receive").subscribe(processor);
+          return connection.onDispose();
         });
 
     createConnection()
@@ -84,9 +84,9 @@ public class AeronServerTest extends BaseAeronTest {
         AeronServer.create(aeronResources)
             .options(options -> options.serverChannel(serverChannel))
             .handle(
-                (inbound, outbound) -> {
-                  inbound.receive().log("receive").subscribe(processor);
-                  return Mono.never();
+                connection -> {
+                  connection.inbound().receive().log("receive").subscribe(processor);
+                  return connection.onDispose();
                 })
             .bind()
             .block(TIMEOUT);
@@ -126,9 +126,9 @@ public class AeronServerTest extends BaseAeronTest {
             .block(TIMEOUT));
 
     createServer(
-        (inbound, outbound) -> {
-          inbound.receive().subscribe(processor);
-          return Mono.never();
+        connection -> {
+          connection.inbound().receive().subscribe(processor);
+          return connection.onDispose();
         });
 
     Connection connection = createConnection();
@@ -162,7 +162,7 @@ public class AeronServerTest extends BaseAeronTest {
   }
 
   private OnDisposable createServer(
-      BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> handler) {
+      Function<? super Connection, ? extends Publisher<Void>> handler) {
     return addDisposable(
         AeronServer.create(aeronResources)
             .options(options -> options.serverChannel(serverChannel))

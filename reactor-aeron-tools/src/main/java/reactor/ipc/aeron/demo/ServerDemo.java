@@ -1,7 +1,6 @@
 package reactor.ipc.aeron.demo;
 
 import io.aeron.driver.AeronResources;
-import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.server.AeronServer;
 
 public class ServerDemo {
@@ -17,10 +16,13 @@ public class ServerDemo {
       AeronServer.create("server", aeronResources)
           .options(options -> options.serverChannel("aeron:udp?endpoint=localhost:13000"))
           .handle(
-              (inbound, outbound) -> {
-                inbound.receive().asString().log("receive").subscribe();
-                return Mono.never();
-              })
+              connection ->
+                  connection
+                      .inbound()
+                      .receive()
+                      .asString()
+                      .log("receive")
+                      .then(connection.onDispose()))
           .bind()
           .block();
 
