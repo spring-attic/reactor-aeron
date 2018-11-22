@@ -82,8 +82,10 @@ public class AeronResources implements Disposable, AutoCloseable {
   }
 
   private void onStart() {
-    MediaDriver.Context mediaContext = new MediaDriver.Context();
-    mediaContext.dirDeleteOnStart(config.isDirDeleteOnStart());
+    MediaDriver.Context mediaContext =
+        new MediaDriver.Context()
+            .imageLivenessTimeoutNs(config.imageLivenessTimeoutNs())
+            .dirDeleteOnStart(config.isDirDeleteOnStart());
     mediaDriver = MediaDriver.launchEmbedded(mediaContext);
 
     Aeron.Context aeronContext = new Aeron.Context();
@@ -188,7 +190,7 @@ public class AeronResources implements Disposable, AutoCloseable {
       Consumer<Image> onUnavailableImage) {
     Subscription subscription =
         addSubscription(
-            category + "data",
+            category + "-data",
             channel,
             streamId,
             purpose,

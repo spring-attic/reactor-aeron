@@ -1,5 +1,7 @@
 package io.aeron.driver;
 
+import static io.aeron.driver.Configuration.IMAGE_LIVENESS_TIMEOUT_NS;
+
 public class AeronResourcesConfig {
 
   public static final boolean DELETE_AERON_DIR_ON_START = true;
@@ -7,10 +9,12 @@ public class AeronResourcesConfig {
 
   private final ThreadingMode threadingMode;
   private final boolean dirDeleteOnStart;
+  private final long imageLivenessTimeoutNs;
 
   private AeronResourcesConfig(Builder builder) {
     this.threadingMode = builder.threadingMode;
     this.dirDeleteOnStart = builder.dirDeleteOnStart;
+    this.imageLivenessTimeoutNs = builder.imageLivenessTimeoutNs;
   }
 
   public static AeronResourcesConfig defaultConfig() {
@@ -29,17 +33,23 @@ public class AeronResourcesConfig {
     return threadingMode;
   }
 
+  public long imageLivenessTimeoutNs() {
+    return imageLivenessTimeoutNs;
+  }
+
   @Override
   public String toString() {
     final StringBuilder sb = new StringBuilder("AeronResourcesConfig{");
     sb.append(", threadingMode=").append(threadingMode);
     sb.append(", dirDeleteOnStart=").append(dirDeleteOnStart);
+    sb.append(", imageLivenessTimeoutNs=").append(imageLivenessTimeoutNs);
     sb.append('}');
     return sb.toString();
   }
 
   public static class Builder {
 
+    private long imageLivenessTimeoutNs = IMAGE_LIVENESS_TIMEOUT_NS;
     private ThreadingMode threadingMode = THREADING_MODE;
     private boolean dirDeleteOnStart = DELETE_AERON_DIR_ON_START;
 
@@ -67,6 +77,11 @@ public class AeronResourcesConfig {
 
     public Builder dirDeleteOnStart(boolean dirDeleteOnStart) {
       this.dirDeleteOnStart = dirDeleteOnStart;
+      return this;
+    }
+
+    public Builder imageLivenessTimeoutNs(long imageLivenessTimeoutNs) {
+      this.imageLivenessTimeoutNs = imageLivenessTimeoutNs;
       return this;
     }
 
