@@ -110,10 +110,13 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
     sessionHandler
         .initialise()
-        .subscribeOn(Schedulers.newSingle("ds"))
+        .subscribeOn(Schedulers.single())
         .subscribe(
             connection ->
-                settings.handler().apply(connection).subscribe(connection.disposeSubscriber()),
+                settings
+                    .handler() //
+                    .apply(connection)
+                    .subscribe(connection.disposeSubscriber()),
             th ->
                 logger.error(
                     "[{}] Occurred exception on connect to {}, sessionId: {}, "

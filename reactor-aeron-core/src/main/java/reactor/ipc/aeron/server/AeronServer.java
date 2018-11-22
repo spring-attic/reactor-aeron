@@ -9,7 +9,7 @@ import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.Connection;
 import reactor.ipc.aeron.OnDisposable;
 
-public class AeronServer {
+public final class AeronServer {
 
   private final AeronServerSettings settings;
 
@@ -39,11 +39,11 @@ public class AeronServer {
         AeronServerSettings.builder().name(name).aeronResources(aeronResources).build());
   }
 
-  public final Mono<? extends OnDisposable> bind() {
+  public Mono<? extends OnDisposable> bind() {
     return bind(settings.options());
   }
 
-  public final Mono<? extends OnDisposable> bind(AeronOptions options) {
+  public Mono<? extends OnDisposable> bind(AeronOptions options) {
     return Mono.fromCallable(() -> new ServerHandler(settings.options(options)));
   }
 
@@ -64,7 +64,7 @@ public class AeronServer {
    *     terminates.
    * @return a new {@link AeronServer}
    */
-  public final AeronServer handle(Function<? super Connection, ? extends Publisher<Void>> handler) {
-    return new AeronServer(settings.handle(handler));
+  public AeronServer handle(Function<? super Connection, ? extends Publisher<Void>> handler) {
+    return new AeronServer(settings.handler(handler));
   }
 }

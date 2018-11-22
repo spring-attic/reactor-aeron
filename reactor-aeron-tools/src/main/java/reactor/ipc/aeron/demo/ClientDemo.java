@@ -2,7 +2,6 @@ package reactor.ipc.aeron.demo;
 
 import io.aeron.driver.AeronResources;
 import java.util.Objects;
-import reactor.core.publisher.Mono;
 import reactor.ipc.aeron.ByteBufferFlux;
 import reactor.ipc.aeron.Connection;
 import reactor.ipc.aeron.client.AeronClient;
@@ -27,17 +26,12 @@ public class ClientDemo {
                     options.clientChannel("aeron:udp?endpoint=localhost:12001");
                   })
               .handle(
-                  (inbound, outbound) -> {
+                  connection1 -> {
                     System.out.println("Handler invoked");
-                    outbound
+                    return connection1
+                        .outbound()
                         .send(ByteBufferFlux.from("Hello", "world!").log("send"))
-                        .then()
-                        .subscribe(
-                            avoid -> {
-                              // no-op
-                            },
-                            Throwable::printStackTrace);
-                    return Mono.never();
+                        .then(connection1.onDispose());
                   })
               .connect()
               .block();

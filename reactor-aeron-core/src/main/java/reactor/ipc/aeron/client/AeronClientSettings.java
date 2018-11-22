@@ -1,21 +1,20 @@
-package reactor.ipc.aeron.server;
+package reactor.ipc.aeron.client;
 
 import io.aeron.driver.AeronResources;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.reactivestreams.Publisher;
-import reactor.ipc.aeron.AeronOptions;
 import reactor.ipc.aeron.Connection;
 import reactor.ipc.aeron.OnDisposable;
 
-public class AeronServerSettings {
+public class AeronClientSettings {
 
   private final String name;
   private final AeronResources aeronResources;
-  private final AeronOptions options;
+  private final AeronClientOptions options;
   private final Function<? super Connection, ? extends Publisher<Void>> handler;
 
-  private AeronServerSettings(Builder builder) {
+  private AeronClientSettings(Builder builder) {
     this.name = builder.name;
     this.aeronResources = builder.aeronResources;
     this.options = builder.options;
@@ -34,38 +33,38 @@ public class AeronServerSettings {
     return aeronResources;
   }
 
-  public AeronOptions options() {
-    return options;
-  }
-
-  public AeronServerSettings options(Consumer<AeronOptions> consumer) {
-    return new Builder(this).options(consumer).build();
-  }
-
-  public AeronServerSettings options(AeronOptions options) {
-    return new Builder(this).options(options).build();
-  }
-
   public Function<? super Connection, ? extends Publisher<Void>> handler() {
     return handler;
   }
 
-  public AeronServerSettings handler(
+  public AeronClientSettings handler(
       Function<? super Connection, ? extends Publisher<Void>> handler) {
     return new Builder(this).handler(handler).build();
+  }
+
+  public AeronClientOptions options() {
+    return options;
+  }
+
+  public AeronClientSettings options(Consumer<AeronClientOptions> consumer) {
+    return new Builder(this).options(consumer).build();
+  }
+
+  public AeronClientSettings options(AeronClientOptions options) {
+    return new Builder(this).options(options).build();
   }
 
   public static class Builder {
 
     private String name;
     private AeronResources aeronResources;
-    private AeronOptions options = new AeronOptions();
+    private AeronClientOptions options = new AeronClientOptions();
     private Function<? super Connection, ? extends Publisher<Void>> handler =
         OnDisposable::onDispose;
 
     private Builder() {}
 
-    private Builder(AeronServerSettings settings) {
+    private Builder(AeronClientSettings settings) {
       this.name = settings.name;
       this.aeronResources = settings.aeronResources;
       this.options = settings.options;
@@ -82,12 +81,12 @@ public class AeronServerSettings {
       return this;
     }
 
-    public Builder options(AeronOptions options) {
+    public Builder options(AeronClientOptions options) {
       this.options = options;
       return this;
     }
 
-    public Builder options(Consumer<AeronOptions> consumer) {
+    public Builder options(Consumer<AeronClientOptions> consumer) {
       consumer.accept(options);
       return this;
     }
@@ -97,8 +96,8 @@ public class AeronServerSettings {
       return this;
     }
 
-    public AeronServerSettings build() {
-      return new AeronServerSettings(this);
+    public AeronClientSettings build() {
+      return new AeronClientSettings(this);
     }
   }
 }

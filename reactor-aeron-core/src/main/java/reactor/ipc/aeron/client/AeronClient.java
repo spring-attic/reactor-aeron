@@ -1,16 +1,19 @@
 package reactor.ipc.aeron.client;
 
 import io.aeron.driver.AeronResources;
-import java.util.Objects;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
-import reactor.ipc.aeron.AeronInbound;
-import reactor.ipc.aeron.AeronOutbound;
 import reactor.ipc.aeron.Connection;
 
-public abstract class AeronClient {
+public final class AeronClient {
+
+  private final AeronClientSettings settings;
+
+  private AeronClient(AeronClientSettings settings) {
+    this.settings = settings;
+  }
 
   /**
    * Create aeron client.
@@ -30,55 +33,48 @@ public abstract class AeronClient {
    * @return aeron client
    */
   public static AeronClient create(String name, AeronResources aeronResources) {
-    AeronClientConnectionProvider connectionProvider =
-        new AeronClientConnectionProvider(name, aeronResources);
-    return new AeronClientConnect(connectionProvider);
+    return new AeronClient(
+        AeronClientSettings.builder().name(name).aeronResources(aeronResources).build());
   }
 
-  public final Mono<? extends Connection> connect() {
-    return connect(options());
+  public Mono<? extends Connection> connect() {
+    return connect(settings.options());
   }
 
-  public abstract Mono<? extends Connection> connect(AeronClientOptions options);
+  public Mono<? extends Connection> connect(AeronClientOptions options) {
+    return Mono.defer(() -> connect0(options));
+  }
 
-  protected AeronClientOptions options() {
-    return new AeronClientOptions();
+  private Mono<? extends Connection> connect0(AeronClientOptions options) {
+    AeronClientConnector connector = new AeronClientConnector(settings.options(options));
+    return connector
+        .newHandler()
+        .doOnError(ex -> connector.dispose())
+        .doOnSuccess(
+            connection -> {
+              settings
+                  .handler() //
+                  .apply(connection)
+                  .subscribe(connection.disposeSubscriber());
+              connection
+                  .onDispose()
+                  .doOnTerminate(connector::dispose)
+                  .subscribe(
+                      null,
+                      th -> {
+                        // no-op
+                      });
+            });
   }
 
   /**
-   * Apply {@link AeronClientOptions} on the given options consumer to be ultimately used for for
-   * invoking {@link #options()}.
+   * Apply {@link AeronClientOptions} on the given options consumer.
    *
    * @param options a consumer aeron client options
    * @return a new {@link AeronClient}
    */
   public AeronClient options(Consumer<AeronClientOptions> options) {
-    Objects.requireNonNull(options, "options");
-    AeronClientOptions aeronClientOptions = new AeronClientOptions();
-    options.accept(aeronClientOptions);
-    return new AeronClientOnOptions(this, aeronClientOptions);
-  }
-
-  /**
-   * Setup a callback called after {@link AeronClient} has been connected.
-   *
-   * @param doOnConnected a consumer observing connected events
-   * @return a new {@link AeronClient}
-   */
-  public final AeronClient doOnConnected(Consumer<? super Connection> doOnConnected) {
-    Objects.requireNonNull(doOnConnected, "doOnConnected");
-    return new AeronClientDoOn(this, doOnConnected, null);
-  }
-
-  /**
-   * Setup a callback called after {@link Connection} has been disconnected.
-   *
-   * @param doOnDisconnected a consumer observing disconnected events
-   * @return a new {@link AeronClient}
-   */
-  public final AeronClient doOnDisconnected(Consumer<? super Connection> doOnDisconnected) {
-    Objects.requireNonNull(doOnDisconnected, "doOnDisconnected");
-    return new AeronClientDoOn(this, null, doOnDisconnected);
+    return new AeronClient(settings.options(options));
   }
 
   /**
@@ -88,12 +84,7 @@ public abstract class AeronClient {
    *     terminates.
    * @return a new {@link AeronClient}
    */
-  public final AeronClient handle(
-      BiFunction<? super AeronInbound, ? super AeronOutbound, ? extends Publisher<Void>> handler) {
-    Objects.requireNonNull(handler, "handler");
-    return doOnConnected(
-        connection ->
-            Mono.fromDirect(handler.apply(connection.inbound(), connection.outbound()))
-                .subscribe(connection.disposeSubscriber()));
+  public AeronClient handle(Function<? super Connection, ? extends Publisher<Void>> handler) {
+    return new AeronClient(settings.handler(handler));
   }
 }

@@ -11,7 +11,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
-import reactor.core.publisher.Mono;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.ipc.aeron.client.AeronClient;
 import reactor.ipc.aeron.client.AeronClientOptions;
@@ -107,9 +106,9 @@ public class AeronClientTest extends BaseAeronTest {
         AeronClient.create(aeronResources)
             .options(DEFAULT_CLIENT_OPTIONS)
             .handle(
-                (inbound, outbound) -> {
-                  inbound.receive().asString().log("client-1").subscribe(processor1);
-                  return Mono.never();
+                connection -> {
+                  connection.inbound().receive().asString().log("client-1").subscribe(processor1);
+                  return connection.onDispose();
                 })
             .connect()
             .block(TIMEOUT));
@@ -118,9 +117,9 @@ public class AeronClientTest extends BaseAeronTest {
         AeronClient.create(aeronResources)
             .options(DEFAULT_CLIENT_OPTIONS)
             .handle(
-                (inbound, outbound) -> {
-                  inbound.receive().asString().log("client-2").subscribe(processor2);
-                  return Mono.never();
+                connection -> {
+                  connection.inbound().receive().asString().log("client-2").subscribe(processor2);
+                  return connection.onDispose();
                 })
             .connect()
             .block(TIMEOUT));
