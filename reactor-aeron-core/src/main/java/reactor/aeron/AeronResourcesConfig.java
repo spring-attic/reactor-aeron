@@ -3,6 +3,7 @@ package reactor.aeron;
 import static io.aeron.driver.Configuration.IMAGE_LIVENESS_TIMEOUT_NS;
 
 import io.aeron.driver.ThreadingMode;
+import java.time.Duration;
 
 public class AeronResourcesConfig {
 
@@ -11,12 +12,12 @@ public class AeronResourcesConfig {
 
   private final ThreadingMode threadingMode;
   private final boolean dirDeleteOnStart;
-  private final long imageLivenessTimeoutNs;
+  private final Duration imageLivenessTimeout;
 
   private AeronResourcesConfig(Builder builder) {
     this.threadingMode = builder.threadingMode;
     this.dirDeleteOnStart = builder.dirDeleteOnStart;
-    this.imageLivenessTimeoutNs = builder.imageLivenessTimeoutNs;
+    this.imageLivenessTimeout = builder.imageLivenessTimeout;
   }
 
   public static AeronResourcesConfig defaultConfig() {
@@ -35,8 +36,8 @@ public class AeronResourcesConfig {
     return threadingMode;
   }
 
-  public long imageLivenessTimeoutNs() {
-    return imageLivenessTimeoutNs;
+  public Duration imageLivenessTimeout() {
+    return imageLivenessTimeout;
   }
 
   @Override
@@ -44,14 +45,14 @@ public class AeronResourcesConfig {
     final StringBuilder sb = new StringBuilder("AeronResourcesConfig{");
     sb.append(", threadingMode=").append(threadingMode);
     sb.append(", dirDeleteOnStart=").append(dirDeleteOnStart);
-    sb.append(", imageLivenessTimeoutNs=").append(imageLivenessTimeoutNs);
+    sb.append(", imageLivenessTimeout=").append(imageLivenessTimeout);
     sb.append('}');
     return sb.toString();
   }
 
   public static class Builder {
 
-    private long imageLivenessTimeoutNs = IMAGE_LIVENESS_TIMEOUT_NS;
+    private Duration imageLivenessTimeout = Duration.ofNanos(IMAGE_LIVENESS_TIMEOUT_NS);
     private ThreadingMode threadingMode = THREADING_MODE;
     private boolean dirDeleteOnStart = DELETE_AERON_DIR_ON_START;
 
@@ -82,8 +83,8 @@ public class AeronResourcesConfig {
       return this;
     }
 
-    public Builder imageLivenessTimeoutNs(long imageLivenessTimeoutNs) {
-      this.imageLivenessTimeoutNs = imageLivenessTimeoutNs;
+    public Builder imageLivenessTimeoutNs(Duration imageLivenessTimeout) {
+      this.imageLivenessTimeout = imageLivenessTimeout;
       return this;
     }
 

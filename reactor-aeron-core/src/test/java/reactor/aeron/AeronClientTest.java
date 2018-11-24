@@ -27,7 +27,7 @@ class AeronClientTest extends BaseAeronTest {
   private String clientChannel;
   private AeronResources aeronResources;
 
-  private final int imageLivenessTimeoutSec = 1;
+  private final Duration imageLivenessTimeout = Duration.ofSeconds(1);
 
   @BeforeEach
   void beforeEach() {
@@ -46,7 +46,7 @@ class AeronClientTest extends BaseAeronTest {
     aeronResources =
         AeronResources.start(
             AeronResourcesConfig.builder()
-                .imageLivenessTimeoutNs(TimeUnit.SECONDS.toNanos(imageLivenessTimeoutSec))
+                .imageLivenessTimeoutNs(imageLivenessTimeout)
                 .build());
   }
 
@@ -63,15 +63,11 @@ class AeronClientTest extends BaseAeronTest {
   @Test
   public void testClientReceivesDataFromServer() {
     createServer(
-        connection -> {
-          System.err.println("in");
-          connection
-              .outbound()
-              .send(ByteBufferFlux.from("hello1", "2", "3").log("server"))
-              .then()
-              .subscribe();
-          return connection.onDispose();
-        });
+        connection ->
+            connection
+                .outbound()
+                .send(ByteBufferFlux.from("hello1", "2", "3").log("server"))
+                .then(connection.onDispose()));
 
     Connection connection = createConnection();
     StepVerifier.create(connection.inbound().receive().asString().log("client"))
@@ -84,14 +80,11 @@ class AeronClientTest extends BaseAeronTest {
   @Test
   public void testTwoClientsReceiveDataFromServer() {
     createServer(
-        connection -> {
-          connection
-              .outbound()
-              .send(ByteBufferFlux.from("1", "2", "3").log("server"))
-              .then()
-              .subscribe();
-          return connection.onDispose();
-        });
+        connection ->
+            connection
+                .outbound()
+                .send(ByteBufferFlux.from("1", "2", "3").log("server"))
+                .then(connection.onDispose()));
 
     Connection connection1 = createConnection();
     Connection connection2 = createConnection();
@@ -112,14 +105,11 @@ class AeronClientTest extends BaseAeronTest {
   @Test
   public void testClientWith2HandlersReceiveData() {
     createServer(
-        connection -> {
-          connection
-              .outbound()
-              .send(ByteBufferFlux.from("1", "2", "3").log("server"))
-              .then()
-              .subscribe();
-          return connection.onDispose();
-        });
+        connection ->
+            connection
+                .outbound()
+                .send(ByteBufferFlux.from("1", "2", "3").log("server"))
+                .then(connection.onDispose()));
 
     ReplayProcessor<String> processor1 = ReplayProcessor.create();
     ReplayProcessor<String> processor2 = ReplayProcessor.create();
@@ -153,17 +143,14 @@ class AeronClientTest extends BaseAeronTest {
   public void testClientClosesSessionAndServerHandleUnavailableImage() throws Exception {
     OnDisposable server =
         createServer(
-            connection -> {
-              connection
-                  .outbound()
-                  .send(
-                      ByteBufferFlux.from("hello1", "2", "3")
-                          .delayElements(Duration.ofSeconds(1))
-                          .log("server1"))
-                  .then()
-                  .subscribe();
-              return connection.onDispose();
-            });
+            connection ->
+                connection
+                    .outbound()
+                    .send(
+                        ByteBufferFlux.from("hello1", "2", "3")
+                            .delayElements(Duration.ofSeconds(1))
+                            .log("server1"))
+                    .then(connection.onDispose()));
 
     ReplayProcessor<String> processor = ReplayProcessor.create();
 
@@ -183,7 +170,7 @@ class AeronClientTest extends BaseAeronTest {
 
     server.dispose();
 
-    latch.await(imageLivenessTimeoutSec + 1, TimeUnit.SECONDS);
+    latch.await(imageLivenessTimeout.toMillis(), TimeUnit.MILLISECONDS);
 
     assertEquals(0, latch.getCount());
   }

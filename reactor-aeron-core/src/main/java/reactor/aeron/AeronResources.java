@@ -80,7 +80,7 @@ public class AeronResources implements Disposable, AutoCloseable {
   private void onStart() {
     MediaDriver.Context mediaContext =
         new MediaDriver.Context()
-            .imageLivenessTimeoutNs(config.imageLivenessTimeoutNs())
+            .imageLivenessTimeoutNs(config.imageLivenessTimeout().toNanos())
             .dirDeleteOnStart(config.isDirDeleteOnStart());
     mediaDriver = MediaDriver.launchEmbedded(mediaContext);
 

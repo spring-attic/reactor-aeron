@@ -29,7 +29,7 @@ class AeronServerTest extends BaseAeronTest {
   private String clientChannel;
   private AeronResources aeronResources;
 
-  private final int imageLivenessTimeoutSec = 1;
+  private final Duration imageLivenessTimeout = Duration.ofSeconds(1);
 
   @BeforeEach
   void beforeEach() {
@@ -48,7 +48,7 @@ class AeronServerTest extends BaseAeronTest {
     aeronResources =
         AeronResources.start(
             AeronResourcesConfig.builder()
-                .imageLivenessTimeoutNs(TimeUnit.SECONDS.toNanos(imageLivenessTimeoutSec))
+                .imageLivenessTimeoutNs(imageLivenessTimeout)
                 .build());
   }
 
@@ -134,7 +134,7 @@ class AeronServerTest extends BaseAeronTest {
 
     connection.dispose();
 
-    latch.await(imageLivenessTimeoutSec, TimeUnit.SECONDS);
+    latch.await(imageLivenessTimeout.toMillis(), TimeUnit.MILLISECONDS);
 
     assertEquals(0, latch.getCount());
   }
