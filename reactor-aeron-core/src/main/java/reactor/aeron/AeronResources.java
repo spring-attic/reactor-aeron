@@ -78,6 +78,7 @@ public class AeronResources implements Disposable, AutoCloseable {
   private void onStart() {
     MediaDriver.Context mediaContext = new MediaDriver.Context();
     mediaContext.dirDeleteOnStart(config.isDirDeleteOnStart());
+    mediaContext.mtuLength(config.mtuLength());
     mediaDriver = MediaDriver.launchEmbedded(mediaContext);
 
     Aeron.Context aeronContext = new Aeron.Context();
@@ -177,6 +178,10 @@ public class AeronResources implements Disposable, AutoCloseable {
     Subscription subscription = addSubscription(category, channel, streamId, purpose, sessionId);
     poller.addDataSubscription(subscription, dataMessageSubscriber);
     return subscription;
+  }
+
+  public int mtuLength() {
+    return config.mtuLength();
   }
 
   /**
