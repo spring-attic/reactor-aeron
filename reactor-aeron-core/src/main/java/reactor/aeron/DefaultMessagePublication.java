@@ -3,6 +3,7 @@ package reactor.aeron;
 import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
 import java.nio.ByteBuffer;
+import java.util.function.Supplier;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.UnsafeBuffer;
@@ -54,20 +55,34 @@ public final class DefaultMessagePublication implements Disposable, MessagePubli
   public long publish(MessageType msgType, ByteBuffer msgBody, long sessionId) {
     int capacity = msgBody.remaining() + Protocol.HEADER_SIZE;
     if (capacity < mtuLength) {
-      return tryClaim(msgType, msgBody, sessionId);
+      BufferClaim bufferClaim = bufferClaims.get();
+      long result = execute(() -> publication.tryClaim(capacity, bufferClaim));
+      if (result > 0) {
+        try {
+          MutableDirectBuffer buffer = bufferClaim.buffer();
+          int index = bufferClaim.offset();
+          index = Protocol.putHeader(buffer, index, msgType, sessionId);
+          buffer.putBytes(index, msgBody, msgBody.position(), msgBody.limit());
+          bufferClaim.commit();
+        } catch (Exception ex) {
+          bufferClaim.abort();
+          throw new RuntimeException("Unexpected exception", ex);
+        }
+      }
+      return result;
     } else {
-      return tryOffer(msgType, msgBody, sessionId);
+      UnsafeBuffer buffer = new UnsafeBuffer(new byte[msgBody.remaining() + Protocol.HEADER_SIZE]);
+      int index = Protocol.putHeader(buffer, 0, msgType, sessionId);
+      buffer.putBytes(index, msgBody, msgBody.remaining());
+      return execute(() -> publication.offer(buffer));
     }
   }
 
-  private long tryOffer(MessageType msgType, ByteBuffer msgBody, long sessionId) {
-    UnsafeBuffer buffer = new UnsafeBuffer(new byte[msgBody.remaining() + Protocol.HEADER_SIZE]);
-    int index = Protocol.putHeader(buffer, 0, msgType, sessionId);
-    buffer.putBytes(index, msgBody, msgBody.remaining());
+  private long execute(Supplier<Long> sendingTask) {
     long start = System.currentTimeMillis();
     long result;
     for (; ; ) {
-      result = publication.offer(buffer);
+      result = sendingTask.get();
 
       if (result > 0) {
         break;
@@ -102,72 +117,6 @@ public final class DefaultMessagePublication implements Disposable, MessagePubli
           break;
         }
       }
-      idleStrategy.idle(0);
-    }
-    idleStrategy.reset();
-    return result;
-  }
-
-  private long tryClaim(MessageType msgType, ByteBuffer msgBody, long sessionId) {
-    BufferClaim bufferClaim = bufferClaims.get();
-    int headerSize = Protocol.HEADER_SIZE;
-    int size = headerSize + msgBody.remaining();
-    long result = tryClaim(bufferClaim, size);
-    if (result > 0) {
-      try {
-        MutableDirectBuffer buffer = bufferClaim.buffer();
-        int index = bufferClaim.offset();
-        index = Protocol.putHeader(buffer, index, msgType, sessionId);
-        buffer.putBytes(index, msgBody, msgBody.position(), msgBody.limit());
-        bufferClaim.commit();
-      } catch (Exception ex) {
-        bufferClaim.abort();
-        throw new RuntimeException("Unexpected exception", ex);
-      }
-    }
-    return result;
-  }
-
-  private long tryClaim(BufferClaim bufferClaim, int size) {
-    long start = System.currentTimeMillis();
-    long result;
-    for (; ; ) {
-      result = publication.tryClaim(size, bufferClaim);
-
-      if (result > 0) {
-        break;
-      } else if (result == Publication.NOT_CONNECTED) {
-        if (System.currentTimeMillis() - start > waitConnectedMillis) {
-          logger.debug(
-              "[{}] Publication NOT_CONNECTED: {} during {} millis",
-              category,
-              asString(),
-              waitConnectedMillis);
-          break;
-        }
-      } else if (result == Publication.BACK_PRESSURED) {
-        if (System.currentTimeMillis() - start > waitBackpressuredMillis) {
-          logger.debug(
-              "[{}] Publication BACK_PRESSURED during {} millis: {}",
-              category,
-              asString(),
-              waitBackpressuredMillis);
-          break;
-        }
-      } else if (result == Publication.CLOSED) {
-        logger.debug("[{}] Publication CLOSED: {}", category, AeronUtils.format(publication));
-        break;
-      } else if (result == Publication.ADMIN_ACTION) {
-        if (System.currentTimeMillis() - start > waitConnectedMillis) {
-          logger.debug(
-              "[{}] Publication ADMIN_ACTION: {} during {} millis",
-              category,
-              asString(),
-              waitConnectedMillis);
-          break;
-        }
-      }
-
       idleStrategy.idle(0);
     }
     idleStrategy.reset();
