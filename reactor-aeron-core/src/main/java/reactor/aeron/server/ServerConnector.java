@@ -93,7 +93,8 @@ public class ServerConnector implements Disposable {
 
     SendConnectAckTask(MonoSink<Void> sink) {
       this.sink = sink;
-      this.publication = new DefaultMessagePublication(clientControlPublication, category, 0, 0);
+      this.publication =
+          new DefaultMessagePublication(aeronResources, clientControlPublication, category, 0, 0);
     }
 
     @Override

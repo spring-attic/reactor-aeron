@@ -143,6 +143,7 @@ final class ClientConnector implements Disposable {
           try {
             MessagePublication messagePublication =
                 new DefaultMessagePublication(
+                    aeronResources,
                     serverControlPublication,
                     category,
                     options.connectTimeoutMillis(),

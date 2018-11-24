@@ -217,10 +217,18 @@ public class AeronResources implements Disposable, AutoCloseable {
    * @param subscription subscription
    */
   public void close(Subscription subscription) {
-    if (subscription != null) {
-      poller.removeSubscription(subscription);
-      CloseHelper.quietClose(subscription);
-    }
+    // todo wait for commandQueue
+    Schedulers.single().schedule(
+        () -> {
+          if (subscription != null) {
+            poller.removeSubscription(subscription);
+            try {
+              subscription.close();
+            } catch (Exception e) {
+              logger.warn("Subscription closed with error: {}", e);
+            }
+          }
+        });
   }
 
   /**
@@ -229,7 +237,17 @@ public class AeronResources implements Disposable, AutoCloseable {
    * @param publication publication
    */
   public void close(Publication publication) {
-    CloseHelper.quietClose(publication);
+    // todo wait for commandQueue
+    Schedulers.single().schedule(
+        () -> {
+          if (publication != null) {
+            try {
+              publication.close();
+            } catch (Exception e) {
+              logger.warn("Publication closed with error: {}", e);
+            }
+          }
+        });
   }
 
   @Override

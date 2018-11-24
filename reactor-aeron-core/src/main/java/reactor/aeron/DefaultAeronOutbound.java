@@ -70,6 +70,7 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
               aeronResources.publication(category, channel, streamId, "to send data to", sessionId);
           this.publication =
               new DefaultMessagePublication(
+                  aeronResources,
                   aeronPublication,
                   category,
                   options.connectTimeoutMillis(),

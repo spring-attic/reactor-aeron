@@ -3,7 +3,6 @@ package reactor.aeron;
 import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
 import java.nio.ByteBuffer;
-import org.agrona.CloseHelper;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.IdleStrategy;
 import reactor.core.Disposable;
@@ -24,6 +23,8 @@ public final class DefaultMessagePublication implements Disposable, MessagePubli
 
   private final String category;
 
+  private final AeronResources aeronResources;
+
   /**
    * Constructor.
    *
@@ -33,10 +34,12 @@ public final class DefaultMessagePublication implements Disposable, MessagePubli
    * @param waitBackpressuredMillis wait backpressure millis
    */
   public DefaultMessagePublication(
+      AeronResources aeronResources,
       Publication publication,
       String category,
       long waitConnectedMillis,
       long waitBackpressuredMillis) {
+    this.aeronResources = aeronResources;
     this.publication = publication;
     this.category = category;
     this.idleStrategy = AeronUtils.newBackoffIdleStrategy();
@@ -118,9 +121,7 @@ public final class DefaultMessagePublication implements Disposable, MessagePubli
 
   @Override
   public void dispose() {
-    if (!isDisposed()) {
-      CloseHelper.quietClose(publication);
-    }
+    aeronResources.close(publication);
   }
 
   @Override
