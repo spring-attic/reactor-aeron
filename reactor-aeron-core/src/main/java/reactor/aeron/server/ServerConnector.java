@@ -77,7 +77,7 @@ public class ServerConnector implements Disposable {
 
   private Disposable scheduleHearbeats() {
     return heartbeatSender
-        .scheduleHeartbeats(clientControlPublication, sessionId)
+        .scheduleHeartbeats(aeronResources, clientControlPublication, sessionId)
         .subscribe(
             ignore -> {
               // no-op
@@ -117,7 +117,8 @@ public class ServerConnector implements Disposable {
 
     SendConnectAckTask(MonoSink<?> sink) {
       this.sink = sink;
-      this.publication = new DefaultMessagePublication(clientControlPublication, category, 0, 0);
+      this.publication =
+          new DefaultMessagePublication(aeronResources, clientControlPublication, category, 0, 0);
     }
 
     @Override

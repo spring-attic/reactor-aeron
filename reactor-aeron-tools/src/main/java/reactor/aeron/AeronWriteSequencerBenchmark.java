@@ -46,6 +46,7 @@ public class AeronWriteSequencerBenchmark {
 
     MessagePublication messagePublication =
         new DefaultMessagePublication(
+            aeronResources,
             publication,
             "benchmark",
             options.connectTimeoutMillis(),

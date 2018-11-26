@@ -99,7 +99,7 @@ final class ClientConnector implements Disposable {
 
               heartbeatSenderDisposable =
                   heartbeatSender
-                      .scheduleHeartbeats(serverControlPublication, sessionId)
+                      .scheduleHeartbeats(aeronResources, serverControlPublication, sessionId)
                       .subscribe(
                           avoid -> {
                             // no-op
@@ -164,6 +164,7 @@ final class ClientConnector implements Disposable {
           try {
             MessagePublication messagePublication =
                 new DefaultMessagePublication(
+                    aeronResources,
                     serverControlPublication,
                     category,
                     options.connectTimeoutMillis(),

@@ -1,5 +1,7 @@
 package reactor.aeron;
 
+import static io.aeron.driver.Configuration.MTU_LENGTH;
+
 import io.aeron.driver.ThreadingMode;
 
 public class AeronResourcesConfig {
@@ -9,10 +11,12 @@ public class AeronResourcesConfig {
 
   private final ThreadingMode threadingMode;
   private final boolean dirDeleteOnStart;
+  private final int mtuLength;
 
   private AeronResourcesConfig(Builder builder) {
     this.threadingMode = builder.threadingMode;
     this.dirDeleteOnStart = builder.dirDeleteOnStart;
+    this.mtuLength = builder.mtuLength;
   }
 
   public static AeronResourcesConfig defaultConfig() {
@@ -31,11 +35,16 @@ public class AeronResourcesConfig {
     return threadingMode;
   }
 
+  public int mtuLength() {
+    return mtuLength;
+  }
+
   @Override
   public String toString() {
     final StringBuilder sb = new StringBuilder("AeronResourcesConfig{");
     sb.append(", threadingMode=").append(threadingMode);
     sb.append(", dirDeleteOnStart=").append(dirDeleteOnStart);
+    sb.append(", mtuLength=").append(mtuLength);
     sb.append('}');
     return sb.toString();
   }
@@ -44,6 +53,7 @@ public class AeronResourcesConfig {
 
     private ThreadingMode threadingMode = THREADING_MODE;
     private boolean dirDeleteOnStart = DELETE_AERON_DIR_ON_START;
+    private int mtuLength = MTU_LENGTH;
 
     private Builder() {}
 
@@ -69,6 +79,11 @@ public class AeronResourcesConfig {
 
     public Builder dirDeleteOnStart(boolean dirDeleteOnStart) {
       this.dirDeleteOnStart = dirDeleteOnStart;
+      return this;
+    }
+
+    public Builder mtuLength(int mtuLength) {
+      this.mtuLength = mtuLength;
       return this;
     }
 

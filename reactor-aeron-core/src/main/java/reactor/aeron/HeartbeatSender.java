@@ -41,12 +41,13 @@ public class HeartbeatSender {
    * @param sessionId session id
    * @return hearbeat task handle
    */
-  public Mono<Void> scheduleHeartbeats(Publication controlPub, long sessionId) {
+  public Mono<Void> scheduleHeartbeats(
+      AeronResources aeronResources, Publication controlPub, long sessionId) {
     return Mono.create(
         sink -> {
           Disposable disposable =
               scheduler.schedulePeriodically(
-                  new SendHeartbeatTask(sink, controlPub, sessionId),
+                  new SendHeartbeatTask(sink, aeronResources, controlPub, sessionId),
                   heartbeatIntervalMillis,
                   heartbeatIntervalMillis,
                   TimeUnit.MILLISECONDS);
@@ -66,9 +67,14 @@ public class HeartbeatSender {
 
     private int failCounter = 0;
 
-    SendHeartbeatTask(MonoSink<Void> sink, Publication controlPublication, long sessionId) {
+    SendHeartbeatTask(
+        MonoSink<Void> sink,
+        AeronResources aeronResources,
+        Publication controlPublication,
+        long sessionId) {
       this.sink = sink;
-      this.publication = new DefaultMessagePublication(controlPublication, category, 0, 0);
+      this.publication =
+          new DefaultMessagePublication(aeronResources, controlPublication, category, 0, 0);
       this.sessionId = sessionId;
     }
 

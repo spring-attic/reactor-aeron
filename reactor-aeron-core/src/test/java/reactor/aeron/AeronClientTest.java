@@ -3,6 +3,7 @@ package reactor.aeron;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -59,6 +60,29 @@ public class AeronClientTest extends BaseAeronTest {
     Connection connection = createConnection();
     StepVerifier.create(connection.inbound().receive().asString().log("client"))
         .expectNext("hello1", "2", "3")
+        .expectNoEvent(Duration.ofMillis(10))
+        .thenCancel()
+        .verify();
+  }
+
+  @Test
+  public void testClientReceivesLongDataFromServer() {
+    aeronResources.mtuLength();
+    char[] chars = new char[aeronResources.mtuLength() * 2];
+    Arrays.fill(chars, 'a');
+    String str = new String(chars);
+
+    createServer(
+        connection ->
+            connection
+                .outbound()
+                .send(ByteBufferFlux.from(str, str, str).log("server"))
+                .then(connection.onDispose()));
+
+    Connection connection = createConnection();
+
+    StepVerifier.create(connection.inbound().receive().asString().log("client"))
+        .expectNext(str, str, str)
         .expectNoEvent(Duration.ofMillis(10))
         .thenCancel()
         .verify();
