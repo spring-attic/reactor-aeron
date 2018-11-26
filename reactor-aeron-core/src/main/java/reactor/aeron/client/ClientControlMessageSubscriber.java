@@ -5,7 +5,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import reactor.aeron.ControlMessageSubscriber;
-import reactor.aeron.HeartbeatWatchdog;
 import reactor.aeron.MessageType;
 import reactor.aeron.Protocol;
 import reactor.aeron.client.AeronClientInbound.ClientDataMessageProcessor;
@@ -21,7 +20,6 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
 
   private final String category;
 
-  private final HeartbeatWatchdog heartbeatWatchdog;
 
   private final Consumer<Long> onCompleteHandler;
 
@@ -29,9 +27,8 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
       new ConcurrentHashMap<>();
 
   ClientControlMessageSubscriber(
-      String category, HeartbeatWatchdog heartbeatWatchdog, Consumer<Long> onCompleteHandler) {
+      String category, Consumer<Long> onCompleteHandler) {
     this.category = category;
-    this.heartbeatWatchdog = heartbeatWatchdog;
     this.onCompleteHandler = onCompleteHandler;
   }
 
@@ -54,11 +51,6 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
       processor.onNext(new ConnectAckResponse(sessionId, serverSessionStreamId));
       processor.onComplete();
     }
-  }
-
-  @Override
-  public void onHeartbeat(long sessionId) {
-    heartbeatWatchdog.heartbeatReceived(sessionId);
   }
 
   /**

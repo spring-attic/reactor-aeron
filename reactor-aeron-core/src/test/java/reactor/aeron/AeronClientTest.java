@@ -1,14 +1,19 @@
 package reactor.aeron;
 
+import static java.lang.Boolean.TRUE;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import io.aeron.ChannelUriStringBuilder;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
 import reactor.aeron.client.AeronClient;
@@ -17,29 +22,37 @@ import reactor.aeron.server.AeronServer;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.test.StepVerifier;
 
-public class AeronClientTest extends BaseAeronTest {
+class AeronClientTest extends BaseAeronTest {
 
-  private static String serverChannel =
-      "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort(13000);
+  private String serverChannel;
+  private String clientChannel;
+  private AeronResources aeronResources;
 
-  private static String clientChannel =
-      "aeron:udp?endpoint=localhost:" + SocketUtils.findAvailableUdpPort();
+  private final Duration imageLivenessTimeout = Duration.ofSeconds(1);
 
-  private static AeronResources aeronResources;
-
-  private static final Consumer<AeronClientOptions> DEFAULT_CLIENT_OPTIONS =
-      options -> {
-        options.clientChannel(clientChannel);
-        options.serverChannel(serverChannel);
-      };
-
-  @BeforeAll
-  static void beforeAll() {
-    aeronResources = AeronResources.start();
+  @BeforeEach
+  void beforeEach() {
+    serverChannel =
+        new ChannelUriStringBuilder()
+            .reliable(TRUE)
+            .media("udp")
+            .endpoint("localhost:" + SocketUtils.findAvailableUdpPort(13000, 14000))
+            .build();
+    clientChannel =
+        new ChannelUriStringBuilder()
+            .reliable(TRUE)
+            .media("udp")
+            .endpoint("localhost:" + SocketUtils.findAvailableUdpPort(14000, 15000))
+            .build();
+    aeronResources =
+        AeronResources.start(
+            AeronResourcesConfig.builder()
+                .imageLivenessTimeoutNs(imageLivenessTimeout)
+                .build());
   }
 
-  @AfterAll
-  static void afterAll() {
+  @AfterEach
+  void afterEach() {
     Optional.ofNullable(aeronResources).ifPresent(AeronResources::dispose);
   }
 
@@ -125,27 +138,17 @@ public class AeronClientTest extends BaseAeronTest {
     ReplayProcessor<String> processor1 = ReplayProcessor.create();
     ReplayProcessor<String> processor2 = ReplayProcessor.create();
 
-    addDisposable(
-        AeronClient.create(aeronResources)
-            .options(DEFAULT_CLIENT_OPTIONS)
-            .handle(
-                connection -> {
-                  connection.inbound().receive().asString().log("client-1").subscribe(processor1);
-                  return connection.onDispose();
-                })
-            .connect()
-            .block(TIMEOUT));
+    createConnection(
+        connection -> {
+          connection.inbound().receive().asString().log("client-1").subscribe(processor1);
+          return connection.onDispose();
+        });
 
-    addDisposable(
-        AeronClient.create(aeronResources)
-            .options(DEFAULT_CLIENT_OPTIONS)
-            .handle(
-                connection -> {
-                  connection.inbound().receive().asString().log("client-2").subscribe(processor2);
-                  return connection.onDispose();
-                })
-            .connect()
-            .block(TIMEOUT));
+    createConnection(
+        connection -> {
+          connection.inbound().receive().asString().log("client-2").subscribe(processor2);
+          return connection.onDispose();
+        });
 
     StepVerifier.create(processor1)
         .expectNext("1", "2", "3")
@@ -161,25 +164,17 @@ public class AeronClientTest extends BaseAeronTest {
   }
 
   @Test
-  public void testClientClosesSessionUponHeartbeatLoss() throws Exception {
-    OnDisposable onDisposable =
-        AeronServer.create(aeronResources)
-            .options(
-                options -> {
-                  options.serverChannel(serverChannel);
-                  options.heartbeatTimeoutMillis(500);
-                })
-            .handle(
-                connection ->
-                    connection
-                        .outbound()
-                        .send(
-                            ByteBufferFlux.from("hello1", "2", "3")
-                                .delayElements(Duration.ofSeconds(1))
-                                .log("server"))
-                        .then(connection.onDispose()))
-            .bind()
-            .block(TIMEOUT);
+  public void testClientClosesSessionAndServerHandleUnavailableImage() throws Exception {
+    OnDisposable server =
+        createServer(
+            connection ->
+                connection
+                    .outbound()
+                    .send(
+                        ByteBufferFlux.from("hello1", "2", "3")
+                            .delayElements(Duration.ofSeconds(1))
+                            .log("server1"))
+                    .then(connection.onDispose()));
 
     ReplayProcessor<String> processor = ReplayProcessor.create();
 
@@ -188,25 +183,48 @@ public class AeronClientTest extends BaseAeronTest {
             options -> {
               options.clientChannel(clientChannel);
               options.serverChannel(serverChannel);
-              options.heartbeatTimeoutMillis(500);
             });
+
+    CountDownLatch latch = new CountDownLatch(1);
+    connection.onDispose().doOnSuccess(aVoid -> latch.countDown()).subscribe();
 
     connection.inbound().receive().asString().log("client").subscribe(processor);
 
-    processor.elementAt(2).block(Duration.ofSeconds(4));
+    processor.take(1).blockLast(Duration.ofSeconds(4));
 
-    onDisposable.dispose();
+    server.dispose();
 
-    Thread.sleep(1500);
+    latch.await(imageLivenessTimeout.toMillis(), TimeUnit.MILLISECONDS);
+
+    assertEquals(0, latch.getCount());
   }
 
   private Connection createConnection() {
-    return createConnection(DEFAULT_CLIENT_OPTIONS);
+    return createConnection(
+        options -> {
+          options.clientChannel(clientChannel);
+          options.serverChannel(serverChannel);
+        });
   }
 
   private Connection createConnection(Consumer<AeronClientOptions> options) {
     Connection connection =
         AeronClient.create(aeronResources).options(options).connect().block(TIMEOUT);
+    return addDisposable(connection);
+  }
+
+  private Connection createConnection(
+      Function<? super Connection, ? extends Publisher<Void>> handler) {
+    Connection connection =
+        AeronClient.create(aeronResources)
+            .options(
+                options -> {
+                  options.clientChannel(clientChannel);
+                  options.serverChannel(serverChannel);
+                })
+            .handle(handler)
+            .connect()
+            .block(TIMEOUT);
     return addDisposable(connection);
   }
 

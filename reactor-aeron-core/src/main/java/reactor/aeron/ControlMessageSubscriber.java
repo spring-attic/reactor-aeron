@@ -12,7 +12,5 @@ public interface ControlMessageSubscriber extends PollerSubscriber {
 
   void onConnectAck(UUID connectRequestId, long sessionId, int serverSessionStreamId);
 
-  void onHeartbeat(long sessionId);
-
   void onComplete(long sessionId);
 }

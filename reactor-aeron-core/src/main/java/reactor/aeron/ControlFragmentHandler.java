@@ -53,8 +53,6 @@ public class ControlFragmentHandler implements FragmentHandler {
       UUID connectRequestId = new UUID(mostSigBits, leastSigBits);
 
       subscriber.onConnectAck(connectRequestId, sessionId, serverSessionStreamId);
-    } else if (type == MessageType.HEARTBEAT.ordinal()) {
-      subscriber.onHeartbeat(sessionId);
     } else if (type == MessageType.COMPLETE.ordinal()) {
       subscriber.onComplete(sessionId);
     } else {

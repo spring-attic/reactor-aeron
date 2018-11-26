@@ -51,7 +51,7 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
 
   @Override
   public void dispose() {
-    if (publication != null) {
+    if (publication != null && !publication.isDisposed()) {
       publication.dispose();
     }
   }

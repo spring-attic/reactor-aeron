@@ -29,6 +29,8 @@ public final class DefaultMessagePublication implements Disposable, MessagePubli
 
   private final ThreadLocal<BufferClaim> bufferClaims = ThreadLocal.withInitial(BufferClaim::new);
 
+  private final AeronResources aeronResources;
+
   /**
    * Constructor.
    *
@@ -43,6 +45,7 @@ public final class DefaultMessagePublication implements Disposable, MessagePubli
       String category,
       long waitConnectedMillis,
       long waitBackpressuredMillis) {
+    this.aeronResources = aeronResources;
     this.mtuLength = aeronResources.mtuLength();
     this.publication = publication;
     this.category = category;
@@ -130,7 +133,7 @@ public final class DefaultMessagePublication implements Disposable, MessagePubli
 
   @Override
   public void dispose() {
-    publication.close();
+    aeronResources.close(publication);
   }
 
   @Override

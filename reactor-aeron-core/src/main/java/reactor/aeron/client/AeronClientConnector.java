@@ -1,5 +1,6 @@
 package reactor.aeron.client;
 
+import io.aeron.Image;
 import io.aeron.Subscription;
 import java.util.List;
 import java.util.Optional;
@@ -10,8 +11,6 @@ import reactor.aeron.AeronOutbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
 import reactor.aeron.DefaultAeronOutbound;
-import reactor.aeron.HeartbeatSender;
-import reactor.aeron.HeartbeatWatchdog;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
@@ -21,6 +20,8 @@ import reactor.util.Loggers;
 public final class AeronClientConnector implements Disposable {
 
   private static final Logger logger = Loggers.getLogger(AeronClientConnector.class);
+
+  private static final int CONTROL_SESSION_ID = 0;
 
   private final String name;
   private final AeronClientOptions options;
@@ -34,29 +35,31 @@ public final class AeronClientConnector implements Disposable {
 
   private final int clientControlStreamId;
 
-  private final HeartbeatSender heartbeatSender;
-
   private final List<ClientHandler> handlers = new CopyOnWriteArrayList<>();
-
-  private final HeartbeatWatchdog heartbeatWatchdog;
 
   AeronClientConnector(AeronClientSettings settings) {
     this.options = settings.options();
     this.name = Optional.ofNullable(settings.name()).orElse("client");
     this.aeronResources = settings.aeronResources();
-    this.heartbeatWatchdog = new HeartbeatWatchdog(options.heartbeatTimeoutMillis(), this.name);
     this.controlMessageSubscriber =
-        new ClientControlMessageSubscriber(name, heartbeatWatchdog, this::dispose);
+        new ClientControlMessageSubscriber(name, this::dispose);
     this.clientControlStreamId = streamIdCounter.incrementAndGet();
-    this.heartbeatSender = new HeartbeatSender(options.heartbeatTimeoutMillis(), this.name);
     this.controlSubscription =
         aeronResources.controlSubscription(
             name,
             options.clientChannel(),
             clientControlStreamId,
             "to receive control requests on",
-            0,
-            controlMessageSubscriber);
+            CONTROL_SESSION_ID,
+            controlMessageSubscriber,
+            null,
+            this::onUnavailableControlImage);
+  }
+
+  private void onUnavailableControlImage(Image image) {
+    if (controlSubscription.hasNoImages()) {
+      dispose();
+    }
   }
 
   /**
@@ -110,7 +113,6 @@ public final class AeronClientConnector implements Disposable {
               aeronResources,
               options,
               controlMessageSubscriber,
-              heartbeatSender,
               clientControlStreamId,
               clientSessionStreamId);
 
@@ -137,9 +139,6 @@ public final class AeronClientConnector implements Disposable {
                         clientSessionStreamId,
                         sessionId,
                         this::dispose);
-
-                heartbeatWatchdog.add(
-                    sessionId, this::dispose, () -> inbound.getLastSignalTimeNs());
 
                 return outbound.initialise(sessionId, serverSessionStreamId);
               })
@@ -197,7 +196,6 @@ public final class AeronClientConnector implements Disposable {
 
     public void dispose0() {
       handlers.remove(this);
-      heartbeatWatchdog.remove(sessionId);
       connector.dispose();
       if (inbound != null) {
         inbound.dispose();

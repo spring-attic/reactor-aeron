@@ -23,7 +23,6 @@ final class AeronServerInbound implements AeronInbound, Disposable {
   private final AeronResources aeronResources;
 
   private Subscription serverDataSubscription;
-  private ServerDataMessageProcessor messageProcessor;
 
   AeronServerInbound(String name, AeronResources aeronResources) {
     this.processor = TopicProcessor.<ByteBuffer>builder().name(name).build();
@@ -39,7 +38,8 @@ final class AeronServerInbound implements AeronInbound, Disposable {
       Runnable onCompleteHandler) {
     return Mono.fromRunnable(
         () -> {
-          messageProcessor = new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
+          ServerDataMessageProcessor messageProcessor =
+              new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
           serverDataSubscription =
               aeronResources.dataSubscription(
                   name,
@@ -47,7 +47,13 @@ final class AeronServerInbound implements AeronInbound, Disposable {
                   serverSessionStreamId,
                   "to receive client data on",
                   sessionId,
-                  messageProcessor);
+                  messageProcessor,
+                  null,
+                  dataImage -> {
+                    if (serverDataSubscription.hasNoImages()) {
+                      onCompleteHandler.run();
+                    }
+                  });
           messageProcessor.subscribe(processor);
         });
   }
@@ -63,10 +69,6 @@ final class AeronServerInbound implements AeronInbound, Disposable {
     aeronResources.close(serverDataSubscription);
   }
 
-  long lastSignalTimeNs() {
-    return messageProcessor.lastSignalTimeNs;
-  }
-
   static class ServerDataMessageProcessor implements DataMessageSubscriber, Publisher<ByteBuffer> {
 
     private static final Logger logger = Loggers.getLogger(ServerDataMessageProcessor.class);
@@ -74,8 +76,6 @@ final class AeronServerInbound implements AeronInbound, Disposable {
     private final String category;
 
     private volatile org.reactivestreams.Subscription subscription;
-
-    private volatile long lastSignalTimeNs;
 
     private volatile Subscriber<? super ByteBuffer> subscriber;
 
@@ -104,8 +104,6 @@ final class AeronServerInbound implements AeronInbound, Disposable {
             sessionId,
             buffer);
       }
-
-      lastSignalTimeNs = System.nanoTime();
 
       if (this.sessionId == sessionId) {
         subscriber.onNext(buffer);

@@ -9,7 +9,6 @@ import java.util.concurrent.TimeoutException;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronUtils;
 import reactor.aeron.DefaultMessagePublication;
-import reactor.aeron.HeartbeatSender;
 import reactor.aeron.MessagePublication;
 import reactor.aeron.MessageType;
 import reactor.aeron.Protocol;
@@ -39,23 +38,15 @@ final class ClientConnector implements Disposable {
 
   private final Publication serverControlPublication;
 
-  private final HeartbeatSender heartbeatSender;
-
   private final AeronResources aeronResources;
 
   private volatile long sessionId;
-
-  private volatile Disposable heartbeatSenderDisposable =
-      () -> {
-        // no-op
-      };
 
   ClientConnector(
       String category,
       AeronResources aeronResources,
       AeronClientOptions options,
       ClientControlMessageSubscriber controlMessageSubscriber,
-      HeartbeatSender heartbeatSender,
       int clientControlStreamId,
       int clientSessionStreamId) {
     this.category = category;
@@ -64,7 +55,6 @@ final class ClientConnector implements Disposable {
     this.controlMessageSubscriber = controlMessageSubscriber;
     this.clientControlStreamId = clientControlStreamId;
     this.clientSessionStreamId = clientSessionStreamId;
-    this.heartbeatSender = heartbeatSender;
     this.connectRequestId = uuidGenerator.generate();
     this.serverControlPublication =
         aeronResources.publication(
@@ -96,17 +86,6 @@ final class ClientConnector implements Disposable {
         .doOnSuccess(
             response -> {
               this.sessionId = response.sessionId;
-
-              heartbeatSenderDisposable =
-                  heartbeatSender
-                      .scheduleHeartbeats(aeronResources, serverControlPublication, sessionId)
-                      .subscribe(
-                          avoid -> {
-                            // no-op
-                          },
-                          th -> {
-                            // no-op
-                          });
 
               if (logger.isDebugEnabled()) {
                 logger.debug(
@@ -194,8 +173,6 @@ final class ClientConnector implements Disposable {
             th -> {
               // no-op
             });
-
-    heartbeatSenderDisposable.dispose();
 
     aeronResources.close(serverControlPublication);
   }
