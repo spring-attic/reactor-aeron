@@ -1,5 +1,6 @@
 package reactor.aeron;
 
+import io.aeron.Publication;
 import reactor.core.publisher.Mono;
 
 public class SenderLoop {
@@ -9,6 +10,10 @@ public class SenderLoop {
   }
 
   Mono<Void> unregister(MessagePublication messagePublication) {
+
+  }
+
+  Mono<Void> close(Publication publication) {
 
   }
 }
