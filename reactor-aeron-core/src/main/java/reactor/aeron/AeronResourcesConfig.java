@@ -1,8 +1,6 @@
 package reactor.aeron;
 
-import static io.aeron.driver.Configuration.IMAGE_LIVENESS_TIMEOUT_NS;
-import static io.aeron.driver.Configuration.MTU_LENGTH;
-
+import io.aeron.driver.Configuration;
 import io.aeron.driver.ThreadingMode;
 import java.time.Duration;
 
@@ -10,6 +8,9 @@ public class AeronResourcesConfig {
 
   public static final boolean DELETE_AERON_DIR_ON_START = true;
   public static final ThreadingMode THREADING_MODE = ThreadingMode.DEDICATED;
+  public static final Duration IMAGE_LIVENESS_TIMEOUT =
+      Duration.ofNanos(Configuration.IMAGE_LIVENESS_TIMEOUT_NS);
+  public static final int MTU_LENGTH = Configuration.MTU_LENGTH;
 
   private final ThreadingMode threadingMode;
   private final boolean dirDeleteOnStart;
@@ -63,7 +64,7 @@ public class AeronResourcesConfig {
     private ThreadingMode threadingMode = THREADING_MODE;
     private boolean dirDeleteOnStart = DELETE_AERON_DIR_ON_START;
     private int mtuLength = MTU_LENGTH;
-    private Duration imageLivenessTimeout = Duration.ofNanos(IMAGE_LIVENESS_TIMEOUT_NS);
+    private Duration imageLivenessTimeout = IMAGE_LIVENESS_TIMEOUT;
 
     private Builder() {}
 
@@ -97,7 +98,7 @@ public class AeronResourcesConfig {
       return this;
     }
 
-    public Builder imageLivenessTimeoutNs(Duration imageLivenessTimeout) {
+    public Builder imageLivenessTimeout(Duration imageLivenessTimeout) {
       this.imageLivenessTimeout = imageLivenessTimeout;
       return this;
     }

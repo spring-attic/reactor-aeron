@@ -48,7 +48,7 @@ class AeronServerTest extends BaseAeronTest {
     aeronResources =
         AeronResources.start(
             AeronResourcesConfig.builder()
-                .imageLivenessTimeoutNs(imageLivenessTimeout)
+                .imageLivenessTimeout(imageLivenessTimeout)
                 .build());
   }
 

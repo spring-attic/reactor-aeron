@@ -1,6 +1,7 @@
 package reactor.aeron;
 
 import io.aeron.Aeron;
+import io.aeron.Aeron.Context;
 import io.aeron.CommonContext;
 import io.aeron.Image;
 import io.aeron.Publication;
@@ -97,18 +98,7 @@ public class AeronResources implements Disposable, AutoCloseable {
     receiver.schedule(poller = new Poller(() -> !receiver.isDisposed()));
 
     Runtime.getRuntime()
-        .addShutdownHook(
-            new Thread(
-                () -> {
-                  try {
-                    aeronContext.deleteAeronDirectory();
-                  } catch (Throwable th) {
-                    logger.warn(
-                        "Exception occurred at deleting aeron directory: {}, cause: {}",
-                        directoryName,
-                        th);
-                  }
-                }));
+        .addShutdownHook(new Thread(() -> deleteAeronDirectory(aeronContext, directoryName)));
 
     logger.info(
         "{} has initialized embedded media mediaDriver, aeron directory: {}", this, directoryName);
@@ -223,17 +213,18 @@ public class AeronResources implements Disposable, AutoCloseable {
    */
   public void close(Subscription subscription) {
     // todo wait for commandQueue
-    Schedulers.single().schedule(
-        () -> {
-          if (subscription != null) {
-            poller.removeSubscription(subscription);
-            try {
-              subscription.close();
-            } catch (Exception e) {
-              logger.warn("Subscription closed with error: {}", e);
-            }
-          }
-        });
+    Schedulers.single()
+        .schedule(
+            () -> {
+              if (subscription != null) {
+                poller.removeSubscription(subscription);
+                try {
+                  subscription.close();
+                } catch (Exception e) {
+                  logger.warn("Subscription closed with error: {}", e);
+                }
+              }
+            });
   }
 
   /**
@@ -243,16 +234,17 @@ public class AeronResources implements Disposable, AutoCloseable {
    */
   public void close(Publication publication) {
     // todo wait for commandQueue
-    Schedulers.single().schedule(
-        () -> {
-          if (publication != null) {
-            try {
-              publication.close();
-            } catch (Exception e) {
-              logger.warn("Publication closed with error: {}", e);
-            }
-          }
-        });
+    Schedulers.single()
+        .schedule(
+            () -> {
+              if (publication != null) {
+                try {
+                  publication.close();
+                } catch (Exception e) {
+                  logger.warn("Publication closed with error: {}", e);
+                }
+              }
+            });
   }
 
   @Override
@@ -374,6 +366,15 @@ public class AeronResources implements Disposable, AutoCloseable {
           AeronUtils.format(channel, streamId));
     }
     return subscription;
+  }
+
+  private void deleteAeronDirectory(Context aeronContext, String directoryName) {
+    try {
+      aeronContext.deleteAeronDirectory();
+    } catch (Throwable th) {
+      logger.warn(
+          "Exception occurred at deleting aeron directory: {}, cause: {}", directoryName, th);
+    }
   }
 
   @Override
