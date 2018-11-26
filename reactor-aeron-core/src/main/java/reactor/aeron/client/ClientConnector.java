@@ -60,7 +60,7 @@ final class ClientConnector implements Disposable {
         aeronResources.publication(
             category,
             options.serverChannel(),
-            options.serverStreamId(),
+            options.controlStreamId(),
             "to send control requests to server",
             0);
   }

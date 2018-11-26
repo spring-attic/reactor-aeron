@@ -86,10 +86,16 @@ public class AeronServerSettings {
       return this;
     }
 
-    public Builder options(Consumer<AeronServerOptions.Builder> consumer) {
-      AeronServerOptions.Builder builder = AeronServerOptions.builder();
-      consumer.accept(builder);
-      this.options = builder.build();
+    /**
+     * Adds aeron server options via its builder consumer.
+     *
+     * @param options options
+     * @return self
+     */
+    public Builder options(Consumer<AeronServerOptions.Builder> options) {
+      AeronServerOptions.Builder optionsBuilder = AeronServerOptions.builder();
+      options.accept(optionsBuilder);
+      this.options = optionsBuilder.build();
       return this;
     }
 

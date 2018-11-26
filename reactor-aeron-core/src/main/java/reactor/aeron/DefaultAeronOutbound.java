@@ -2,10 +2,7 @@ package reactor.aeron;
 
 import io.aeron.Publication;
 import java.nio.ByteBuffer;
-import java.time.Duration;
 import org.reactivestreams.Publisher;
-import reactor.aeron.client.AeronClientOptions;
-import reactor.aeron.server.AeronServerOptions;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
@@ -54,14 +51,6 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
     }
   }
 
-  public Mono<Void> initialise(long sessionId, int streamId, AeronClientOptions options) {
-    return initialise(sessionId, streamId, options.connectTimeout(), options.backpressureTimeout());
-  }
-
-  public Mono<Void> initialise(long sessionId, int streamId, AeronServerOptions options) {
-    return initialise(sessionId, streamId, options.connectTimeout(), options.backpressureTimeout());
-  }
-
   /**
    * Init method.
    *
@@ -69,8 +58,7 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
    * @param streamId stream id
    * @return initialization handle
    */
-  private Mono<Void> initialise(
-      long sessionId, int streamId, Duration connectTimeout, Duration backpressureTimeout) {
+  public Mono<Void> initialise(long sessionId, int streamId, AeronOptions options) {
     return Mono.create(
         sink -> {
           Publication aeronPublication =
@@ -80,10 +68,10 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
                   aeronResources,
                   aeronPublication,
                   category,
-                  connectTimeout.toMillis(),
-                  backpressureTimeout.toMillis());
+                  options.connectTimeout().toMillis(),
+                  options.backpressureTimeout().toMillis());
           this.sequencer = aeronResources.writeSequencer(category, publication, sessionId);
-          createRetryTask(sink, aeronPublication, connectTimeout.toMillis()).schedule();
+          createRetryTask(sink, aeronPublication, options.connectTimeout().toMillis()).schedule();
         });
   }
 
