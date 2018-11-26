@@ -2,7 +2,10 @@ package reactor.aeron;
 
 import io.aeron.Publication;
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import org.reactivestreams.Publisher;
+import reactor.aeron.client.AeronClientOptions;
+import reactor.aeron.server.AeronServerOptions;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
@@ -17,8 +20,6 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
 
   private final String channel;
 
-  private final AeronOptions options;
-
   private volatile AeronWriteSequencer sequencer;
 
   private volatile DefaultMessagePublication publication;
@@ -29,14 +30,11 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
    * @param category category
    * @param aeronResources aeronResources
    * @param channel channel
-   * @param options options
    */
-  public DefaultAeronOutbound(
-      String category, AeronResources aeronResources, String channel, AeronOptions options) {
+  public DefaultAeronOutbound(String category, AeronResources aeronResources, String channel) {
     this.category = category;
     this.aeronResources = aeronResources;
     this.channel = channel;
-    this.options = options;
   }
 
   @Override
@@ -56,6 +54,14 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
     }
   }
 
+  public Mono<Void> initialise(long sessionId, int streamId, AeronClientOptions options) {
+    return initialise(sessionId, streamId, options.connectTimeout(), options.backpressureTimeout());
+  }
+
+  public Mono<Void> initialise(long sessionId, int streamId, AeronServerOptions options) {
+    return initialise(sessionId, streamId, options.connectTimeout(), options.backpressureTimeout());
+  }
+
   /**
    * Init method.
    *
@@ -63,7 +69,8 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
    * @param streamId stream id
    * @return initialization handle
    */
-  public Mono<Void> initialise(long sessionId, int streamId) {
+  private Mono<Void> initialise(
+      long sessionId, int streamId, Duration connectTimeout, Duration backpressureTimeout) {
     return Mono.create(
         sink -> {
           Publication aeronPublication =
@@ -73,17 +80,15 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
                   aeronResources,
                   aeronPublication,
                   category,
-                  options.connectTimeoutMillis(),
-                  options.backpressureTimeoutMillis());
+                  connectTimeout.toMillis(),
+                  backpressureTimeout.toMillis());
           this.sequencer = aeronResources.writeSequencer(category, publication, sessionId);
-          int timeoutMillis = options.connectTimeoutMillis();
-
-          createRetryTask(sink, aeronPublication, timeoutMillis).schedule();
+          createRetryTask(sink, aeronPublication, connectTimeout.toMillis()).schedule();
         });
   }
 
   private RetryTask createRetryTask(
-      MonoSink<Void> sink, Publication aeronPublication, int timeoutMillis) {
+      MonoSink<Void> sink, Publication aeronPublication, long timeoutMillis) {
     return new RetryTask(
         Schedulers.single(),
         100,

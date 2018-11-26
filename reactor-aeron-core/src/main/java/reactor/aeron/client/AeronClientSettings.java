@@ -46,7 +46,7 @@ public class AeronClientSettings {
     return options;
   }
 
-  public AeronClientSettings options(Consumer<AeronClientOptions> consumer) {
+  public AeronClientSettings options(Consumer<AeronClientOptions.Builder> consumer) {
     return new Builder(this).options(consumer).build();
   }
 
@@ -58,7 +58,7 @@ public class AeronClientSettings {
 
     private String name;
     private AeronResources aeronResources;
-    private AeronClientOptions options = new AeronClientOptions();
+    private AeronClientOptions options;
     private Function<? super Connection, ? extends Publisher<Void>> handler =
         OnDisposable::onDispose;
 
@@ -86,8 +86,10 @@ public class AeronClientSettings {
       return this;
     }
 
-    public Builder options(Consumer<AeronClientOptions> consumer) {
-      consumer.accept(options);
+    public Builder options(Consumer<AeronClientOptions.Builder> consumer) {
+      AeronClientOptions.Builder builder = AeronClientOptions.builder();
+      consumer.accept(builder);
+      this.options = builder.build();
       return this;
     }
 

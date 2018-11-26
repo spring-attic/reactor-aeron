@@ -33,7 +33,6 @@ public class AeronWriteSequencerBenchmark {
   }
 
   private void run() {
-    AeronOptions options = new AeronOptions();
     AeronResources aeronResources = AeronResources.start();
 
     io.aeron.Subscription subscription =
@@ -49,8 +48,8 @@ public class AeronWriteSequencerBenchmark {
             aeronResources,
             publication,
             "benchmark",
-            options.connectTimeoutMillis(),
-            options.backpressureTimeoutMillis());
+            Duration.ofSeconds(5).toMillis(),
+            Duration.ofSeconds(5).toMillis());
 
     AeronWriteSequencer sequencer = aeronResources.writeSequencer("test", messagePublication, 1);
 

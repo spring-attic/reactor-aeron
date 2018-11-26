@@ -73,7 +73,7 @@ public final class AeronClient {
    * @param options a consumer aeron client options
    * @return a new {@link AeronClient}
    */
-  public AeronClient options(Consumer<AeronClientOptions> options) {
+  public AeronClient options(Consumer<AeronClientOptions.Builder> options) {
     return new AeronClient(settings.options(options));
   }
 

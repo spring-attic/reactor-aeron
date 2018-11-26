@@ -24,8 +24,8 @@ import reactor.test.StepVerifier;
 
 class AeronClientTest extends BaseAeronTest {
 
-  private String serverChannel;
-  private String clientChannel;
+  private ChannelUriStringBuilder serverChannel;
+  private ChannelUriStringBuilder clientChannel;
   private AeronResources aeronResources;
 
   private final Duration imageLivenessTimeout = Duration.ofSeconds(1);
@@ -36,14 +36,12 @@ class AeronClientTest extends BaseAeronTest {
         new ChannelUriStringBuilder()
             .reliable(TRUE)
             .media("udp")
-            .endpoint("localhost:" + SocketUtils.findAvailableUdpPort(13000, 14000))
-            .build();
+            .endpoint("localhost:" + SocketUtils.findAvailableUdpPort(13000, 14000));
     clientChannel =
         new ChannelUriStringBuilder()
             .reliable(TRUE)
             .media("udp")
-            .endpoint("localhost:" + SocketUtils.findAvailableUdpPort(14000, 15000))
-            .build();
+            .endpoint("localhost:" + SocketUtils.findAvailableUdpPort(14000, 15000));
     aeronResources =
         AeronResources.start(
             AeronResourcesConfig.builder()
@@ -207,7 +205,7 @@ class AeronClientTest extends BaseAeronTest {
         });
   }
 
-  private Connection createConnection(Consumer<AeronClientOptions> options) {
+  private Connection createConnection(Consumer<AeronClientOptions.Builder> options) {
     Connection connection =
         AeronClient.create(aeronResources).options(options).connect().block(TIMEOUT);
     return addDisposable(connection);

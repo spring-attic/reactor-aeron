@@ -3,7 +3,6 @@ package reactor.aeron.server;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.reactivestreams.Publisher;
-import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
 import reactor.aeron.OnDisposable;
@@ -12,7 +11,7 @@ public class AeronServerSettings {
 
   private final String name;
   private final AeronResources aeronResources;
-  private final AeronOptions options;
+  private final AeronServerOptions options;
   private final Function<? super Connection, ? extends Publisher<Void>> handler;
 
   private AeronServerSettings(Builder builder) {
@@ -34,15 +33,15 @@ public class AeronServerSettings {
     return aeronResources;
   }
 
-  public AeronOptions options() {
+  public AeronServerOptions options() {
     return options;
   }
 
-  public AeronServerSettings options(Consumer<AeronOptions> consumer) {
+  public AeronServerSettings options(Consumer<AeronServerOptions.Builder> consumer) {
     return new Builder(this).options(consumer).build();
   }
 
-  public AeronServerSettings options(AeronOptions options) {
+  public AeronServerSettings options(AeronServerOptions options) {
     return new Builder(this).options(options).build();
   }
 
@@ -59,7 +58,7 @@ public class AeronServerSettings {
 
     private String name;
     private AeronResources aeronResources;
-    private AeronOptions options = new AeronOptions();
+    private AeronServerOptions options;
     private Function<? super Connection, ? extends Publisher<Void>> handler =
         OnDisposable::onDispose;
 
@@ -82,13 +81,15 @@ public class AeronServerSettings {
       return this;
     }
 
-    public Builder options(AeronOptions options) {
+    public Builder options(AeronServerOptions options) {
       this.options = options;
       return this;
     }
 
-    public Builder options(Consumer<AeronOptions> consumer) {
-      consumer.accept(options);
+    public Builder options(Consumer<AeronServerOptions.Builder> consumer) {
+      AeronServerOptions.Builder builder = AeronServerOptions.builder();
+      consumer.accept(builder);
+      this.options = builder.build();
       return this;
     }
 

@@ -7,7 +7,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.reactivestreams.Subscription;
 import reactor.aeron.AeronInbound;
-import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronOutbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronUtils;
@@ -32,7 +31,7 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
   private final AeronServerSettings settings;
   private final String category;
-  private final AeronOptions options;
+  private final AeronServerOptions options;
   private final AeronResources aeronResources;
 
   private final AtomicLong nextSessionId = new AtomicLong(0);
@@ -51,15 +50,16 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
     this.controlSubscription =
         settings
-            .aeronResources().controlSubscription(
-            category,
-            options.serverChannel(),
-            options.serverStreamId(),
-            "to receive control requests on",
-            CONTROL_SESSION_ID,
-            this,
-            null,
-            null);
+            .aeronResources()
+            .controlSubscription(
+                category,
+                options.serverChannel(),
+                options.serverStreamId(),
+                "to receive control requests on",
+                CONTROL_SESSION_ID,
+                this,
+                null,
+                null);
 
     this.onClose
         .doOnTerminate(this::dispose0)
@@ -198,7 +198,7 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
         int serverSessionStreamId) {
       this.clientSessionStreamId = clientSessionStreamId;
       this.clientChannel = clientChannel;
-      this.outbound = new DefaultAeronOutbound(category, aeronResources, clientChannel, options);
+      this.outbound = new DefaultAeronOutbound(category, aeronResources, clientChannel);
       this.connectRequestId = connectRequestId;
       this.sessionId = sessionId;
       this.serverSessionStreamId = serverSessionStreamId;
@@ -223,7 +223,7 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
       return connector
           .connect()
-          .then(outbound.initialise(sessionId, clientSessionStreamId))
+          .then(outbound.initialise(sessionId, clientSessionStreamId, options))
           .then(
               inbound.initialise(
                   category,

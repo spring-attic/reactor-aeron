@@ -146,8 +146,8 @@ final class ClientConnector implements Disposable {
                     aeronResources,
                     serverControlPublication,
                     category,
-                    options.connectTimeoutMillis(),
-                    options.controlBackpressureTimeoutMillis());
+                    options.connectTimeout().toMillis(),
+                    options.controlBackpressureTimeout().toMillis());
 
             long result = messagePublication.publish(messageType, buffer, sessionId);
             if (result > 0) {

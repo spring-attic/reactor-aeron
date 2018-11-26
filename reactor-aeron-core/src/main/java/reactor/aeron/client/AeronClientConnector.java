@@ -105,8 +105,7 @@ public final class AeronClientConnector implements Disposable {
 
     ClientHandler() {
       this.clientSessionStreamId = streamIdCounter.incrementAndGet();
-      this.outbound =
-          new DefaultAeronOutbound(name, aeronResources, options.serverChannel(), options);
+      this.outbound = new DefaultAeronOutbound(name, aeronResources, options.serverChannel());
       this.connector =
           new ClientConnector(
               name,
@@ -140,7 +139,7 @@ public final class AeronClientConnector implements Disposable {
                         sessionId,
                         this::dispose);
 
-                return outbound.initialise(sessionId, serverSessionStreamId);
+                return outbound.initialise(sessionId, serverSessionStreamId, options);
               })
           .doOnError(
               th -> {
