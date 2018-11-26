@@ -3,8 +3,10 @@ package reactor.aeron;
 import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
 import java.nio.ByteBuffer;
+import java.util.function.Supplier;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.IdleStrategy;
+import org.agrona.concurrent.UnsafeBuffer;
 import reactor.core.Disposable;
 import reactor.util.Logger;
 import reactor.util.Loggers;
@@ -23,6 +25,10 @@ public final class DefaultMessagePublication implements Disposable, MessagePubli
 
   private final String category;
 
+  private final int mtuLength;
+
+  private final ThreadLocal<BufferClaim> bufferClaims = ThreadLocal.withInitial(BufferClaim::new);
+
   private final AeronResources aeronResources;
 
   /**
@@ -40,6 +46,7 @@ public final class DefaultMessagePublication implements Disposable, MessagePubli
       long waitConnectedMillis,
       long waitBackpressuredMillis) {
     this.aeronResources = aeronResources;
+    this.mtuLength = aeronResources.mtuLength();
     this.publication = publication;
     this.category = category;
     this.idleStrategy = AeronUtils.newBackoffIdleStrategy();
@@ -49,30 +56,36 @@ public final class DefaultMessagePublication implements Disposable, MessagePubli
 
   @Override
   public long publish(MessageType msgType, ByteBuffer msgBody, long sessionId) {
-    BufferClaim bufferClaim = new BufferClaim();
-    int headerSize = Protocol.HEADER_SIZE;
-    int size = headerSize + msgBody.remaining();
-    long result = tryClaim(bufferClaim, size);
-    if (result > 0) {
-      try {
-        MutableDirectBuffer buffer = bufferClaim.buffer();
-        int index = bufferClaim.offset();
-        index = Protocol.putHeader(buffer, index, msgType, sessionId);
-        buffer.putBytes(index, msgBody, 0, msgBody.limit());
-        bufferClaim.commit();
-      } catch (Exception ex) {
-        bufferClaim.abort();
-        throw new RuntimeException("Unexpected exception", ex);
+    int capacity = msgBody.remaining() + Protocol.HEADER_SIZE;
+    if (capacity < mtuLength) {
+      BufferClaim bufferClaim = bufferClaims.get();
+      long result = execute(() -> publication.tryClaim(capacity, bufferClaim));
+      if (result > 0) {
+        try {
+          MutableDirectBuffer buffer = bufferClaim.buffer();
+          int index = bufferClaim.offset();
+          index = Protocol.putHeader(buffer, index, msgType, sessionId);
+          buffer.putBytes(index, msgBody, msgBody.position(), msgBody.limit());
+          bufferClaim.commit();
+        } catch (Exception ex) {
+          bufferClaim.abort();
+          throw new RuntimeException("Unexpected exception", ex);
+        }
       }
+      return result;
+    } else {
+      UnsafeBuffer buffer = new UnsafeBuffer(new byte[msgBody.remaining() + Protocol.HEADER_SIZE]);
+      int index = Protocol.putHeader(buffer, 0, msgType, sessionId);
+      buffer.putBytes(index, msgBody, msgBody.remaining());
+      return execute(() -> publication.offer(buffer));
     }
-    return result;
   }
 
-  private long tryClaim(BufferClaim bufferClaim, int size) {
+  private long execute(Supplier<Long> sendingTask) {
     long start = System.currentTimeMillis();
     long result;
     for (; ; ) {
-      result = publication.tryClaim(size, bufferClaim);
+      result = sendingTask.get();
 
       if (result > 0) {
         break;
@@ -107,7 +120,6 @@ public final class DefaultMessagePublication implements Disposable, MessagePubli
           break;
         }
       }
-
       idleStrategy.idle(0);
     }
     idleStrategy.reset();

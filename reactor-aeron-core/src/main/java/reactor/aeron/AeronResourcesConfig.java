@@ -1,6 +1,7 @@
 package reactor.aeron;
 
 import static io.aeron.driver.Configuration.IMAGE_LIVENESS_TIMEOUT_NS;
+import static io.aeron.driver.Configuration.MTU_LENGTH;
 
 import io.aeron.driver.ThreadingMode;
 import java.time.Duration;
@@ -12,11 +13,13 @@ public class AeronResourcesConfig {
 
   private final ThreadingMode threadingMode;
   private final boolean dirDeleteOnStart;
+  private final int mtuLength;
   private final Duration imageLivenessTimeout;
 
   private AeronResourcesConfig(Builder builder) {
     this.threadingMode = builder.threadingMode;
     this.dirDeleteOnStart = builder.dirDeleteOnStart;
+    this.mtuLength = builder.mtuLength;
     this.imageLivenessTimeout = builder.imageLivenessTimeout;
   }
 
@@ -36,6 +39,10 @@ public class AeronResourcesConfig {
     return threadingMode;
   }
 
+  public int mtuLength() {
+    return mtuLength;
+  }
+
   public Duration imageLivenessTimeout() {
     return imageLivenessTimeout;
   }
@@ -45,6 +52,7 @@ public class AeronResourcesConfig {
     final StringBuilder sb = new StringBuilder("AeronResourcesConfig{");
     sb.append(", threadingMode=").append(threadingMode);
     sb.append(", dirDeleteOnStart=").append(dirDeleteOnStart);
+    sb.append(", mtuLength=").append(mtuLength);
     sb.append(", imageLivenessTimeout=").append(imageLivenessTimeout);
     sb.append('}');
     return sb.toString();
@@ -52,9 +60,10 @@ public class AeronResourcesConfig {
 
   public static class Builder {
 
-    private Duration imageLivenessTimeout = Duration.ofNanos(IMAGE_LIVENESS_TIMEOUT_NS);
     private ThreadingMode threadingMode = THREADING_MODE;
     private boolean dirDeleteOnStart = DELETE_AERON_DIR_ON_START;
+    private int mtuLength = MTU_LENGTH;
+    private Duration imageLivenessTimeout = Duration.ofNanos(IMAGE_LIVENESS_TIMEOUT_NS);
 
     private Builder() {}
 
@@ -80,6 +89,11 @@ public class AeronResourcesConfig {
 
     public Builder dirDeleteOnStart(boolean dirDeleteOnStart) {
       this.dirDeleteOnStart = dirDeleteOnStart;
+      return this;
+    }
+
+    public Builder mtuLength(int mtuLength) {
+      this.mtuLength = mtuLength;
       return this;
     }
 

@@ -80,6 +80,7 @@ public class AeronResources implements Disposable, AutoCloseable {
   private void onStart() {
     MediaDriver.Context mediaContext =
         new MediaDriver.Context()
+            .mtuLength(config.mtuLength())
             .imageLivenessTimeoutNs(config.imageLivenessTimeout().toNanos())
             .dirDeleteOnStart(config.isDirDeleteOnStart());
     mediaDriver = MediaDriver.launchEmbedded(mediaContext);
@@ -209,6 +210,10 @@ public class AeronResources implements Disposable, AutoCloseable {
             onUnavailableImage);
     poller.addDataSubscription(subscription, dataMessageSubscriber);
     return subscription;
+  }
+
+  public int mtuLength() {
+    return config.mtuLength();
   }
 
   /**
