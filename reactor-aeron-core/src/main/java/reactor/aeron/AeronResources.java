@@ -29,7 +29,7 @@ public class AeronResources implements Disposable, AutoCloseable {
   private MediaDriver mediaDriver;
 
   private Poller poller;
-  private Scheduler sender;
+  private EventLoop eventLoop;
   private Scheduler receiver;
 
   private AeronResources(AeronResourcesConfig config) {
@@ -92,7 +92,7 @@ public class AeronResources implements Disposable, AutoCloseable {
 
     aeron = Aeron.connect(aeronContext);
 
-    sender = Schedulers.newSingle("reactor-aeron-sender");
+    eventLoop = new EventLoop();
     receiver = Schedulers.newSingle("reactor-aeron-receiver");
 
     receiver.schedule(poller = new Poller(() -> !receiver.isDisposed()));
