@@ -23,7 +23,7 @@ public class AeronWriteSequencer {
 
   private static final Logger logger = Loggers.getLogger(AeronWriteSequencer.class);
 
-  private final PublisherSender inner;
+  private final PublicationSender inner;
 
   private final Consumer<Throwable> errorHandler;
 
@@ -48,14 +48,14 @@ public class AeronWriteSequencer {
     //noinspection unchecked
     this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
     this.errorHandler = th -> logger.error("[{}] Unexpected exception", category, th);
-    this.inner = new PublisherSender(this, publication, sessionId);
+    this.inner = new PublicationSender(this, publication, sessionId);
   }
 
   Consumer<Throwable> getErrorHandler() {
     return errorHandler;
   }
 
-  PublisherSender getInner() {
+  PublicationSender getInner() {
     return inner;
   }
 
@@ -82,7 +82,7 @@ public class AeronWriteSequencer {
   }
 
   private void drain() {
-    PublisherSender inner = getInner();
+    PublicationSender inner = getInner();
     if (WIP.getAndIncrement(this) == 0) {
 
       for (; ; ) {

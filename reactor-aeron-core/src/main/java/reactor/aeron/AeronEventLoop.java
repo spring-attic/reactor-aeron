@@ -1,0 +1,203 @@
+package reactor.aeron;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Optional;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.function.Consumer;
+import org.agrona.concurrent.IdleStrategy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.Exceptions;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoProcessor;
+import reactor.core.publisher.MonoSink;
+
+final class AeronEventLoop implements OnDisposable {
+
+  private static final Logger logger = LoggerFactory.getLogger(AeronEventLoop.class);
+
+  // Dispose signals
+  private final MonoProcessor<Void> dispose = MonoProcessor.create();
+  private final MonoProcessor<Void> onDispose = MonoProcessor.create();
+
+  // Worker
+  private final Mono<Worker> workerMono;
+
+  // Commands
+  private final Queue<CommandTask> commandTasks = new ConcurrentLinkedQueue<>();
+
+  // Senders
+  private final List<MessagePublication> messagePublications = new ArrayList<>();
+
+  /**
+   * Default constructor.
+   *
+   * <p>
+   */
+  AeronEventLoop() {
+    workerMono =
+        Mono.fromCallable(
+                () -> {
+                  ThreadFactory threadFactory = defaultThreadFactory();
+                  Worker w = new Worker();
+                  Thread thread = threadFactory.newThread(w);
+                  thread.start();
+                  return w;
+                })
+            .cache();
+  }
+
+  private static class CommandTask implements Runnable {
+    private final MonoSink<Void> sink;
+    private final Consumer<MonoSink<Void>> consumer;
+
+    private CommandTask(MonoSink<Void> sink, Consumer<MonoSink<Void>> consumer) {
+      this.sink = sink;
+      this.consumer = consumer;
+    }
+
+    @Override
+    public void run() {
+      try {
+        consumer.accept(sink);
+      } catch (Exception ex) {
+        logger.warn("Exception occurred on command task: {}", ex);
+      }
+    }
+
+    private void cancel() {
+      sink.error(Exceptions.failWithCancel());
+    }
+  }
+
+  Mono<Void> register(MessagePublication messagePublication) {
+    return worker().flatMap(w -> command(sink -> register(messagePublication, sink)));
+  }
+
+  Mono<Void> dispose(MessagePublication messagePublication) {
+    return worker().flatMap(w -> command(sink -> dispose(messagePublication, sink)));
+  }
+
+  @Override
+  public Mono<Void> onDispose() {
+    return onDispose;
+  }
+
+  @Override
+  public void dispose() {
+    dispose.onComplete();
+  }
+
+  @Override
+  public boolean isDisposed() {
+    return onDispose.isDisposed();
+  }
+
+  private static ThreadFactory defaultThreadFactory() {
+    return r -> {
+      Thread thread = new Thread(r);
+      thread.setName("aeron-event-loop");
+      thread.setUncaughtExceptionHandler(
+          (t, e) -> logger.error("Uncaught exception occurred: {}", e, e));
+      return thread;
+    };
+  }
+
+  private Mono<Worker> worker() {
+    return workerMono.takeUntilOther(listenDispose());
+  }
+
+  private Mono<Void> command(Consumer<MonoSink<Void>> consumer) {
+    return Mono.create(sink -> commandTasks.add(new CommandTask(sink, consumer)));
+  }
+
+  private <T> Mono<T> listenDispose() {
+    //noinspection unchecked
+    return dispose //
+        .map(avoid -> (T) avoid)
+        .switchIfEmpty(Mono.error(Exceptions::failWithRejected));
+  }
+
+  private void register(MessagePublication messagePublication, MonoSink<Void> sink) {
+    if (messagePublication == null) {
+      sink.error(new IllegalArgumentException("messagePublication must be not null"));
+    } else {
+      messagePublications.add(messagePublication);
+      sink.success();
+    }
+  }
+
+  private void dispose(MessagePublication messagePublication, MonoSink<Void> sink) {
+    messagePublications.removeIf(p -> p == messagePublication);
+    try {
+      Optional.ofNullable(messagePublication).ifPresent(MessagePublication::close);
+      sink.success();
+    } catch (Exception ex) {
+      logger.warn("Exception occurred on closing {}, cause: {}", messagePublication, ex);
+      sink.error(ex);
+    }
+  }
+
+  private class Worker implements Runnable {
+
+    private final IdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
+
+    @Override
+    public void run() {
+      while (!dispose.isDisposed()) {
+
+        for (;;) {
+          CommandTask task = commandTasks.poll();
+          if (task == null) {
+            break;
+          }
+          task.run();
+        }
+
+        for (int i = 0, n = messagePublications.size(); i < n; i++) {
+          MessagePublication messagePublication = messagePublications.get(i);
+          boolean result = messagePublication.proceed();
+        }
+
+
+
+        // ...
+      }
+
+      // Dispose commands
+      disposeCommandTasks();
+
+      // Dispose publications
+      disposePublications();
+
+      // Emit total dispose
+      onDispose.onComplete();
+    }
+
+    private void disposeCommandTasks() {
+      for (; ; ) {
+        CommandTask task = commandTasks.poll();
+        if (task == null) {
+          break;
+        }
+        task.cancel();
+      }
+    }
+
+    private void disposePublications() {
+      for (Iterator<MessagePublication> it = messagePublications.iterator(); it.hasNext(); ) {
+        MessagePublication messagePublication = it.next();
+        try {
+          messagePublication.close();
+        } catch (Exception ex) {
+          logger.warn("Exception occurred on closing {}, cause: {}", messagePublication, ex);
+        }
+        it.remove();
+      }
+    }
+  }
+}

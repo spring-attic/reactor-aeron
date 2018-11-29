@@ -164,7 +164,7 @@ public class AeronWriteSequencerTest {
     }
 
     @Override
-    public long publish(MessageType msgType, ByteBuffer msgBody, long sessionId) {
+    public Mono<Void> enqueue(MessageType msgType, ByteBuffer msgBody, long sessionId) {
       Command command = commands.peek();
       long result;
       if (command != null) {
@@ -185,8 +185,13 @@ public class AeronWriteSequencerTest {
     }
 
     @Override
-    public String asString() {
+    public String toString() {
       return "fakePublication";
+    }
+
+    @Override
+    public void close() {
+      // no-op
     }
 
     interface Command {

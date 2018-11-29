@@ -99,18 +99,13 @@ public class ServerConnector implements Disposable {
 
     @Override
     public Boolean call() throws Exception {
-      long result =
-          publication.publish(
+      boolean result =
+          publication.enqueue(
               MessageType.CONNECT_ACK,
               Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId),
               sessionId);
-      if (result > 0) {
-        logger.debug(
-            "[{}] Sent {} to {}",
-            category,
-            MessageType.CONNECT_ACK,
-            category,
-            publication.asString());
+      if (result) {
+        logger.debug("[{}] Sent {} to {}", category, MessageType.CONNECT_ACK, category);
         sink.success();
         return true;
       } else if (result == Publication.CLOSED) {

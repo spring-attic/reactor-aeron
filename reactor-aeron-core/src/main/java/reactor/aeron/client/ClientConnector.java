@@ -146,13 +146,14 @@ final class ClientConnector implements Disposable {
                     aeronResources,
                     serverControlPublication,
                     category,
+                    aeronResources.mtuLength(),
                     options.connectTimeoutMillis(),
                     options.controlBackpressureTimeoutMillis());
 
-            long result = messagePublication.publish(messageType, buffer, sessionId);
+            long result = messagePublication.enqueue(messageType, buffer, sessionId);
             if (result > 0) {
               logger.debug(
-                  "[{}] Sent {} to {}", category, messageType, messagePublication.asString());
+                  "[{}] Sent {} to {}", category, messageType, messagePublication.toString());
               sink.success();
               return;
             }

@@ -10,21 +10,21 @@ import reactor.core.CoreSubscriber;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Operators;
 
-class PublisherSender implements CoreSubscriber<ByteBuffer>, Subscription {
+class PublicationSender implements CoreSubscriber<ByteBuffer>, Subscription {
 
-  private static final AtomicReferenceFieldUpdater<PublisherSender, Subscription>
+  private static final AtomicReferenceFieldUpdater<PublicationSender, Subscription>
       MISSED_SUBSCRIPTION =
           AtomicReferenceFieldUpdater.newUpdater(
-              PublisherSender.class, Subscription.class, "missedSubscription");
+              PublicationSender.class, Subscription.class, "missedSubscription");
 
-  private static final AtomicLongFieldUpdater<PublisherSender> MISSED_REQUESTED =
-      AtomicLongFieldUpdater.newUpdater(PublisherSender.class, "missedRequested");
+  private static final AtomicLongFieldUpdater<PublicationSender> MISSED_REQUESTED =
+      AtomicLongFieldUpdater.newUpdater(PublicationSender.class, "missedRequested");
 
-  private static final AtomicLongFieldUpdater<PublisherSender> MISSED_PRODUCED =
-      AtomicLongFieldUpdater.newUpdater(PublisherSender.class, "missedProduced");
+  private static final AtomicLongFieldUpdater<PublicationSender> MISSED_PRODUCED =
+      AtomicLongFieldUpdater.newUpdater(PublicationSender.class, "missedProduced");
 
-  private static final AtomicIntegerFieldUpdater<PublisherSender> WIP =
-      AtomicIntegerFieldUpdater.newUpdater(PublisherSender.class, "wip");
+  private static final AtomicIntegerFieldUpdater<PublicationSender> WIP =
+      AtomicIntegerFieldUpdater.newUpdater(PublicationSender.class, "wip");
 
   private final int batchSize;
   private final AeronWriteSequencer sequencer;
@@ -54,7 +54,7 @@ class PublisherSender implements CoreSubscriber<ByteBuffer>, Subscription {
   private MonoSink<?> promise;
   private long upstreamRequested;
 
-  PublisherSender(AeronWriteSequencer sequencer, MessagePublication publication, long sessionId) {
+  PublicationSender(AeronWriteSequencer sequencer, MessagePublication publication, long sessionId) {
     this.batchSize = 16;
     this.sequencer = sequencer;
     this.sessionId = sessionId;
@@ -67,10 +67,8 @@ class PublisherSender implements CoreSubscriber<ByteBuffer>, Subscription {
 
   void doOnNext(ByteBuffer byteBuffer) {
     Exception cause = null;
-    long result = 0;
     try {
-      result = publication.publish(MessageType.NEXT, byteBuffer, sessionId);
-      if (result > 0) {
+      if (publication.enqueue(MessageType.NEXT, byteBuffer, sessionId)) {
         return;
       }
     } catch (Exception ex) {
@@ -80,9 +78,7 @@ class PublisherSender implements CoreSubscriber<ByteBuffer>, Subscription {
     cancel();
 
     promise.error(
-        new Exception(
-            "Failed to publish signal into session with Id: " + sessionId + ", result: " + result,
-            cause));
+        new Exception("Failed to publish signal into session with Id: " + sessionId, cause));
 
     sequencer.scheduleDrain();
   }

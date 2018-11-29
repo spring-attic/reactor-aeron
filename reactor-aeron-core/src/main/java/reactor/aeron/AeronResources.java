@@ -29,7 +29,7 @@ public class AeronResources implements Disposable, AutoCloseable {
   private MediaDriver mediaDriver;
 
   private Poller poller;
-  private EventLoop eventLoop;
+  private AeronEventLoop eventLoop;
   private Scheduler receiver;
 
   private AeronResources(AeronResourcesConfig config) {
@@ -92,7 +92,7 @@ public class AeronResources implements Disposable, AutoCloseable {
 
     aeron = Aeron.connect(aeronContext);
 
-    eventLoop = new EventLoop();
+    eventLoop = new AeronEventLoop();
     receiver = Schedulers.newSingle("reactor-aeron-receiver");
 
     receiver.schedule(poller = new Poller(() -> !receiver.isDisposed()));
@@ -206,47 +206,6 @@ public class AeronResources implements Disposable, AutoCloseable {
     return config.mtuLength();
   }
 
-  /**
-   * Closes the given subscription.
-   *
-   * @param subscription subscription
-   */
-  public void close(Subscription subscription) {
-    // todo wait for commandQueue
-    Schedulers.single()
-        .schedule(
-            () -> {
-              if (subscription != null) {
-                poller.removeSubscription(subscription);
-                try {
-                  subscription.close();
-                } catch (Exception e) {
-                  logger.warn("Subscription closed with error: {}", e);
-                }
-              }
-            });
-  }
-
-  /**
-   * Closes the given publication.
-   *
-   * @param publication publication
-   */
-  public void close(Publication publication) {
-    // todo wait for commandQueue
-    Schedulers.single()
-        .schedule(
-            () -> {
-              if (publication != null) {
-                try {
-                  publication.close();
-                } catch (Exception e) {
-                  logger.warn("Publication closed with error: {}", e);
-                }
-              }
-            });
-  }
-
   @Override
   public void close() {
     dispose();
@@ -262,13 +221,13 @@ public class AeronResources implements Disposable, AutoCloseable {
   private void onClose() {
     logger.info("{} shutdown initiated", this);
 
-    Optional.ofNullable(sender) //
-        .filter(s -> !s.isDisposed())
-        .ifPresent(Scheduler::dispose);
-
-    Optional.ofNullable(receiver) //
-        .filter(s -> !s.isDisposed())
-        .ifPresent(Scheduler::dispose);
+//    Optional.ofNullable(sender) //
+//        .filter(s -> !s.isDisposed())
+//        .ifPresent(Scheduler::dispose);
+//
+//    Optional.ofNullable(receiver) //
+//        .filter(s -> !s.isDisposed())
+//        .ifPresent(Scheduler::dispose);
 
     CloseHelper.quietClose(aeron);
 
@@ -290,7 +249,7 @@ public class AeronResources implements Disposable, AutoCloseable {
    * Creates new {@link AeronWriteSequencer}.
    *
    * @param category category
-   * @param publication publication (see {@link #publication(String, String, int, String, long)}
+   * @param publication publication
    * @param sessionId session id
    * @return new write sequencer
    */

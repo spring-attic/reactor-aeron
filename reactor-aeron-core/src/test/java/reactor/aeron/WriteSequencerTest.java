@@ -65,15 +65,15 @@ public class WriteSequencerTest {
     static final Consumer<Throwable> ERROR_HANDLER =
         th -> System.err.println("Unexpected exception: " + th);
 
-    private final SubscriberForTest inner;
+    private final TestPublicationSender inner;
 
     TestWriteSequencer(Scheduler scheduler) {
       super(scheduler, "test", null, 1234);
-      this.inner = new SubscriberForTest(this, null, 1234);
+      this.inner = new TestPublicationSender(this, null, 1234);
     }
 
     @Override
-    PublisherSender getInner() {
+    PublicationSender getInner() {
       return inner;
     }
 
@@ -90,11 +90,11 @@ public class WriteSequencerTest {
           .collect(Collectors.toList());
     }
 
-    static class SubscriberForTest extends PublisherSender {
+    static class TestPublicationSender extends PublicationSender {
 
       final List<ByteBuffer> signals = new CopyOnWriteArrayList<>();
 
-      SubscriberForTest(
+      TestPublicationSender(
           AeronWriteSequencer sequencer, MessagePublication publication, long sessionId) {
         super(sequencer, publication, sessionId);
       }
