@@ -72,6 +72,7 @@ public final class DefaultMessagePublication implements OnDisposable, MessagePub
     long result = task.run();
     if (result > 0) {
       publishTasks.poll();
+      task.success();
       return true;
     }
 
@@ -135,21 +136,23 @@ public final class DefaultMessagePublication implements OnDisposable, MessagePub
 
   @Override
   public void close() {
-    if (!isDisposed()) {
-      try {
-        publication.close();
-      } finally {
-        disposePublishTasks();
-        onDispose.onComplete();
-      }
+    try {
+      publication.close();
+    } finally {
+      disposePublishTasks();
+      onDispose.onComplete();
     }
   }
 
   @Override
   public void dispose() {
-    if (!isDisposed()) {
-      eventLoop.dispose(this).subscribe();
-    }
+    eventLoop
+        .dispose(this)
+        .subscribe(
+            null,
+            th -> {
+              // no-op
+            });
   }
 
   @Override
@@ -173,6 +176,7 @@ public final class DefaultMessagePublication implements OnDisposable, MessagePub
   }
 
   private class PublishTask {
+
     private final MessageType msgType;
     private final ByteBuffer msgBody;
     private final long sessionId;
@@ -187,20 +191,12 @@ public final class DefaultMessagePublication implements OnDisposable, MessagePub
       this.sink = sink;
     }
 
-    private boolean isTimeoutElapsed(int timeout) {
-      return System.currentTimeMillis() - start > timeout;
-    }
-
-    private void error(Throwable th) {
-      sink.error(th);
-    }
-
     private long run() {
       int mtuLength = options.mtuLength();
       int capacity = msgBody.remaining() + Protocol.HEADER_SIZE;
       if (capacity < mtuLength) {
         BufferClaim bufferClaim = bufferClaims.get();
-        long result = execute(() -> publication.tryClaim(capacity, bufferClaim));
+        long result = publication.tryClaim(capacity, bufferClaim);
         if (result > 0) {
           try {
             MutableDirectBuffer buffer = bufferClaim.buffer();
@@ -219,8 +215,20 @@ public final class DefaultMessagePublication implements OnDisposable, MessagePub
             new UnsafeBuffer(new byte[msgBody.remaining() + Protocol.HEADER_SIZE]);
         int index = Protocol.putHeader(buffer, 0, msgType, sessionId);
         buffer.putBytes(index, msgBody, msgBody.remaining());
-        return execute(() -> publication.offer(buffer));
+        return publication.offer(buffer);
       }
+    }
+
+    private boolean isTimeoutElapsed(int timeout) {
+      return System.currentTimeMillis() - start > timeout;
+    }
+
+    private void success() {
+      sink.success();
+    }
+
+    private void error(Throwable ex) {
+      sink.error(ex);
     }
   }
 }
