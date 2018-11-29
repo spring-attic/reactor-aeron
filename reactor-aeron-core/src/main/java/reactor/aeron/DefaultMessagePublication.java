@@ -69,7 +69,7 @@ public final class DefaultMessagePublication implements OnDisposable, MessagePub
       return false;
     }
 
-    long result = task.publish();
+    long result = task.run();
     if (result > 0) {
       publishTasks.poll();
       return true;
@@ -195,7 +195,7 @@ public final class DefaultMessagePublication implements OnDisposable, MessagePub
       sink.error(th);
     }
 
-    private long publish() {
+    private long run() {
       int mtuLength = options.mtuLength();
       int capacity = msgBody.remaining() + Protocol.HEADER_SIZE;
       if (capacity < mtuLength) {

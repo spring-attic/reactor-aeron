@@ -51,29 +51,6 @@ final class AeronEventLoop implements OnDisposable {
             .cache();
   }
 
-  private static class CommandTask implements Runnable {
-    private final MonoSink<Void> sink;
-    private final Consumer<MonoSink<Void>> consumer;
-
-    private CommandTask(MonoSink<Void> sink, Consumer<MonoSink<Void>> consumer) {
-      this.sink = sink;
-      this.consumer = consumer;
-    }
-
-    @Override
-    public void run() {
-      try {
-        consumer.accept(sink);
-      } catch (Exception ex) {
-        logger.warn("Exception occurred on command task: {}", ex);
-      }
-    }
-
-    private void cancel() {
-      sink.error(Exceptions.failWithCancel());
-    }
-  }
-
   Mono<Void> register(MessagePublication messagePublication) {
     return worker().flatMap(w -> command(sink -> register(messagePublication, sink)));
   }
@@ -142,6 +119,15 @@ final class AeronEventLoop implements OnDisposable {
     }
   }
 
+  /**
+   * Runnable event loop worker. Does a following:
+   *
+   * <ul>
+   *   <li>runs until dispose signal obtained
+   *   <li>on run iteration makes progress on: a) commands; b) publications; c) subscriptions
+   *   <li>idles on negative progress
+   * </ul>
+   */
   private class Worker implements Runnable {
 
     private final IdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
@@ -149,8 +135,8 @@ final class AeronEventLoop implements OnDisposable {
     @Override
     public void run() {
       while (!dispose.isDisposed()) {
-
-        for (;;) {
+        // Process commands
+        for (; ; ) {
           CommandTask task = commandTasks.poll();
           if (task == null) {
             break;
@@ -158,14 +144,14 @@ final class AeronEventLoop implements OnDisposable {
           task.run();
         }
 
+        // Process publications
+        boolean result = false;
+        //noinspection ForLoopReplaceableByForEach
         for (int i = 0, n = messagePublications.size(); i < n; i++) {
-          MessagePublication messagePublication = messagePublications.get(i);
-          boolean result = messagePublication.proceed();
+          result |= messagePublications.get(i).proceed();
         }
 
-
-
-        // ...
+        idleStrategy.idle(result ? 1 : 0);
       }
 
       // Dispose commands
@@ -198,6 +184,33 @@ final class AeronEventLoop implements OnDisposable {
         }
         it.remove();
       }
+    }
+  }
+
+  /**
+   * Runnable task for submitting to {@link #commandTasks} queue. For usage see methods {@link
+   * #register(MessagePublication)} and {@link #dispose(MessagePublication)}.
+   */
+  private static class CommandTask implements Runnable {
+    private final MonoSink<Void> sink;
+    private final Consumer<MonoSink<Void>> consumer;
+
+    private CommandTask(MonoSink<Void> sink, Consumer<MonoSink<Void>> consumer) {
+      this.sink = sink;
+      this.consumer = consumer;
+    }
+
+    @Override
+    public void run() {
+      try {
+        consumer.accept(sink);
+      } catch (Exception ex) {
+        logger.warn("Exception occurred on command task: {}", ex);
+      }
+    }
+
+    private void cancel() {
+      sink.error(Exceptions.failWithCancel());
     }
   }
 }
