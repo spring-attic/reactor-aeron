@@ -2,7 +2,6 @@ package reactor.aeron.client;
 
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedGenerator;
-import io.aeron.Publication;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
@@ -36,7 +35,7 @@ final class ClientConnector implements Disposable {
 
   private final int clientSessionStreamId;
 
-  private final Publication serverControlPublication;
+  private final io.aeron.Publication serverControlPublication;
 
   private final AeronResources aeronResources;
 
@@ -136,7 +135,7 @@ final class ClientConnector implements Disposable {
     }
   }
 
-  private Mono<Void> send(ByteBuffer buffer, MessageType messageType) {
+  private Mono<Void> send(ByteBuffer buffer, MessageType msgType) {
     return Mono.create(
         sink -> {
           Exception cause = null;
@@ -150,17 +149,17 @@ final class ClientConnector implements Disposable {
                     options.connectTimeoutMillis(),
                     options.controlBackpressureTimeoutMillis());
 
-            long result = messagePublication.enqueue(messageType, buffer, sessionId);
+            long result = messagePublication.enqueue(msgType, buffer, sessionId);
             if (result > 0) {
               logger.debug(
-                  "[{}] Sent {} to {}", category, messageType, messagePublication.toString());
+                  "[{}] Sent {} to {}", category, msgType, messagePublication.toString());
               sink.success();
               return;
             }
           } catch (Exception ex) {
             cause = ex;
           }
-          sink.error(new RuntimeException("Failed to send message of type: " + messageType, cause));
+          sink.error(new RuntimeException("Failed to send message of type: " + msgType, cause));
         });
   }
 
@@ -168,13 +167,10 @@ final class ClientConnector implements Disposable {
   public void dispose() {
     sendDisconnectRequest()
         .subscribe(
-            avoid -> {
-              // no-op
-            },
+            null,
             th -> {
               // no-op
             });
-
     aeronResources.close(serverControlPublication);
   }
 }

@@ -105,7 +105,7 @@ public class AeronResources implements Disposable, AutoCloseable {
   }
 
   /**
-   * Adds publication. Also see {@link #close(Publication)}}.
+   * Adds publication.
    *
    * @param channel channel
    * @param streamId stream id
@@ -206,6 +206,27 @@ public class AeronResources implements Disposable, AutoCloseable {
     return config.mtuLength();
   }
 
+  /**
+   * Closes the given subscription.
+   *
+   * @param subscription subscription
+   */
+  public void close(Subscription subscription) {
+    // todo wait for commandQueue
+    Schedulers.single()
+        .schedule(
+            () -> {
+              if (subscription != null) {
+                poller.removeSubscription(subscription);
+                try {
+                  subscription.close();
+                } catch (Exception e) {
+                  logger.warn("Subscription closed with error: {}", e);
+                }
+              }
+            });
+  }
+
   @Override
   public void close() {
     dispose();
@@ -221,13 +242,13 @@ public class AeronResources implements Disposable, AutoCloseable {
   private void onClose() {
     logger.info("{} shutdown initiated", this);
 
-//    Optional.ofNullable(sender) //
-//        .filter(s -> !s.isDisposed())
-//        .ifPresent(Scheduler::dispose);
-//
-//    Optional.ofNullable(receiver) //
-//        .filter(s -> !s.isDisposed())
-//        .ifPresent(Scheduler::dispose);
+    //    Optional.ofNullable(sender) //
+    //        .filter(s -> !s.isDisposed())
+    //        .ifPresent(Scheduler::dispose);
+    //
+    //    Optional.ofNullable(receiver) //
+    //        .filter(s -> !s.isDisposed())
+    //        .ifPresent(Scheduler::dispose);
 
     CloseHelper.quietClose(aeron);
 
