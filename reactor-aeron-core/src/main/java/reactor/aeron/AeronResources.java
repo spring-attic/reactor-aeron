@@ -277,7 +277,7 @@ public class AeronResources implements Disposable, AutoCloseable {
   public AeronWriteSequencer writeSequencer(
       String category, MessagePublication publication, long sessionId) {
     AeronWriteSequencer writeSequencer =
-        new AeronWriteSequencer(sender, category, publication, sessionId);
+        new AeronWriteSequencer(category, publication, sessionId);
     if (logger.isDebugEnabled()) {
       logger.debug("[{}] Created {}, sessionId={}", category, writeSequencer, sessionId);
     }

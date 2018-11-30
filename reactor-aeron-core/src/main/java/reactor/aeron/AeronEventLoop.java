@@ -3,6 +3,7 @@ package reactor.aeron;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -26,6 +27,7 @@ final class AeronEventLoop implements OnDisposable {
 
   // Worker
   private final Mono<Worker> workerMono;
+  private volatile Thread thread;
 
   // Commands
   private final Queue<CommandTask> commandTasks = new ConcurrentLinkedQueue<>();
@@ -44,11 +46,19 @@ final class AeronEventLoop implements OnDisposable {
                 () -> {
                   ThreadFactory threadFactory = defaultThreadFactory();
                   Worker w = new Worker();
-                  Thread thread = threadFactory.newThread(w);
+                  thread = threadFactory.newThread(w);
                   thread.start();
                   return w;
                 })
             .cache();
+  }
+
+  boolean inEventLoop() {
+    return thread == Thread.currentThread();
+  }
+
+  Mono<Void> execute(Consumer<MonoSink<Void>> taskConsumer) {
+    return worker().flatMap(w -> command(taskConsumer));
   }
 
   Mono<Void> register(MessagePublication messagePublication) {
@@ -100,23 +110,15 @@ final class AeronEventLoop implements OnDisposable {
   }
 
   private void register(MessagePublication messagePublication, MonoSink<Void> sink) {
-    if (messagePublication == null) {
-      sink.error(new IllegalArgumentException("messagePublication must be not null"));
-    } else {
-      messagePublications.add(messagePublication);
-      sink.success();
-    }
+    Objects.requireNonNull(messagePublication, "messagePublication must be not null");
+    messagePublications.add(messagePublication);
+    sink.success();
   }
 
   private void dispose(MessagePublication messagePublication, MonoSink<Void> sink) {
     messagePublications.removeIf(p -> p == messagePublication);
-    try {
-      Optional.ofNullable(messagePublication).ifPresent(MessagePublication::close);
-      sink.success();
-    } catch (Exception ex) {
-      logger.warn("Exception occurred on closing {}, cause: {}", messagePublication, ex);
-      sink.error(ex);
-    }
+    Optional.ofNullable(messagePublication).ifPresent(MessagePublication::close);
+    sink.success();
   }
 
   /**
@@ -206,6 +208,7 @@ final class AeronEventLoop implements OnDisposable {
         consumer.accept(sink);
       } catch (Exception ex) {
         logger.warn("Exception occurred on command task: {}", ex);
+        sink.error(ex);
       }
     }
 
