@@ -17,7 +17,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
 import reactor.aeron.client.AeronClient;
-import reactor.aeron.client.AeronClientOptions;
 import reactor.aeron.server.AeronServer;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.test.StepVerifier;
@@ -44,9 +43,7 @@ class AeronClientTest extends BaseAeronTest {
             .endpoint("localhost:" + SocketUtils.findAvailableUdpPort(14000, 15000));
     aeronResources =
         AeronResources.start(
-            AeronResourcesConfig.builder()
-                .imageLivenessTimeoutNs(imageLivenessTimeout)
-                .build());
+            AeronResourcesConfig.builder().imageLivenessTimeoutNs(imageLivenessTimeout).build());
   }
 
   @AfterEach
@@ -205,7 +202,7 @@ class AeronClientTest extends BaseAeronTest {
         });
   }
 
-  private Connection createConnection(Consumer<AeronClientOptions.Builder> options) {
+  private Connection createConnection(Consumer<AeronOptions.Builder> options) {
     Connection connection =
         AeronClient.create(aeronResources).options(options).connect().block(TIMEOUT);
     return addDisposable(connection);

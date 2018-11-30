@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import reactor.aeron.AeronInbound;
+import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronOutbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
@@ -24,7 +25,7 @@ public final class AeronClientConnector implements Disposable {
   private static final int CONTROL_SESSION_ID = 0;
 
   private final String name;
-  private final AeronClientOptions options;
+  private final AeronOptions options;
   private final AeronResources aeronResources;
 
   private static final AtomicInteger streamIdCounter = new AtomicInteger();
@@ -41,8 +42,7 @@ public final class AeronClientConnector implements Disposable {
     this.options = settings.options();
     this.name = Optional.ofNullable(settings.name()).orElse("client");
     this.aeronResources = settings.aeronResources();
-    this.controlMessageSubscriber =
-        new ClientControlMessageSubscriber(name, this::dispose);
+    this.controlMessageSubscriber = new ClientControlMessageSubscriber(name, this::dispose);
     this.clientControlStreamId = streamIdCounter.incrementAndGet();
     this.controlSubscription =
         aeronResources.controlSubscription(

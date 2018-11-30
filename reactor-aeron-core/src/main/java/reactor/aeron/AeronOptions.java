@@ -1,36 +1,47 @@
 package reactor.aeron;
 
-import static java.lang.Boolean.TRUE;
-
 import io.aeron.ChannelUriStringBuilder;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.function.Consumer;
 
-public abstract class AeronOptions<O extends AeronOptions<O>> {
+public final class AeronOptions {
 
+  public static final Duration ACK_TIMEOUT = Duration.ofSeconds(10);
   public static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
   public static final Duration BACKPRESSURE_TIMEOUT = Duration.ofSeconds(5);
-  public static final Duration CONTROL_BACKPRESSURE_TIMEOUT = Duration.ofSeconds(5);
   public static final int CONTROL_STREAM_ID = 1;
 
   private final ChannelUriStringBuilder serverChannel;
+  private final ChannelUriStringBuilder clientChannel;
+  private final Duration ackTimeout;
   private final Duration connectTimeout;
   private final Duration backpressureTimeout;
-  private final Duration controlBackpressureTimeout;
   private final int controlStreamId;
 
-  protected AeronOptions(Builder builder) {
+  private AeronOptions(Builder builder) {
     this.serverChannel = builder.serverChannel.validate();
+    this.clientChannel = builder.clientChannel.validate();
+    this.ackTimeout = validate(builder.ackTimeout, "ackTimeout");
     this.connectTimeout = validate(builder.connectTimeout, "connectTimeout");
     this.backpressureTimeout = validate(builder.backpressureTimeout, "backpressureTimeout");
-    this.controlBackpressureTimeout =
-        validate(builder.controlBackpressureTimeout, "controlBackpressureTimeout");
     this.controlStreamId = validate(builder.controlStreamId, "controlStreamId");
+  }
+
+  public static Builder builder() {
+    return new Builder();
   }
 
   public String serverChannel() {
     return serverChannel.build();
+  }
+
+  public String clientChannel() {
+    return clientChannel.build();
+  }
+
+  public Duration ackTimeout() {
+    return ackTimeout;
   }
 
   public Duration connectTimeout() {
@@ -41,74 +52,82 @@ public abstract class AeronOptions<O extends AeronOptions<O>> {
     return backpressureTimeout;
   }
 
-  public Duration controlBackpressureTimeout() {
-    return controlBackpressureTimeout;
-  }
-
   public int controlStreamId() {
     return controlStreamId;
   }
 
-  protected Duration validate(Duration value, String name) {
-    Objects.requireNonNull(value, name);
+  private Duration validate(Duration value, String message) {
+    Objects.requireNonNull(value, message);
     if (value.compareTo(Duration.ZERO) <= 0) {
-      throw new IllegalArgumentException(name + " > 0 expected, but got: " + name);
+      throw new IllegalArgumentException(message + " > 0 expected, but got: " + value);
     }
     return value;
   }
 
-  private int validate(Integer value, String name) {
-    Objects.requireNonNull(value, name);
+  private int validate(Integer value, String message) {
+    Objects.requireNonNull(value, message);
     if (value <= 0) {
-      throw new IllegalArgumentException(name + " > 0 expected, but got: " + name);
+      throw new IllegalArgumentException(message + " > 0 expected, but got: " + value);
     }
     return value;
   }
 
-  public abstract static class Builder<B extends Builder<B, O>, O extends AeronOptions<O>> {
+  public static class Builder {
 
-    private ChannelUriStringBuilder serverChannel =
-        new ChannelUriStringBuilder().reliable(TRUE).media("udp");
+    private ChannelUriStringBuilder serverChannel = serverChannelBuilder();
+    private ChannelUriStringBuilder clientChannel = clientChannelBuilder();
+    private Duration ackTimeout = ACK_TIMEOUT;
     private Duration connectTimeout = CONNECT_TIMEOUT;
     private Duration backpressureTimeout = BACKPRESSURE_TIMEOUT;
-    private Duration controlBackpressureTimeout = CONTROL_BACKPRESSURE_TIMEOUT;
     private Integer controlStreamId = CONTROL_STREAM_ID;
 
-    public B serverChannel(ChannelUriStringBuilder serverChannel) {
+    private Builder() {}
+
+    public Builder serverChannel(ChannelUriStringBuilder serverChannel) {
       this.serverChannel = serverChannel;
-      return self();
+      return this;
     }
 
-    public B serverChannel(Consumer<ChannelUriStringBuilder> serverChannel) {
+    public Builder serverChannel(Consumer<ChannelUriStringBuilder> serverChannel) {
       serverChannel.accept(this.serverChannel);
-      return self();
+      return this;
     }
 
-    public B connectTimeout(Duration connectTimeout) {
+    public Builder connectTimeout(Duration connectTimeout) {
       this.connectTimeout = connectTimeout;
-      return self();
+      return this;
     }
 
-    public B backpressureTimeout(Duration backpressureTimeout) {
-      this.backpressureTimeout = backpressureTimeout;
-      return self();
-    }
-
-    public B controlBackpressureTimeout(Duration controlBackpressureTimeout) {
-      this.controlBackpressureTimeout = controlBackpressureTimeout;
-      return self();
-    }
-
-    public B controlStreamId(int controlStreamId) {
+    public Builder controlStreamId(int controlStreamId) {
       this.controlStreamId = controlStreamId;
-      return self();
+      return this;
     }
 
-    public abstract O build();
+    public Builder clientChannel(ChannelUriStringBuilder clientChannel) {
+      this.clientChannel = clientChannel;
+      return this;
+    }
 
-    private B self() {
-      //noinspection unchecked
-      return (B) this;
+    public Builder clientChannel(Consumer<ChannelUriStringBuilder> clientChannel) {
+      clientChannel.accept(this.clientChannel);
+      return this;
+    }
+
+    public Builder ackTimeout(Duration ackTimeout) {
+      this.ackTimeout = ackTimeout;
+      return this;
+    }
+
+    private ChannelUriStringBuilder serverChannelBuilder() {
+      return new ChannelUriStringBuilder().reliable(true).media("udp");
+    }
+
+    private ChannelUriStringBuilder clientChannelBuilder() {
+      return new ChannelUriStringBuilder().reliable(true).media("udp").endpoint("localhost:" + 0);
+    }
+
+    public AeronOptions build() {
+      return new AeronOptions(this);
     }
   }
 }

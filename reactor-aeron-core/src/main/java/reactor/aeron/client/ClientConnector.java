@@ -6,6 +6,7 @@ import io.aeron.Publication;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
+import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronUtils;
 import reactor.aeron.DefaultMessagePublication;
@@ -26,7 +27,7 @@ final class ClientConnector implements Disposable {
 
   private final String category;
 
-  private final AeronClientOptions options;
+  private final AeronOptions options;
 
   private final UUID connectRequestId;
 
@@ -45,7 +46,7 @@ final class ClientConnector implements Disposable {
   ClientConnector(
       String category,
       AeronResources aeronResources,
-      AeronClientOptions options,
+      AeronOptions options,
       ClientControlMessageSubscriber controlMessageSubscriber,
       int clientControlStreamId,
       int clientSessionStreamId) {
@@ -147,7 +148,7 @@ final class ClientConnector implements Disposable {
                     serverControlPublication,
                     category,
                     options.connectTimeout().toMillis(),
-                    options.controlBackpressureTimeout().toMillis());
+                    options.backpressureTimeout().toMillis());
 
             long result = messagePublication.publish(messageType, buffer, sessionId);
             if (result > 0) {

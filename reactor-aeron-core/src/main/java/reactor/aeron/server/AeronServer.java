@@ -3,6 +3,7 @@ package reactor.aeron.server;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.reactivestreams.Publisher;
+import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
 import reactor.aeron.OnDisposable;
@@ -42,17 +43,17 @@ public final class AeronServer {
     return bind(settings.options());
   }
 
-  public Mono<? extends OnDisposable> bind(AeronServerOptions options) {
+  public Mono<? extends OnDisposable> bind(AeronOptions options) {
     return Mono.fromCallable(() -> new ServerHandler(settings.options(options)));
   }
 
   /**
-   * Apply {@link AeronServerOptions} on the given options consumer.
+   * Apply {@link AeronOptions} on the given options consumer.
    *
    * @param options a consumer aeron server options
    * @return a new {@link AeronServer}
    */
-  public AeronServer options(Consumer<AeronServerOptions.Builder> options) {
+  public AeronServer options(Consumer<AeronOptions.Builder> options) {
     return new AeronServer(settings.options(options));
   }
 

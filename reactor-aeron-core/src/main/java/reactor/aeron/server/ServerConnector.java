@@ -3,6 +3,7 @@ package reactor.aeron.server;
 import io.aeron.Publication;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronUtils;
 import reactor.aeron.DefaultMessagePublication;
@@ -29,7 +30,7 @@ public class ServerConnector implements Disposable {
 
   private final UUID connectRequestId;
 
-  private final AeronServerOptions options;
+  private final AeronOptions options;
 
   private final long sessionId;
 
@@ -43,7 +44,7 @@ public class ServerConnector implements Disposable {
       long sessionId,
       int serverSessionStreamId,
       UUID connectRequestId,
-      AeronServerOptions options) {
+      AeronOptions options) {
     this.category = category;
     this.serverSessionStreamId = serverSessionStreamId;
     this.connectRequestId = connectRequestId;
@@ -67,7 +68,7 @@ public class ServerConnector implements Disposable {
     return new RetryTask(
         Schedulers.single(),
         100,
-        options.connectTimeout().toMillis() + options.controlBackpressureTimeout().toMillis(),
+        options.connectTimeout().toMillis() + options.backpressureTimeout().toMillis(),
         new SendConnectAckTask(sink),
         throwable -> {
           String errMessage =

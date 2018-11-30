@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.reactivestreams.Subscription;
 import reactor.aeron.AeronInbound;
+import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronOutbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronUtils;
@@ -31,7 +32,7 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
   private final AeronServerSettings settings;
   private final String category;
-  private final AeronServerOptions options;
+  private final AeronOptions options;
   private final AeronResources aeronResources;
 
   private final AtomicLong nextSessionId = new AtomicLong(0);
