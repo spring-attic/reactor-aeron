@@ -1,6 +1,7 @@
 package reactor.aeron;
 
 import io.aeron.Aeron;
+import io.aeron.driver.Configuration;
 import java.time.Duration;
 
 /** Aeron options. */
@@ -27,6 +28,16 @@ public class AeronOptions {
   private int controlBackpressureTimeoutMillis = DEFAULT_CONTROL_BACKPRESSURE_TIMEOUT_MILLIS;
 
   private int backpressureTimeoutMillis = DEFAULT_BACKPRESSURE_TIMEOUT_MILLIS;
+
+  private int mtuLength = Configuration.MTU_LENGTH;
+
+  public int mtuLength() {
+    return mtuLength;
+  }
+
+  public void mtuLength(int mtuLength) {
+    this.mtuLength = mtuLength;
+  }
 
   /**
    * Return connect tieout millis.

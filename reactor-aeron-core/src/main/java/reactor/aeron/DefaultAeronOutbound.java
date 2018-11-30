@@ -70,11 +70,7 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
               aeronResources.publication(category, channel, streamId, "to send data to", sessionId);
           this.publication =
               new DefaultMessagePublication(
-                  aeronResources,
-                  aeronPublication,
-                  category,
-                  options.connectTimeoutMillis(),
-                  options.backpressureTimeoutMillis());
+                  aeronResources.eventLoop(), aeronPublication, category, options);
           this.sequencer = aeronResources.writeSequencer(category, publication, sessionId);
           int timeoutMillis = options.connectTimeoutMillis();
 
@@ -99,7 +95,7 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
           String errMessage =
               String.format(
                   "Publication %s for sending data in not connected during %d millis",
-                  publication.asString(), timeoutMillis);
+                  publication, timeoutMillis);
           sink.error(new Exception(errMessage, throwable));
         });
   }

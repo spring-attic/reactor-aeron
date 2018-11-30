@@ -94,7 +94,8 @@ public class ServerConnector implements Disposable {
     SendConnectAckTask(MonoSink<Void> sink) {
       this.sink = sink;
       this.publication =
-          new DefaultMessagePublication(aeronResources, clientControlPublication, category, 0, 0);
+          new DefaultMessagePublication(
+              aeronResources.eventLoop(), clientControlPublication, category, options);
     }
 
     @Override
@@ -110,7 +111,7 @@ public class ServerConnector implements Disposable {
         return true;
       } else if (result == Publication.CLOSED) {
         throw new RuntimeException(
-            String.format("Publication %s has been closed", publication.asString()));
+            String.format("Publication %s has been closed", publication));
       }
 
       return false;

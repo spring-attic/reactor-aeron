@@ -6,7 +6,6 @@ import java.nio.ByteBuffer;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
 import org.agrona.concurrent.UnsafeBuffer;
-import reactor.aeron.client.AeronClientOptions;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
@@ -24,7 +23,7 @@ public final class DefaultMessagePublication implements OnDisposable, MessagePub
   private final String category;
 
   private final AeronEventLoop eventLoop;
-  private final AeronClientOptions options;
+  private final AeronOptions options;
 
   private final ManyToOneConcurrentLinkedQueue<PublishTask> publishTasks =
       new ManyToOneConcurrentLinkedQueue<>();
@@ -38,10 +37,7 @@ public final class DefaultMessagePublication implements OnDisposable, MessagePub
    * @param category category
    */
   public DefaultMessagePublication(
-      AeronEventLoop eventLoop,
-      Publication publication,
-      String category,
-      AeronClientOptions options) {
+      AeronEventLoop eventLoop, Publication publication, String category, AeronOptions options) {
     this.eventLoop = eventLoop;
     this.publication = publication;
     this.category = category;
