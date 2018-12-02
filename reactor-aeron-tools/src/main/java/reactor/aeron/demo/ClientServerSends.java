@@ -17,8 +17,10 @@ public class ClientServerSends {
       AeronClient.create("client", aeronResources)
           .options(
               options -> {
-                options.serverChannel("aeron:udp?endpoint=localhost:13000");
-                options.clientChannel("aeron:udp?endpoint=localhost:12001");
+                options.serverChannel(
+                    channel -> channel.media("udp").reliable(true).endpoint("localhost:13000"));
+                options.clientChannel(
+                    channel -> channel.media("udp").reliable(true).endpoint("localhost:12001"));
               })
           .handle(
               connection ->

@@ -68,7 +68,7 @@ public class ServerConnector implements Disposable {
     return new RetryTask(
         Schedulers.single(),
         100,
-        options.connectTimeoutMillis() + options.controlBackpressureTimeoutMillis(),
+        options.connectTimeout().toMillis() + options.backpressureTimeout().toMillis(),
         new SendConnectAckTask(sink),
         throwable -> {
           String errMessage =

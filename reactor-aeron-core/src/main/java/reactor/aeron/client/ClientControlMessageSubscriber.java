@@ -20,14 +20,12 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
 
   private final String category;
 
-
   private final Consumer<Long> onCompleteHandler;
 
   private final Map<UUID, MonoProcessor<ConnectAckResponse>> sinkByConnectRequestId =
       new ConcurrentHashMap<>();
 
-  ClientControlMessageSubscriber(
-      String category, Consumer<Long> onCompleteHandler) {
+  ClientControlMessageSubscriber(String category, Consumer<Long> onCompleteHandler) {
     this.category = category;
     this.onCompleteHandler = onCompleteHandler;
   }

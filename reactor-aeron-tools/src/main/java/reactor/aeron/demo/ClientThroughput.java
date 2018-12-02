@@ -22,8 +22,10 @@ public class ClientThroughput {
       AeronClient.create("client", aeronResources)
           .options(
               options -> {
-                options.serverChannel("aeron:udp?endpoint=" + HOST + ":13000");
-                options.clientChannel("aeron:udp?endpoint=" + HOST + ":12001");
+                options.serverChannel(
+                    channel -> channel.media("udp").reliable(true).endpoint(HOST + ":13000"));
+                options.clientChannel(
+                    channel -> channel.media("udp").reliable(true).endpoint(HOST + ":12001"));
               })
           .handle(
               connection ->

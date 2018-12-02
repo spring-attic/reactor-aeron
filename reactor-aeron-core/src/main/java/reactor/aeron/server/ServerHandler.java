@@ -51,15 +51,16 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
     this.controlSubscription =
         settings
-            .aeronResources().controlSubscription(
-            category,
-            options.serverChannel(),
-            options.serverStreamId(),
-            "to receive control requests on",
-            CONTROL_SESSION_ID,
-            this,
-            null,
-            null);
+            .aeronResources()
+            .controlSubscription(
+                category,
+                options.serverChannel(),
+                options.controlStreamId(),
+                "to receive control requests on",
+                CONTROL_SESSION_ID,
+                this,
+                null,
+                null);
 
     this.onClose
         .doOnTerminate(this::dispose0)
@@ -198,7 +199,7 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
         int serverSessionStreamId) {
       this.clientSessionStreamId = clientSessionStreamId;
       this.clientChannel = clientChannel;
-      this.outbound = new DefaultAeronOutbound(category, aeronResources, clientChannel, options);
+      this.outbound = new DefaultAeronOutbound(category, aeronResources, clientChannel);
       this.connectRequestId = connectRequestId;
       this.sessionId = sessionId;
       this.serverSessionStreamId = serverSessionStreamId;
@@ -223,7 +224,7 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
       return connector
           .connect()
-          .then(outbound.initialise(sessionId, clientSessionStreamId))
+          .then(outbound.initialise(sessionId, clientSessionStreamId, options))
           .then(
               inbound.initialise(
                   category,

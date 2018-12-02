@@ -38,7 +38,7 @@ public class AeronServerSettings {
     return options;
   }
 
-  public AeronServerSettings options(Consumer<AeronOptions> consumer) {
+  public AeronServerSettings options(Consumer<AeronOptions.Builder> consumer) {
     return new Builder(this).options(consumer).build();
   }
 
@@ -59,7 +59,7 @@ public class AeronServerSettings {
 
     private String name;
     private AeronResources aeronResources;
-    private AeronOptions options = new AeronOptions();
+    private AeronOptions options;
     private Function<? super Connection, ? extends Publisher<Void>> handler =
         OnDisposable::onDispose;
 
@@ -87,8 +87,16 @@ public class AeronServerSettings {
       return this;
     }
 
-    public Builder options(Consumer<AeronOptions> consumer) {
-      consumer.accept(options);
+    /**
+     * Adds aeron server options via its builder consumer.
+     *
+     * @param options options
+     * @return self
+     */
+    public Builder options(Consumer<AeronOptions.Builder> options) {
+      AeronOptions.Builder optionsBuilder = AeronOptions.builder();
+      options.accept(optionsBuilder);
+      this.options = optionsBuilder.build();
       return this;
     }
 
