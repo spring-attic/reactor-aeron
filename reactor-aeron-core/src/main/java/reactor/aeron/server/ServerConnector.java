@@ -17,9 +17,6 @@ public class ServerConnector implements Disposable {
 
   private static final Logger logger = Loggers.getLogger(ServerConnector.class);
 
-  private static final RuntimeException NOT_CONNECTED_EXCEPTION =
-      new RuntimeException("publication is not connected");
-
   private final String category;
 
   private final Publication clientControlPublication;
@@ -69,9 +66,7 @@ public class ServerConnector implements Disposable {
               new DefaultMessagePublication(
                   aeronResources, clientControlPublication, category, 0, 0);
 
-          return Mono.fromCallable(() -> sendConnectAck(publication))
-              .filter(isSuccess -> isSuccess)
-              .switchIfEmpty(Mono.error(NOT_CONNECTED_EXCEPTION))
+          return sendConnectAck(publication)
               .retryBackoff(retryCount, retryInterval, retryInterval)
               .timeout(connectTimeout)
               .then()
@@ -83,19 +78,18 @@ public class ServerConnector implements Disposable {
                   throwable -> {
                     String errMessage =
                         String.format(
-                            "Failed to send %s into %s", MessageType.CONNECT_ACK, publication);
+                            "Failed to send %s, publication %s is not connected",
+                            MessageType.CONNECT_ACK, publication);
                     return Mono.error(new RuntimeException(errMessage, throwable));
                   });
         });
   }
 
-  private boolean sendConnectAck(DefaultMessagePublication publication) {
-    long result =
-        publication.publish(
-            MessageType.CONNECT_ACK,
-            Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId),
-            sessionId);
-    return result > 0;
+  private Mono<Void> sendConnectAck(DefaultMessagePublication publication) {
+    return publication.enqueue(
+        MessageType.CONNECT_ACK,
+        Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId),
+        sessionId);
   }
 
   @Override
