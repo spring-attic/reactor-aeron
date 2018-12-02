@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import org.agrona.CloseHelper;
 import reactor.core.Disposable;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
@@ -104,28 +105,35 @@ public class AeronResources implements Disposable, AutoCloseable {
         "{} has initialized embedded media mediaDriver, aeron directory: {}", this, directoryName);
   }
 
-  /**
-   * Adds publication.
-   *
-   * @param channel channel
-   * @param streamId stream id
-   * @param purpose purpose
-   * @param sessionId session id
-   * @return publication
-   */
-  public Publication publication(
-      String category, String channel, int streamId, String purpose, long sessionId) {
+  public AeronEventLoop nextEventLoop() {
+    return eventLoop;
+  }
+
+  public Mono<MessagePublication> messagePublication(
+      String category,
+      String channel,
+      long sessionId,
+      int streamId,
+      AeronOptions options,
+      AeronEventLoop eventLoop) {
 
     Publication publication = aeron.addPublication(channel, streamId);
+
     if (logger.isDebugEnabled()) {
       logger.debug(
-          "[{}] Added publication, sessionId={} {} {}",
+          "[{}] Added publication, sessionId={} {}",
           category,
           sessionId,
-          purpose,
-          AeronUtils.format(channel, streamId));
+          AeronUtils.format(publication));
     }
-    return publication;
+
+    MessagePublication messagePublication =
+        new MessagePublication(category, publication, options, eventLoop);
+
+    return eventLoop
+        .register(messagePublication)
+        .doOnError(ex -> publication.close())
+        .thenReturn(messagePublication);
   }
 
   /**
@@ -202,10 +210,6 @@ public class AeronResources implements Disposable, AutoCloseable {
     return subscription;
   }
 
-  public int mtuLength() {
-    return config.mtuLength();
-  }
-
   /**
    * Closes the given subscription.
    *
@@ -222,26 +226,6 @@ public class AeronResources implements Disposable, AutoCloseable {
                   subscription.close();
                 } catch (Exception e) {
                   logger.warn("Subscription closed with error: {}", e);
-                }
-              }
-            });
-  }
-
-  /**
-   * Closes the given publication.
-   *
-   * @param publication publication
-   */
-  public void close(Publication publication) {
-    // todo wait for commandQueue
-    Schedulers.single()
-        .schedule(
-            () -> {
-              if (publication != null) {
-                try {
-                  publication.close();
-                } catch (Exception e) {
-                  logger.warn("Publication closed with error: {}", e);
                 }
               }
             });
@@ -269,6 +253,7 @@ public class AeronResources implements Disposable, AutoCloseable {
     //    Optional.ofNullable(receiver) //
     //        .filter(s -> !s.isDisposed())
     //        .ifPresent(Scheduler::dispose);
+    // TODO at this point close EventLoop
 
     CloseHelper.quietClose(aeron);
 
@@ -284,28 +269,6 @@ public class AeronResources implements Disposable, AutoCloseable {
   @Override
   public boolean isDisposed() {
     return onClose.isDisposed();
-  }
-
-  /**
-   * Creates new {@link AeronWriteSequencer}.
-   *
-   * @param category category
-   * @param publication publication
-   * @param sessionId session id
-   * @return new write sequencer
-   */
-  public AeronWriteSequencer writeSequencer(
-      String category, MessagePublication publication, long sessionId) {
-    AeronWriteSequencer writeSequencer =
-        new AeronWriteSequencer(category, publication, sessionId, eventLoop);
-    if (logger.isDebugEnabled()) {
-      logger.debug("[{}] Created {}, sessionId={}", category, writeSequencer, sessionId);
-    }
-    return writeSequencer;
-  }
-
-  public AeronEventLoop eventLoop() {
-    return eventLoop;
   }
 
   /**

@@ -5,7 +5,7 @@ import java.time.Duration;
 import java.util.UUID;
 import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
-import reactor.aeron.DefaultMessagePublication;
+import reactor.aeron.MessagePublication;
 import reactor.aeron.MessageType;
 import reactor.aeron.Protocol;
 import reactor.core.Disposable;
@@ -62,8 +62,8 @@ public class ServerConnector implements Disposable {
           Duration connectTimeout = options.connectTimeout().plus(options.backpressureTimeout());
           long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
 
-          DefaultMessagePublication publication =
-              new DefaultMessagePublication(
+          MessagePublication publication =
+              new MessagePublication(
                   aeronResources, clientControlPublication, category, 0, 0);
 
           return sendConnectAck(publication)
@@ -85,7 +85,7 @@ public class ServerConnector implements Disposable {
         });
   }
 
-  private Mono<Void> sendConnectAck(DefaultMessagePublication publication) {
+  private Mono<Void> sendConnectAck(MessagePublication publication) {
     return publication.enqueue(
         MessageType.CONNECT_ACK,
         Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId),

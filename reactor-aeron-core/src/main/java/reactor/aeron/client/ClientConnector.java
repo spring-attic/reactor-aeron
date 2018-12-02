@@ -8,7 +8,6 @@ import java.util.concurrent.TimeoutException;
 import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronUtils;
-import reactor.aeron.DefaultMessagePublication;
 import reactor.aeron.MessagePublication;
 import reactor.aeron.MessageType;
 import reactor.aeron.Protocol;
@@ -25,19 +24,12 @@ final class ClientConnector implements Disposable {
   private static final TimeBasedGenerator uuidGenerator = Generators.timeBasedGenerator();
 
   private final String category;
-
   private final AeronOptions options;
-
   private final UUID connectRequestId;
-
   private final ClientControlMessageSubscriber controlMessageSubscriber;
-
   private final int clientControlStreamId;
-
   private final int clientSessionStreamId;
-
   private final io.aeron.Publication serverControlPublication;
-
   private final AeronResources aeronResources;
 
   private volatile long sessionId;
@@ -137,28 +129,16 @@ final class ClientConnector implements Disposable {
   }
 
   private Mono<Void> send(ByteBuffer buffer, MessageType msgType) {
-    return Mono.create(
-        sink -> {
-          Exception cause = null;
-          try {
-            MessagePublication messagePublication =
-                new DefaultMessagePublication(
-                    aeronResources,
-                    serverControlPublication,
-                    category,
-                    options.connectTimeout().toMillis(),
-                    options.backpressureTimeout().toMillis());
+    return Mono.defer(
+        () -> {
+          MessagePublication publication =
+              new MessagePublication(category, serverControlPublication, options, aeronResources);
 
-            long result = messagePublication.enqueue(msgType, buffer, sessionId);
-            if (result > 0) {
-              logger.debug("[{}] Sent {} to {}", category, msgType, messagePublication.toString());
-              sink.success();
-              return;
-            }
-          } catch (Exception ex) {
-            cause = ex;
-          }
-          sink.error(new RuntimeException("Failed to send message of type: " + msgType, cause));
+          return publication
+              .enqueue(msgType, buffer, sessionId)
+              .doOnSuccess(
+                  avoid -> logger.debug("[{}] Sent {} to {}", category, msgType, publication))
+              .doOnError(ex -> logger.warn("Failed to send message of type: " + msgType, ex));
         });
   }
 

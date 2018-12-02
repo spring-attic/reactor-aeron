@@ -24,18 +24,14 @@ public final class AeronClientConnector implements Disposable {
 
   private static final int CONTROL_SESSION_ID = 0;
 
+  private static final AtomicInteger streamIdCounter = new AtomicInteger();
+
   private final String name;
   private final AeronOptions options;
   private final AeronResources aeronResources;
-
-  private static final AtomicInteger streamIdCounter = new AtomicInteger();
-
   private final ClientControlMessageSubscriber controlMessageSubscriber;
-
   private final Subscription controlSubscription;
-
   private final int clientControlStreamId;
-
   private final List<ClientHandler> handlers = new CopyOnWriteArrayList<>();
 
   AeronClientConnector(AeronClientSettings settings) {
@@ -90,22 +86,19 @@ public final class AeronClientConnector implements Disposable {
   class ClientHandler implements Connection {
 
     private final DefaultAeronOutbound outbound;
-
     private final int clientSessionStreamId;
-
     private final ClientConnector connector;
 
     private volatile AeronClientInbound inbound;
-
     private volatile long sessionId;
-
     private volatile int serverSessionStreamId;
 
+    // TODO refactor OnDispose mechanism
     private final MonoProcessor<Void> onClose = MonoProcessor.create();
 
     ClientHandler() {
       this.clientSessionStreamId = streamIdCounter.incrementAndGet();
-      this.outbound = new DefaultAeronOutbound(name, aeronResources, options.serverChannel());
+      this.outbound = new DefaultAeronOutbound(name, aeronResources, options);
       this.connector =
           new ClientConnector(
               name,
@@ -139,7 +132,8 @@ public final class AeronClientConnector implements Disposable {
                         sessionId,
                         this::dispose);
 
-                return outbound.initialise(sessionId, serverSessionStreamId, options);
+                return outbound.initialise(
+                    options.serverChannel(), sessionId, serverSessionStreamId);
               })
           .doOnError(
               th -> {

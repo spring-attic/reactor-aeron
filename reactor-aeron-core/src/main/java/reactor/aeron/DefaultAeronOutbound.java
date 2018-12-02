@@ -1,44 +1,40 @@
 package reactor.aeron;
 
-import io.aeron.Publication;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.Objects;
 import org.reactivestreams.Publisher;
-import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 
 /** Default aeron outbound. */
-public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
+public final class DefaultAeronOutbound implements OnDisposable, AeronOutbound {
 
   private static final RuntimeException NOT_CONNECTED_EXCEPTION =
       new RuntimeException("publication is not connected");
 
   private final String category;
-
-  private final AeronResources aeronResources;
-
-  private final String channel;
+  private final AeronResources resources;
+  private final AeronOptions options;
 
   private volatile AeronWriteSequencer sequencer;
-
-  private volatile DefaultMessagePublication publication;
+  private volatile MessagePublication publication;
 
   /**
    * Constructor.
    *
    * @param category category
-   * @param aeronResources aeronResources
-   * @param channel channel
+   * @param resources resources
+   * @param options channel
    */
-  public DefaultAeronOutbound(String category, AeronResources aeronResources, String channel) {
+  public DefaultAeronOutbound(String category, AeronResources resources, AeronOptions options) {
     this.category = category;
-    this.aeronResources = aeronResources;
-    this.channel = channel;
+    this.resources = resources;
+    this.options = options;
   }
 
   @Override
   public AeronOutbound send(Publisher<? extends ByteBuffer> dataStream) {
-    return then(sequencer.write(dataStream));
+    return then(Objects.requireNonNull(sequencer).write(dataStream));
   }
 
   @Override
@@ -48,49 +44,69 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
 
   @Override
   public void dispose() {
-    if (publication != null && !publication.isDisposed()) {
+    if (publication != null) {
       publication.dispose();
     }
+  }
+
+  @Override
+  public boolean isDisposed() {
+    return publication != null && publication.isDisposed();
+  }
+
+  @Override
+  public Mono<Void> onDispose() {
+    return publication != null ? publication.onDispose() : Mono.empty();
+  }
+
+  private void setPublication(MessagePublication publication) {
+    this.publication = publication;
+  }
+
+  private void setSequencer(AeronWriteSequencer sequencer) {
+    this.sequencer = sequencer;
   }
 
   /**
    * Init method.
    *
+   * @param channel channel
    * @param sessionId session id
    * @param streamId stream id
    * @return initialization handle
    */
-  public Mono<Void> initialise(long sessionId, int streamId, AeronOptions options) {
+  public Mono<Void> initialise(String channel, long sessionId, int streamId) {
     return Mono.defer(
         () -> {
-          Publication aeronPublication =
-              aeronResources.publication(category, channel, streamId, "to send data to", sessionId);
-          this.publication =
-              new DefaultMessagePublication(
-                  aeronResources,
-                  aeronPublication,
-                  category,
-                  options.connectTimeout().toMillis(),
-                  options.backpressureTimeout().toMillis());
-          this.sequencer = aeronResources.writeSequencer(category, publication, sessionId);
+          AeronEventLoop eventLoop = resources.nextEventLoop();
 
-          Duration retryInterval = Duration.ofMillis(100);
-          Duration connectTimeout = options.connectTimeout();
-          long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
+          return resources
+              .messagePublication(category, channel, sessionId, streamId, options, eventLoop)
+              .doOnSuccess(this::setPublication)
+              .doOnSuccess(
+                  result ->
+                      setSequencer(
+                          new AeronWriteSequencer(category, publication, sessionId, eventLoop)))
+              .flatMap(
+                  result -> {
+                    Duration retryInterval = Duration.ofMillis(100);
+                    Duration connectTimeout = options.connectTimeout();
+                    long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
 
-          return Mono.fromCallable(aeronPublication::isConnected)
-              .filter(isConnected -> isConnected)
-              .switchIfEmpty(Mono.error(NOT_CONNECTED_EXCEPTION))
-              .retryBackoff(retryCount, retryInterval, retryInterval)
-              .timeout(connectTimeout)
-              .then()
-              .onErrorResume(
-                  throwable -> {
-                    String errMessage =
-                        String.format(
-                            "Publication %s for sending data in not connected during %s",
-                            publication, connectTimeout);
-                    return Mono.error(new RuntimeException(errMessage, throwable));
+                    return Mono.fromCallable(publication::isConnected)
+                        .filter(isConnected -> isConnected)
+                        .switchIfEmpty(Mono.error(NOT_CONNECTED_EXCEPTION))
+                        .retryBackoff(retryCount, retryInterval, retryInterval)
+                        .timeout(connectTimeout)
+                        .then()
+                        .onErrorResume(
+                            throwable -> {
+                              String errMessage =
+                                  String.format(
+                                      "Publication %s for sending data in not connected during %s",
+                                      publication, connectTimeout);
+                              return Mono.error(new RuntimeException(errMessage, throwable));
+                            });
                   });
         });
   }

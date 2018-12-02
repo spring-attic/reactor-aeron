@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.aeron.ChannelUriStringBuilder;
+import io.aeron.driver.Configuration;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Optional;
@@ -75,8 +76,7 @@ class AeronClientTest extends BaseAeronTest {
 
   @Test
   public void testClientReceivesLongDataFromServer() {
-    aeronResources.mtuLength();
-    char[] chars = new char[aeronResources.mtuLength() * 2];
+    char[] chars = new char[Configuration.MTU_LENGTH * 2];
     Arrays.fill(chars, 'a');
     String str = new String(chars);
 
