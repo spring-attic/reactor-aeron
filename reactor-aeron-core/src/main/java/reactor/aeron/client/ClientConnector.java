@@ -5,6 +5,7 @@ import com.fasterxml.uuid.impl.TimeBasedGenerator;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
+import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronUtils;
 import reactor.aeron.DefaultMessagePublication;
@@ -25,7 +26,7 @@ final class ClientConnector implements Disposable {
 
   private final String category;
 
-  private final AeronClientOptions options;
+  private final AeronOptions options;
 
   private final UUID connectRequestId;
 
@@ -44,7 +45,7 @@ final class ClientConnector implements Disposable {
   ClientConnector(
       String category,
       AeronResources aeronResources,
-      AeronClientOptions options,
+      AeronOptions options,
       ClientControlMessageSubscriber controlMessageSubscriber,
       int clientControlStreamId,
       int clientSessionStreamId) {
@@ -59,7 +60,7 @@ final class ClientConnector implements Disposable {
         aeronResources.publication(
             category,
             options.serverChannel(),
-            options.serverStreamId(),
+            options.controlStreamId(),
             "to send control requests to server",
             0);
   }
@@ -142,7 +143,11 @@ final class ClientConnector implements Disposable {
           try {
             MessagePublication messagePublication =
                 new DefaultMessagePublication(
-                    aeronResources.eventLoop(), serverControlPublication, category, options);
+                    aeronResources,
+                    serverControlPublication,
+                    category,
+                    options.connectTimeout().toMillis(),
+                    options.backpressureTimeout().toMillis());
 
             long result = messagePublication.enqueue(msgType, buffer, sessionId);
             if (result > 0) {

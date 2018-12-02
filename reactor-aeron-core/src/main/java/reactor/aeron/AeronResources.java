@@ -227,6 +227,26 @@ public class AeronResources implements Disposable, AutoCloseable {
             });
   }
 
+  /**
+   * Closes the given publication.
+   *
+   * @param publication publication
+   */
+  public void close(Publication publication) {
+    // todo wait for commandQueue
+    Schedulers.single()
+        .schedule(
+            () -> {
+              if (publication != null) {
+                try {
+                  publication.close();
+                } catch (Exception e) {
+                  logger.warn("Publication closed with error: {}", e);
+                }
+              }
+            });
+  }
+
   @Override
   public void close() {
     dispose();

@@ -65,7 +65,10 @@ public class ServerThroughput {
               TimeUnit.SECONDS);
 
       AeronServer.create("server", aeronResources)
-          .options(options -> options.serverChannel("aeron:udp?endpoint=" + HOST + ":13000"))
+          .options(
+              options ->
+                  options.serverChannel(
+                      channel -> channel.media("udp").reliable(true).endpoint(HOST + ":13000")))
           .handle(
               connection ->
                   connection

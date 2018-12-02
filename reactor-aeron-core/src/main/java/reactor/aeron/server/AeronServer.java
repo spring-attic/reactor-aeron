@@ -53,7 +53,7 @@ public final class AeronServer {
    * @param options a consumer aeron server options
    * @return a new {@link AeronServer}
    */
-  public AeronServer options(Consumer<AeronOptions> options) {
+  public AeronServer options(Consumer<AeronOptions.Builder> options) {
     return new AeronServer(settings.options(options));
   }
 

@@ -3,6 +3,7 @@ package reactor.aeron.client;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.reactivestreams.Publisher;
+import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
 import reactor.core.publisher.Mono;
@@ -41,11 +42,11 @@ public final class AeronClient {
     return connect(settings.options());
   }
 
-  public Mono<? extends Connection> connect(AeronClientOptions options) {
+  public Mono<? extends Connection> connect(AeronOptions options) {
     return Mono.defer(() -> connect0(options));
   }
 
-  private Mono<? extends Connection> connect0(AeronClientOptions options) {
+  private Mono<? extends Connection> connect0(AeronOptions options) {
     AeronClientConnector connector = new AeronClientConnector(settings.options(options));
     return connector
         .newHandler()
@@ -68,12 +69,12 @@ public final class AeronClient {
   }
 
   /**
-   * Apply {@link AeronClientOptions} on the given options consumer.
+   * Apply {@link AeronOptions} on the given options consumer.
    *
    * @param options a consumer aeron client options
    * @return a new {@link AeronClient}
    */
-  public AeronClient options(Consumer<AeronClientOptions> options) {
+  public AeronClient options(Consumer<AeronOptions.Builder> options) {
     return new AeronClient(settings.options(options));
   }
 

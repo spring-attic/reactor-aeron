@@ -2,22 +2,22 @@ package reactor.aeron;
 
 import io.aeron.Publication;
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.MonoSink;
-import reactor.core.scheduler.Schedulers;
 
 /** Default aeron outbound. */
 public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
+
+  private static final RuntimeException NOT_CONNECTED_EXCEPTION =
+      new RuntimeException("publication is not connected");
 
   private final String category;
 
   private final AeronResources aeronResources;
 
   private final String channel;
-
-  private final AeronOptions options;
 
   private volatile AeronWriteSequencer sequencer;
 
@@ -29,14 +29,11 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
    * @param category category
    * @param aeronResources aeronResources
    * @param channel channel
-   * @param options options
    */
-  public DefaultAeronOutbound(
-      String category, AeronResources aeronResources, String channel, AeronOptions options) {
+  public DefaultAeronOutbound(String category, AeronResources aeronResources, String channel) {
     this.category = category;
     this.aeronResources = aeronResources;
     this.channel = channel;
-    this.options = options;
   }
 
   @Override
@@ -63,44 +60,38 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
    * @param streamId stream id
    * @return initialization handle
    */
-  public Mono<Void> initialise(long sessionId, int streamId) {
-    return Mono.create(
-        sink -> {
+  public Mono<Void> initialise(long sessionId, int streamId, AeronOptions options) {
+    return Mono.defer(
+        () -> {
           Publication aeronPublication =
               aeronResources.publication(category, channel, streamId, "to send data to", sessionId);
           this.publication =
               new DefaultMessagePublication(
-                  aeronResources.eventLoop(), aeronPublication, category, options);
+                  aeronResources,
+                  aeronPublication,
+                  category,
+                  options.connectTimeout().toMillis(),
+                  options.backpressureTimeout().toMillis());
           this.sequencer = aeronResources.writeSequencer(category, publication, sessionId);
-          int timeoutMillis = options.connectTimeoutMillis();
 
-          createRetryTask(sink, aeronPublication, timeoutMillis).schedule();
+          Duration retryInterval = Duration.ofMillis(100);
+          Duration connectTimeout = options.connectTimeout();
+          long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
+
+          return Mono.fromCallable(aeronPublication::isConnected)
+              .filter(isConnected -> isConnected)
+              .switchIfEmpty(Mono.error(NOT_CONNECTED_EXCEPTION))
+              .retryBackoff(retryCount, retryInterval, retryInterval)
+              .timeout(connectTimeout)
+              .then()
+              .onErrorResume(
+                  throwable -> {
+                    String errMessage =
+                        String.format(
+                            "Publication %s for sending data in not connected during %s",
+                            publication, connectTimeout);
+                    return Mono.error(new RuntimeException(errMessage, throwable));
+                  });
         });
-  }
-
-  private RetryTask createRetryTask(
-      MonoSink<Void> sink, Publication aeronPublication, int timeoutMillis) {
-    return new RetryTask(
-        Schedulers.single(),
-        100,
-        timeoutMillis,
-        () -> {
-          if (aeronPublication.isConnected()) {
-            sink.success();
-            return true;
-          }
-          return false;
-        },
-        throwable -> {
-          String errMessage =
-              String.format(
-                  "Publication %s for sending data in not connected during %d millis",
-                  publication, timeoutMillis);
-          sink.error(new Exception(errMessage, throwable));
-        });
-  }
-
-  public MessagePublication getPublication() {
-    return publication;
   }
 }
