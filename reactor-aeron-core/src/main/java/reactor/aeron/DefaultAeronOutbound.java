@@ -74,29 +74,24 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
                   options.backpressureTimeout().toMillis());
           this.sequencer = aeronResources.writeSequencer(category, publication, sessionId);
 
-          int timeoutMillis = options.connectTimeoutMillis();
-          long retryMillis = 100;
-          long retryCount = timeoutMillis / retryMillis;
+          Duration retryInterval = Duration.ofMillis(100);
+          Duration connectTimeout = options.connectTimeout();
+          long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
 
           return Mono.fromCallable(aeronPublication::isConnected)
               .filter(isConnected -> isConnected)
               .switchIfEmpty(Mono.error(NOT_CONNECTED_EXCEPTION))
-              .retryBackoff(
-                  retryCount, Duration.ofMillis(retryMillis), Duration.ofMillis(retryMillis))
-              .timeout(Duration.ofMillis(timeoutMillis))
+              .retryBackoff(retryCount, retryInterval, retryInterval)
+              .timeout(connectTimeout)
               .then()
               .onErrorResume(
                   throwable -> {
                     String errMessage =
                         String.format(
-                            "Publication %s for sending data in not connected during %d millis",
-                            publication, timeoutMillis);
+                            "Publication %s for sending data in not connected during %s",
+                            publication, connectTimeout);
                     return Mono.error(new RuntimeException(errMessage, throwable));
                   });
         });
-  }
-
-  public MessagePublication getPublication() {
-    return publication;
   }
 }

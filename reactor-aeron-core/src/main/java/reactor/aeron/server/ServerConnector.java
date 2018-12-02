@@ -61,10 +61,9 @@ public class ServerConnector implements Disposable {
   Mono<Void> connect() {
     return Mono.defer(
         () -> {
-          long retryMillis = 100;
-          long timeoutMillis =
-              options.connectTimeoutMillis() + options.controlBackpressureTimeoutMillis();
-          long retryCount = timeoutMillis / retryMillis;
+          Duration retryInterval = Duration.ofMillis(100);
+          Duration connectTimeout = options.connectTimeout().plus(options.backpressureTimeout());
+          long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
 
           DefaultMessagePublication publication =
               new DefaultMessagePublication(
@@ -73,14 +72,13 @@ public class ServerConnector implements Disposable {
           return Mono.fromCallable(() -> sendConnectAck(publication))
               .filter(isSuccess -> isSuccess)
               .switchIfEmpty(Mono.error(NOT_CONNECTED_EXCEPTION))
-              .retryBackoff(
-                  retryCount, Duration.ofMillis(retryMillis), Duration.ofMillis(retryMillis))
-              .timeout(Duration.ofMillis(timeoutMillis))
+              .retryBackoff(retryCount, retryInterval, retryInterval)
+              .timeout(connectTimeout)
               .then()
               .doOnSuccess(
                   avoid ->
                       logger.debug(
-                          "[{}] Sent {} to {}", category, MessageType.CONNECT_ACK, category))
+                          "[{}] Sent {} to {}", category, MessageType.CONNECT_ACK, publication))
               .onErrorResume(
                   throwable -> {
                     String errMessage =
