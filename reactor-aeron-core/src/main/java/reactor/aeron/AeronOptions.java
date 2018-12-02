@@ -88,8 +88,16 @@ public final class AeronOptions {
       return this;
     }
 
-    public Builder serverChannel(Consumer<ChannelUriStringBuilder> serverChannel) {
-      serverChannel.accept(this.serverChannel);
+    /**
+     * Sets server uri via consumer.
+     *
+     * @param consumer consumer
+     * @return this builder
+     */
+    public Builder serverChannel(Consumer<ChannelUriStringBuilder> consumer) {
+      ChannelUriStringBuilder channelBuilder = serverChannelBuilder();
+      consumer.accept(channelBuilder);
+      this.serverChannel = channelBuilder;
       return this;
     }
 
@@ -108,8 +116,16 @@ public final class AeronOptions {
       return this;
     }
 
-    public Builder clientChannel(Consumer<ChannelUriStringBuilder> clientChannel) {
-      clientChannel.accept(this.clientChannel);
+    /**
+     * Sets client uri via consumer.
+     *
+     * @param consumer consumer
+     * @return this builder
+     */
+    public Builder clientChannel(Consumer<ChannelUriStringBuilder> consumer) {
+      ChannelUriStringBuilder builder = clientChannelBuilder();
+      consumer.accept(builder);
+      this.clientChannel = builder;
       return this;
     }
 
@@ -123,7 +139,7 @@ public final class AeronOptions {
     }
 
     private ChannelUriStringBuilder clientChannelBuilder() {
-      return new ChannelUriStringBuilder().reliable(true).media("udp").endpoint("localhost:" + 0);
+      return new ChannelUriStringBuilder().reliable(true).media("udp").endpoint("localhost:0");
     }
 
     public AeronOptions build() {
