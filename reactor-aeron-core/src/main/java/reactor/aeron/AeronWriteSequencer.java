@@ -42,8 +42,7 @@ final class AeronWriteSequencer {
   @SuppressWarnings("unused")
   private volatile int wip;
 
-  AeronWriteSequencer(
-      String category, MessagePublication publication, long sessionId, AeronEventLoop eventLoop) {
+  AeronWriteSequencer(long sessionId, MessagePublication publication, AeronEventLoop eventLoop) {
     this.eventLoop = eventLoop;
     this.discardedHandler =
         o -> {
@@ -52,7 +51,7 @@ final class AeronWriteSequencer {
     this.pendingWrites = Queues.unbounded().get();
     //noinspection unchecked
     this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
-    this.errorHandler = th -> logger.error("[{}] Unexpected exception", category, th);
+    this.errorHandler = throwable -> logger.error("Unexpected exception", throwable);
     this.inner = new PublisherSender(this, publication, sessionId);
   }
 

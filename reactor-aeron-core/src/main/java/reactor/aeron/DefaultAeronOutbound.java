@@ -5,14 +5,19 @@ import java.time.Duration;
 import java.util.Objects;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
+import reactor.util.Logger;
+import reactor.util.Loggers;
 
 /** Default aeron outbound. */
 public final class DefaultAeronOutbound implements OnDisposable, AeronOutbound {
+
+  private static final Logger logger = Loggers.getLogger(DefaultAeronOutbound.class);
 
   private static final RuntimeException NOT_CONNECTED_EXCEPTION =
       new RuntimeException("publication is not connected");
 
   private final String category;
+  private final String channel;
   private final AeronResources resources;
   private final AeronOptions options;
 
@@ -23,11 +28,14 @@ public final class DefaultAeronOutbound implements OnDisposable, AeronOutbound {
    * Constructor.
    *
    * @param category category
+   * @param channel channel
    * @param resources resources
-   * @param options channel
+   * @param options options
    */
-  public DefaultAeronOutbound(String category, AeronResources resources, AeronOptions options) {
+  public DefaultAeronOutbound(
+      String category, String channel, AeronResources resources, AeronOptions options) {
     this.category = category;
+    this.channel = channel;
     this.resources = resources;
     this.options = options;
   }
@@ -70,12 +78,11 @@ public final class DefaultAeronOutbound implements OnDisposable, AeronOutbound {
   /**
    * Init method.
    *
-   * @param channel channel
    * @param sessionId session id
    * @param streamId stream id
    * @return initialization handle
    */
-  public Mono<Void> initialise(String channel, long sessionId, int streamId) {
+  public Mono<Void> initialise(long sessionId, int streamId) {
     return Mono.defer(
         () -> {
           AeronEventLoop eventLoop = resources.nextEventLoop();
@@ -85,8 +92,7 @@ public final class DefaultAeronOutbound implements OnDisposable, AeronOutbound {
               .doOnSuccess(this::setPublication)
               .doOnSuccess(
                   result ->
-                      setSequencer(
-                          new AeronWriteSequencer(category, publication, sessionId, eventLoop)))
+                      setSequencer(new AeronWriteSequencer(sessionId, publication, eventLoop)))
               .flatMap(
                   result -> {
                     Duration retryInterval = Duration.ofMillis(100);
@@ -101,11 +107,11 @@ public final class DefaultAeronOutbound implements OnDisposable, AeronOutbound {
                         .then()
                         .onErrorResume(
                             throwable -> {
-                              String errMessage =
-                                  String.format(
-                                      "Publication %s for sending data in not connected during %s",
-                                      publication, connectTimeout);
-                              return Mono.error(new RuntimeException(errMessage, throwable));
+                              logger.warn(
+                                  "Failed to connect publication {} for sending data during {}",
+                                  publication,
+                                  connectTimeout);
+                              return Mono.error(throwable);
                             });
                   });
         });

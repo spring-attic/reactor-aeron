@@ -119,20 +119,27 @@ public class AeronResources implements Disposable, AutoCloseable {
 
     Publication publication = aeron.addPublication(channel, streamId);
 
-    if (logger.isDebugEnabled()) {
-      logger.debug(
-          "[{}] Added publication, sessionId={} {}",
-          category,
-          sessionId,
-          AeronUtils.format(publication));
-    }
-
     MessagePublication messagePublication =
         new MessagePublication(category, publication, options, eventLoop);
 
     return eventLoop
         .register(messagePublication)
-        .doOnError(ex -> publication.close())
+        .doOnError(
+            ex -> {
+              logger.error(
+                  "Failed to register publication {} on eventLoop {}, cause: {}",
+                  AeronUtils.format(publication),
+                  eventLoop,
+                  ex);
+              publication.close();
+            })
+        .doOnSuccess(
+            avoid ->
+                logger.debug(
+                    "[{}] Added publication, sessionId={} {}",
+                    category,
+                    sessionId,
+                    AeronUtils.format(publication)))
         .thenReturn(messagePublication);
   }
 
