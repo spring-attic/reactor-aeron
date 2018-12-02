@@ -1,148 +1,149 @@
 package reactor.aeron;
 
-import io.aeron.Aeron;
+import io.aeron.ChannelUriStringBuilder;
 import java.time.Duration;
+import java.util.Objects;
+import java.util.function.Consumer;
 
-/** Aeron options. */
-public class AeronOptions {
+public final class AeronOptions {
 
-  private static final String DEFAULT_SERVER_CHANNEL = "aeron:udp?endpoint=localhost:12000";
+  public static final Duration ACK_TIMEOUT = Duration.ofSeconds(10);
+  public static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
+  public static final Duration BACKPRESSURE_TIMEOUT = Duration.ofSeconds(5);
+  public static final int CONTROL_STREAM_ID = 1;
 
-  private static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = (int) Duration.ofSeconds(5).toMillis();
+  private final ChannelUriStringBuilder serverChannel;
+  private final ChannelUriStringBuilder clientChannel;
+  private final Duration ackTimeout;
+  private final Duration connectTimeout;
+  private final Duration backpressureTimeout;
+  private final int controlStreamId;
 
-  private static final int DEFAULT_CONTROL_BACKPRESSURE_TIMEOUT_MILLIS =
-      (int) Duration.ofSeconds(5).toMillis();
-
-  private static final int DEFAULT_BACKPRESSURE_TIMEOUT_MILLIS =
-      (int) Duration.ofSeconds(5).toMillis();
-
-  private String serverChannel = DEFAULT_SERVER_CHANNEL;
-
-  private int serverStreamId = 1;
-
-  private Aeron aeron;
-
-  private int connectTimeoutMillis = DEFAULT_CONNECT_TIMEOUT_MILLIS;
-
-  private int controlBackpressureTimeoutMillis = DEFAULT_CONTROL_BACKPRESSURE_TIMEOUT_MILLIS;
-
-  private int backpressureTimeoutMillis = DEFAULT_BACKPRESSURE_TIMEOUT_MILLIS;
-
-  /**
-   * Return connect tieout millis.
-   *
-   * @return connect timeout millis
-   */
-  public int connectTimeoutMillis() {
-    return connectTimeoutMillis;
+  private AeronOptions(Builder builder) {
+    this.serverChannel = builder.serverChannel.validate();
+    this.clientChannel = builder.clientChannel.validate();
+    this.ackTimeout = validate(builder.ackTimeout, "ackTimeout");
+    this.connectTimeout = validate(builder.connectTimeout, "connectTimeout");
+    this.backpressureTimeout = validate(builder.backpressureTimeout, "backpressureTimeout");
+    this.controlStreamId = validate(builder.controlStreamId, "controlStreamId");
   }
 
-  /**
-   * Setter for connect timeout millis.
-   *
-   * @param connectTimeoutMillis connect timeout millis
-   */
-  public void connectTimeoutMillis(int connectTimeoutMillis) {
-    if (connectTimeoutMillis <= 0) {
-      throw new IllegalArgumentException(
-          "connectTimeoutMillis > 0 expected, but got: " + connectTimeoutMillis);
-    }
-
-    this.connectTimeoutMillis = connectTimeoutMillis;
+  public static Builder builder() {
+    return new Builder();
   }
 
-  /**
-   * Return control backpressure timeout millis.
-   *
-   * @return control backpressure timeout millis
-   */
-  public int controlBackpressureTimeoutMillis() {
-    return controlBackpressureTimeoutMillis;
-  }
-
-  /**
-   * Setter control backpressure timeout millis.
-   *
-   * @param controlBackpressureTimeoutMillis control backpressure timeout millis
-   */
-  public void controlBackpressureTimeoutMillis(int controlBackpressureTimeoutMillis) {
-    if (controlBackpressureTimeoutMillis <= 0) {
-      throw new IllegalArgumentException(
-          "controlBackpressureTimeoutMillis > 0 expected, but got: "
-              + controlBackpressureTimeoutMillis);
-    }
-
-    this.controlBackpressureTimeoutMillis = controlBackpressureTimeoutMillis;
-  }
-
-  /**
-   * Setter for server channel.
-   *
-   * @param serverChannel server channel
-   */
-  public void serverChannel(String serverChannel) {
-    this.serverChannel = serverChannel;
-  }
-
-  /**
-   * Returns server channel.
-   *
-   * @return server channel
-   */
   public String serverChannel() {
-    return serverChannel;
+    return serverChannel.build();
   }
 
-  public int serverStreamId() {
-    return serverStreamId;
+  public String clientChannel() {
+    return clientChannel.build();
   }
 
-  /**
-   * Setter for server stream id.
-   *
-   * @param serverStreamId server stream id
-   */
-  public void serverStreamId(int serverStreamId) {
-    if (serverStreamId <= 0) {
-      throw new IllegalArgumentException("serverStreamId > 0 expected, but got: " + serverStreamId);
+  public Duration ackTimeout() {
+    return ackTimeout;
+  }
+
+  public Duration connectTimeout() {
+    return connectTimeout;
+  }
+
+  public Duration backpressureTimeout() {
+    return backpressureTimeout;
+  }
+
+  public int controlStreamId() {
+    return controlStreamId;
+  }
+
+  private Duration validate(Duration value, String message) {
+    Objects.requireNonNull(value, message);
+    if (value.compareTo(Duration.ZERO) <= 0) {
+      throw new IllegalArgumentException(message + " > 0 expected, but got: " + value);
+    }
+    return value;
+  }
+
+  private int validate(Integer value, String message) {
+    Objects.requireNonNull(value, message);
+    if (value <= 0) {
+      throw new IllegalArgumentException(message + " > 0 expected, but got: " + value);
+    }
+    return value;
+  }
+
+  public static class Builder {
+
+    private ChannelUriStringBuilder serverChannel = serverChannelBuilder();
+    private ChannelUriStringBuilder clientChannel = clientChannelBuilder();
+    private Duration ackTimeout = ACK_TIMEOUT;
+    private Duration connectTimeout = CONNECT_TIMEOUT;
+    private Duration backpressureTimeout = BACKPRESSURE_TIMEOUT;
+    private Integer controlStreamId = CONTROL_STREAM_ID;
+
+    private Builder() {}
+
+    public Builder serverChannel(ChannelUriStringBuilder serverChannel) {
+      this.serverChannel = serverChannel;
+      return this;
     }
 
-    this.serverStreamId = serverStreamId;
-  }
-
-  public Aeron getAeron() {
-    return aeron;
-  }
-
-  /**
-   * Setter for aeron.
-   *
-   * @param aeron aeron
-   */
-  public void aeron(Aeron aeron) {
-    this.aeron = aeron;
-  }
-
-  /**
-   * Returns backpressure timeout millis.
-   *
-   * @return backpressure timeout millis
-   */
-  public int backpressureTimeoutMillis() {
-    return backpressureTimeoutMillis;
-  }
-
-  /**
-   * Setter for backpressure timeout millis.
-   *
-   * @param backpressureTimeoutMillis backpressure timeout millis
-   */
-  public void backpressureTimeoutMillis(int backpressureTimeoutMillis) {
-    if (backpressureTimeoutMillis <= 0) {
-      throw new IllegalArgumentException(
-          "backpressureTimeoutMillis > 0 expected, but got: " + backpressureTimeoutMillis);
+    /**
+     * Sets server uri via consumer.
+     *
+     * @param consumer consumer
+     * @return this builder
+     */
+    public Builder serverChannel(Consumer<ChannelUriStringBuilder> consumer) {
+      ChannelUriStringBuilder channelBuilder = serverChannelBuilder();
+      consumer.accept(channelBuilder);
+      this.serverChannel = channelBuilder;
+      return this;
     }
 
-    this.backpressureTimeoutMillis = backpressureTimeoutMillis;
+    public Builder connectTimeout(Duration connectTimeout) {
+      this.connectTimeout = connectTimeout;
+      return this;
+    }
+
+    public Builder controlStreamId(int controlStreamId) {
+      this.controlStreamId = controlStreamId;
+      return this;
+    }
+
+    public Builder clientChannel(ChannelUriStringBuilder clientChannel) {
+      this.clientChannel = clientChannel;
+      return this;
+    }
+
+    /**
+     * Sets client uri via consumer.
+     *
+     * @param consumer consumer
+     * @return this builder
+     */
+    public Builder clientChannel(Consumer<ChannelUriStringBuilder> consumer) {
+      ChannelUriStringBuilder builder = clientChannelBuilder();
+      consumer.accept(builder);
+      this.clientChannel = builder;
+      return this;
+    }
+
+    public Builder ackTimeout(Duration ackTimeout) {
+      this.ackTimeout = ackTimeout;
+      return this;
+    }
+
+    private ChannelUriStringBuilder serverChannelBuilder() {
+      return new ChannelUriStringBuilder().reliable(true).media("udp");
+    }
+
+    private ChannelUriStringBuilder clientChannelBuilder() {
+      return new ChannelUriStringBuilder().reliable(true).media("udp").endpoint("localhost:0");
+    }
+
+    public AeronOptions build() {
+      return new AeronOptions(this);
+    }
   }
 }

@@ -19,8 +19,6 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
 
   private final String channel;
 
-  private final AeronOptions options;
-
   private volatile AeronWriteSequencer sequencer;
 
   private volatile DefaultMessagePublication publication;
@@ -31,14 +29,11 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
    * @param category category
    * @param aeronResources aeronResources
    * @param channel channel
-   * @param options options
    */
-  public DefaultAeronOutbound(
-      String category, AeronResources aeronResources, String channel, AeronOptions options) {
+  public DefaultAeronOutbound(String category, AeronResources aeronResources, String channel) {
     this.category = category;
     this.aeronResources = aeronResources;
     this.channel = channel;
-    this.options = options;
   }
 
   @Override
@@ -65,7 +60,7 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
    * @param streamId stream id
    * @return initialization handle
    */
-  public Mono<Void> initialise(long sessionId, int streamId) {
+  public Mono<Void> initialise(long sessionId, int streamId, AeronOptions options) {
     return Mono.defer(
         () -> {
           Publication aeronPublication =
@@ -75,8 +70,8 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
                   aeronResources,
                   aeronPublication,
                   category,
-                  options.connectTimeoutMillis(),
-                  options.backpressureTimeoutMillis());
+                  options.connectTimeout().toMillis(),
+                  options.backpressureTimeout().toMillis());
           this.sequencer = aeronResources.writeSequencer(category, publication, sessionId);
 
           int timeoutMillis = options.connectTimeoutMillis();

@@ -17,7 +17,10 @@ public class ServerServerSends {
     try (AeronResources aeronResources = AeronResources.start()) {
 
       AeronServer.create("server", aeronResources)
-          .options(options -> options.serverChannel("aeron:udp?endpoint=localhost:13000"))
+          .options(
+              options ->
+                  options.serverChannel(
+                      channel -> channel.media("udp").reliable(true).endpoint("localhost:13000")))
           .handle(
               connection ->
                   connection
