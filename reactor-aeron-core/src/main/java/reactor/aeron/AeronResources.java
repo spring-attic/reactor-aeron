@@ -257,14 +257,14 @@ public class AeronResources implements Disposable, AutoCloseable {
   private void onClose() {
     logger.info("{} shutdown initiated", this);
 
-    //    Optional.ofNullable(sender) //
-    //        .filter(s -> !s.isDisposed())
-    //        .ifPresent(Scheduler::dispose);
-    //
-    //    Optional.ofNullable(receiver) //
-    //        .filter(s -> !s.isDisposed())
-    //        .ifPresent(Scheduler::dispose);
-    // TODO at this point close EventLoop
+    Optional.ofNullable(receiver).filter(s -> !s.isDisposed()).ifPresent(Scheduler::dispose);
+
+    try {
+      eventLoop.dispose();
+      eventLoop.onDispose().block();
+    } catch (Exception ignored) {
+      // no-op
+    }
 
     CloseHelper.quietClose(aeron);
 
