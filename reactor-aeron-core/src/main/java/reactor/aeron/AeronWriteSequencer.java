@@ -268,12 +268,7 @@ final class AeronWriteSequencer {
       } else {
         eventLoop
             .execute(sink -> onNextInternal(t, sink))
-            .subscribe(
-                null,
-                th -> {
-                  // no-op
-                  // TODO Sergei G says we have to dispose dataStream here
-                });
+            .subscribe(null, this::disposeCurrentDataStream);
       }
     }
 
@@ -289,16 +284,13 @@ final class AeronWriteSequencer {
                   requestFromUpstream(actual);
                 }
               })
-          .subscribe(
-              null,
-              ex -> {
-                cancel();
+          .subscribe(null, this::disposeCurrentDataStream);
+    }
 
-                promise.error(
-                    new Exception("Failed to publish signal into session: " + sessionId, ex));
-
-                parent.drain();
-              });
+    void disposeCurrentDataStream(Throwable th) {
+      cancel();
+      promise.error(new Exception("Failed to publish signal into session: " + sessionId, th));
+      parent.drain();
     }
 
     @Override
