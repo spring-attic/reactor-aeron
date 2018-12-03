@@ -102,7 +102,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
             category,
             toString(),
             options.connectTimeout());
-        ex = new RuntimeException("Failed to connect withinh timouet");
+        ex = new RuntimeException("Failed to connect within timeout");
       }
     }
 
