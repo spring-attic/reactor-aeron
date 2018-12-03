@@ -109,6 +109,16 @@ public class AeronResources implements Disposable, AutoCloseable {
     return eventLoop;
   }
 
+  /**
+   * Adds and registers new message publication.
+   *
+   * @param category category
+   * @param channel channel
+   * @param streamId stream id
+   * @param options options
+   * @param eventLoop event loop where publocation would be registered
+   * @return mono handle of creation and registering of message publicartiotn
+   */
   public Mono<MessagePublication> messagePublication(
       String category,
       String channel,

@@ -1,5 +1,7 @@
 package reactor.aeron.server;
 
+import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -14,8 +16,10 @@ import reactor.aeron.AeronUtils;
 import reactor.aeron.Connection;
 import reactor.aeron.ControlMessageSubscriber;
 import reactor.aeron.DefaultAeronOutbound;
+import reactor.aeron.MessagePublication;
 import reactor.aeron.MessageType;
 import reactor.aeron.OnDisposable;
+import reactor.aeron.Protocol;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.scheduler.Schedulers;
@@ -34,24 +38,24 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
   private final AeronServerSettings settings;
   private final String category;
   private final AeronOptions options;
-  private final AeronResources aeronResources;
-
+  private final AeronResources resources;
   private final AtomicLong nextSessionId = new AtomicLong(0);
-
-  private final List<SessionHandler> handlers = new CopyOnWriteArrayList<>();
 
   private final io.aeron.Subscription controlSubscription;
 
+  private final List<SessionHandler> handlers = new CopyOnWriteArrayList<>();
+
+  // TODO refactor OnDispose mechanism
   private final MonoProcessor<Void> onClose = MonoProcessor.create();
 
   ServerHandler(AeronServerSettings settings) {
     this.settings = settings;
     this.category = settings.name();
     this.options = settings.options();
-    this.aeronResources = settings.aeronResources();
+    this.resources = settings.aeronResources();
 
     this.controlSubscription =
-        aeronResources.controlSubscription(
+        resources.controlSubscription(
             category,
             options.serverChannel(),
             CONTROL_STREAM_ID,
@@ -164,10 +168,10 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
   private void dispose0() {
     handlers.forEach(SessionHandler::dispose);
     handlers.clear();
-    aeronResources.close(controlSubscription);
+    resources.close(controlSubscription);
   }
 
-  class SessionHandler implements Connection {
+  private class SessionHandler implements Connection {
 
     private final Logger logger = Loggers.getLogger(SessionHandler.class);
 
@@ -178,12 +182,13 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
     private final int serverSessionStreamId;
     private final UUID connectRequestId;
     private final long sessionId;
-    private final ServerConnector connector;
+
+    private final Mono<MessagePublication> controlPublication;
 
     // TODO refactor OnDispose mechanism
     private final MonoProcessor<Void> onClose = MonoProcessor.create();
 
-    SessionHandler(
+    private SessionHandler(
         String clientChannel,
         int clientSessionStreamId,
         int clientControlStreamId,
@@ -193,31 +198,29 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
       this.clientSessionStreamId = clientSessionStreamId;
       this.clientChannel = clientChannel;
       this.outbound =
-          new DefaultAeronOutbound(category, options.clientChannel(), aeronResources, options);
+          new DefaultAeronOutbound(category, options.clientChannel(), resources, options);
       this.connectRequestId = connectRequestId;
       this.sessionId = sessionId;
       this.serverSessionStreamId = serverSessionStreamId;
-      this.inbound = new AeronServerInbound(category, aeronResources);
-      this.connector =
-          new ServerConnector(
-              category,
-              aeronResources,
-              clientChannel,
-              clientControlStreamId,
-              sessionId,
-              serverSessionStreamId,
-              connectRequestId,
-              options);
+      this.inbound = new AeronServerInbound(category, resources);
+
+      this.controlPublication =
+          Mono.defer(() -> newControlPublication(clientChannel, clientControlStreamId)).cache();
 
       this.onClose
           .doOnTerminate(this::dispose0)
           .subscribe(null, th -> logger.warn("SessionHandler disposed with error: {}", th));
     }
 
+    private Mono<MessagePublication> newControlPublication(
+        String clientChannel, int clientControlStreamId) {
+      return resources.messagePublication(
+          category, clientChannel, clientControlStreamId, options, resources.nextEventLoop());
+    }
+
     Mono<? extends Connection> initialise() {
 
-      return connector
-          .connect()
+      return connect()
           .then(outbound.initialise(sessionId, clientSessionStreamId))
           .then(
               inbound.initialise(
@@ -265,18 +268,6 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
     }
 
     @Override
-    public void dispose() {
-      if (!onClose.isDisposed()) {
-        onClose.onComplete();
-      }
-    }
-
-    @Override
-    public boolean isDisposed() {
-      return onClose.isDisposed();
-    }
-
-    @Override
     public String toString() {
       final StringBuilder sb = new StringBuilder("ServerSession{");
       sb.append("sessionId=").append(sessionId);
@@ -288,13 +279,66 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
       return sb.toString();
     }
 
+    @Override
+    public void dispose() {
+      if (!onClose.isDisposed()) {
+        onClose.onComplete();
+      }
+    }
+
+    @Override
+    public boolean isDisposed() {
+      return onClose.isDisposed();
+    }
+
     private void dispose0() {
       handlers.remove(this);
-      connector.dispose();
+
+      // connector.dispose(); todo
+      // === connector.dispose() ===== BEGING ===
+      // resources.close(clientControlPublication);
+      // === connector.dispose() ===== END ===
+
       outbound.dispose();
       inbound.dispose();
 
       logger.debug("[{}] Closed session with sessionId: {}", category, sessionId);
+    }
+
+    Mono<Void> connect() {
+      return Mono.defer(
+          () -> {
+            Duration retryInterval = Duration.ofMillis(100);
+            Duration connectTimeout = options.connectTimeout().plus(options.backpressureTimeout());
+            long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
+
+            return controlPublication.flatMap(
+                publication ->
+                    sendConnectAck(publication)
+                        .retryBackoff(retryCount, retryInterval, retryInterval)
+                        .timeout(connectTimeout)
+                        .then()
+                        .doOnSuccess(
+                            avoid ->
+                                logger.debug(
+                                    "[{}] Sent {} to {}",
+                                    category,
+                                    MessageType.CONNECT_ACK,
+                                    publication))
+                        .onErrorResume(
+                            throwable -> {
+                              String errMessage =
+                                  String.format(
+                                      "Failed to send %s, publication %s is not connected",
+                                      MessageType.CONNECT_ACK, publication);
+                              return Mono.error(new RuntimeException(errMessage, throwable));
+                            }));
+          });
+    }
+
+    private Mono<Void> sendConnectAck(MessagePublication publication) {
+      ByteBuffer buffer = Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId);
+      return publication.enqueue(MessageType.CONNECT_ACK, buffer, sessionId);
     }
   }
 }

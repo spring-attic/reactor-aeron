@@ -3,7 +3,6 @@ package reactor.aeron.client;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedGenerator;
 import io.aeron.Image;
-import io.aeron.Subscription;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Optional;
@@ -40,11 +39,13 @@ public final class AeronClientConnector implements Disposable {
   private final String name;
   private final AeronOptions options;
   private final AeronResources resources;
-  private final ClientControlMessageSubscriber controlMessageSubscriber;
-  private final Subscription controlSubscription;
   private final int clientControlStreamId;
   private final String clientChannel;
+
   private final List<ClientHandler> handlers = new CopyOnWriteArrayList<>();
+
+  private final io.aeron.Subscription controlSubscription;
+  private final ClientControlMessageSubscriber controlMessageSubscriber;
 
   AeronClientConnector(AeronClientSettings settings) {
     this.options = settings.options();
@@ -122,16 +123,12 @@ public final class AeronClientConnector implements Disposable {
           .doOnTerminate(this::dispose0)
           .subscribe(null, th -> logger.warn("SessionHandler disposed with error: {}", th));
 
-      this.controlPublication =
-          Mono.defer(
-                  () ->
-                      resources.messagePublication(
-                          name,
-                          serverChannel,
-                          CONTROL_STREAM_ID,
-                          options,
-                          resources.nextEventLoop()))
-              .cache();
+      this.controlPublication = Mono.defer(this::newControlPublication).cache();
+    }
+
+    private Mono<MessagePublication> newControlPublication() {
+      return resources.messagePublication(
+          name, serverChannel, CONTROL_STREAM_ID, options, resources.nextEventLoop());
     }
 
     Mono<Connection> initialise() {
@@ -263,18 +260,6 @@ public final class AeronClientConnector implements Disposable {
     }
 
     @Override
-    public void dispose() {
-      if (!onClose.isDisposed()) {
-        onClose.onComplete();
-      }
-    }
-
-    @Override
-    public boolean isDisposed() {
-      return onClose.isDisposed();
-    }
-
-    @Override
     public String toString() {
       final StringBuilder sb = new StringBuilder("ClientSession{");
       sb.append("sessionId=").append(sessionId);
@@ -284,6 +269,18 @@ public final class AeronClientConnector implements Disposable {
       sb.append(", serverSessionStreamId=").append(serverSessionStreamId);
       sb.append('}');
       return sb.toString();
+    }
+
+    @Override
+    public void dispose() {
+      if (!onClose.isDisposed()) {
+        onClose.onComplete();
+      }
+    }
+
+    @Override
+    public boolean isDisposed() {
+      return onClose.isDisposed();
     }
 
     public void dispose0() {

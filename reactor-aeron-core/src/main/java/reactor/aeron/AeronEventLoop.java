@@ -35,22 +35,16 @@ public final class AeronEventLoop implements OnDisposable {
   // Senders
   private final List<MessagePublication> publications = new ArrayList<>();
 
-  /**
-   * Default constructor.
-   *
-   * <p>
-   */
   AeronEventLoop() {
-    workerMono =
-        Mono.fromCallable(
-                () -> {
-                  ThreadFactory threadFactory = defaultThreadFactory();
-                  Worker w = new Worker();
-                  thread = threadFactory.newThread(w);
-                  thread.start();
-                  return w;
-                })
-            .cache();
+    workerMono = Mono.fromCallable(this::createWorker).cache();
+  }
+
+  private Worker createWorker() {
+    ThreadFactory threadFactory = defaultThreadFactory();
+    Worker w = new Worker();
+    thread = threadFactory.newThread(w);
+    thread.start();
+    return w;
   }
 
   boolean inEventLoop() {
@@ -65,18 +59,30 @@ public final class AeronEventLoop implements OnDisposable {
     return worker().flatMap(w -> command(sink -> register(publication, sink)));
   }
 
+  private void register(MessagePublication publication, MonoSink<Void> sink) {
+    Objects.requireNonNull(publication, "messagePublication must be not null");
+    publications.add(publication);
+    sink.success();
+  }
+
   public Mono<Void> dispose(MessagePublication publication) {
     return worker().flatMap(w -> command(sink -> dispose(publication, sink)));
   }
 
   @Override
-  public Mono<Void> onDispose() {
-    return onDispose;
+  public void dispose() {
+    dispose.onComplete();
+  }
+
+  private void dispose(MessagePublication publication, MonoSink<Void> sink) {
+    publications.removeIf(p -> p == publication);
+    Optional.ofNullable(publication).ifPresent(MessagePublication::close);
+    sink.success();
   }
 
   @Override
-  public void dispose() {
-    dispose.onComplete();
+  public Mono<Void> onDispose() {
+    return onDispose;
   }
 
   @Override
@@ -107,18 +113,6 @@ public final class AeronEventLoop implements OnDisposable {
     return dispose //
         .map(avoid -> (T) avoid)
         .switchIfEmpty(Mono.error(Exceptions::failWithRejected));
-  }
-
-  private void register(MessagePublication publication, MonoSink<Void> sink) {
-    Objects.requireNonNull(publication, "messagePublication must be not null");
-    publications.add(publication);
-    sink.success();
-  }
-
-  private void dispose(MessagePublication publication, MonoSink<Void> sink) {
-    publications.removeIf(p -> p == publication);
-    Optional.ofNullable(publication).ifPresent(MessagePublication::close);
-    sink.success();
   }
 
   /**

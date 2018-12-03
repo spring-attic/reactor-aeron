@@ -38,7 +38,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
    * @param category category
    * @param publication publication
    */
-  public MessagePublication(
+  MessagePublication(
       String category, Publication publication, AeronOptions options, AeronEventLoop eventLoop) {
     this.category = category;
     this.publication = publication;
@@ -46,12 +46,20 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     this.eventLoop = eventLoop;
   }
 
-  public Mono<Void> enqueue(MessageType msgType, ByteBuffer msgBody, long sessionId) {
+  /**
+   * Enqueues buffer for future sending.
+   *
+   * @param messageType message type
+   * @param buffer buffer
+   * @param sessionId session id
+   * @return mono handle
+   */
+  public Mono<Void> enqueue(MessageType messageType, ByteBuffer buffer, long sessionId) {
     return Mono.create(
         sink -> {
           boolean result = false;
           if (!isDisposed()) {
-            result = publishTasks.offer(new PublishTask(msgType, msgBody, sessionId, sink));
+            result = publishTasks.offer(new PublishTask(messageType, buffer, sessionId, sink));
           }
           if (!result) {
             sink.error(Exceptions.failWithRejected());
@@ -59,6 +67,11 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
         });
   }
 
+  /**
+   * Proceed with processing of tasks.
+   *
+   * @return true - success; false - failure
+   */
   public boolean proceed() {
     PublishTask task = publishTasks.peek();
     if (task == null) {
