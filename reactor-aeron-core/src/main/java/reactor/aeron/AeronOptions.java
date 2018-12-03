@@ -1,7 +1,6 @@
 package reactor.aeron;
 
 import io.aeron.ChannelUriStringBuilder;
-import io.aeron.driver.Configuration;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -11,14 +10,12 @@ public final class AeronOptions {
   public static final Duration ACK_TIMEOUT = Duration.ofSeconds(10);
   public static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
   public static final Duration BACKPRESSURE_TIMEOUT = Duration.ofSeconds(5);
-  public static final int CONTROL_STREAM_ID = 1;
 
   private final ChannelUriStringBuilder serverChannel;
   private final ChannelUriStringBuilder clientChannel;
   private final Duration ackTimeout;
   private final Duration connectTimeout;
   private final Duration backpressureTimeout;
-  private final int controlStreamId;
 
   private AeronOptions(Builder builder) {
     this.serverChannel = builder.serverChannel.validate();
@@ -26,7 +23,6 @@ public final class AeronOptions {
     this.ackTimeout = validate(builder.ackTimeout, "ackTimeout");
     this.connectTimeout = validate(builder.connectTimeout, "connectTimeout");
     this.backpressureTimeout = validate(builder.backpressureTimeout, "backpressureTimeout");
-    this.controlStreamId = validate(builder.controlStreamId, "controlStreamId");
   }
 
   public static Builder builder() {
@@ -53,10 +49,6 @@ public final class AeronOptions {
     return backpressureTimeout;
   }
 
-  public int controlStreamId() {
-    return controlStreamId;
-  }
-
   private Duration validate(Duration value, String message) {
     Objects.requireNonNull(value, message);
     if (value.compareTo(Duration.ZERO) <= 0) {
@@ -80,7 +72,6 @@ public final class AeronOptions {
     private Duration ackTimeout = ACK_TIMEOUT;
     private Duration connectTimeout = CONNECT_TIMEOUT;
     private Duration backpressureTimeout = BACKPRESSURE_TIMEOUT;
-    private Integer controlStreamId = CONTROL_STREAM_ID;
 
     private Builder() {}
 
@@ -108,7 +99,6 @@ public final class AeronOptions {
     }
 
     public Builder controlStreamId(int controlStreamId) {
-      this.controlStreamId = controlStreamId;
       return this;
     }
 

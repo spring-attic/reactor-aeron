@@ -17,7 +17,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.MonoSink;
 
-final class AeronEventLoop implements OnDisposable {
+public final class AeronEventLoop implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronEventLoop.class);
 
@@ -33,7 +33,7 @@ final class AeronEventLoop implements OnDisposable {
   private final Queue<CommandTask> commandTasks = new ConcurrentLinkedQueue<>();
 
   // Senders
-  private final List<MessagePublication> messagePublications = new ArrayList<>();
+  private final List<MessagePublication> publications = new ArrayList<>();
 
   /**
    * Default constructor.
@@ -57,16 +57,16 @@ final class AeronEventLoop implements OnDisposable {
     return thread == Thread.currentThread();
   }
 
-  Mono<Void> execute(Consumer<MonoSink<Void>> taskConsumer) {
-    return worker().flatMap(w -> command(taskConsumer));
+  public Mono<Void> execute(Consumer<MonoSink<Void>> consumer) {
+    return worker().flatMap(w -> command(consumer));
   }
 
-  Mono<Void> register(MessagePublication messagePublication) {
-    return worker().flatMap(w -> command(sink -> register(messagePublication, sink)));
+  public Mono<Void> register(MessagePublication publication) {
+    return worker().flatMap(w -> command(sink -> register(publication, sink)));
   }
 
-  Mono<Void> dispose(MessagePublication messagePublication) {
-    return worker().flatMap(w -> command(sink -> dispose(messagePublication, sink)));
+  public Mono<Void> dispose(MessagePublication publication) {
+    return worker().flatMap(w -> command(sink -> dispose(publication, sink)));
   }
 
   @Override
@@ -109,15 +109,15 @@ final class AeronEventLoop implements OnDisposable {
         .switchIfEmpty(Mono.error(Exceptions::failWithRejected));
   }
 
-  private void register(MessagePublication messagePublication, MonoSink<Void> sink) {
-    Objects.requireNonNull(messagePublication, "messagePublication must be not null");
-    messagePublications.add(messagePublication);
+  private void register(MessagePublication publication, MonoSink<Void> sink) {
+    Objects.requireNonNull(publication, "messagePublication must be not null");
+    publications.add(publication);
     sink.success();
   }
 
-  private void dispose(MessagePublication messagePublication, MonoSink<Void> sink) {
-    messagePublications.removeIf(p -> p == messagePublication);
-    Optional.ofNullable(messagePublication).ifPresent(MessagePublication::close);
+  private void dispose(MessagePublication publication, MonoSink<Void> sink) {
+    publications.removeIf(p -> p == publication);
+    Optional.ofNullable(publication).ifPresent(MessagePublication::close);
     sink.success();
   }
 
@@ -149,8 +149,8 @@ final class AeronEventLoop implements OnDisposable {
         // Process publications
         boolean result = false;
         //noinspection ForLoopReplaceableByForEach
-        for (int i = 0, n = messagePublications.size(); i < n; i++) {
-          result |= messagePublications.get(i).proceed();
+        for (int i = 0, n = publications.size(); i < n; i++) {
+          result |= publications.get(i).proceed();
         }
 
         idleStrategy.idle(result ? 1 : 0);
@@ -177,12 +177,12 @@ final class AeronEventLoop implements OnDisposable {
     }
 
     private void disposePublications() {
-      for (Iterator<MessagePublication> it = messagePublications.iterator(); it.hasNext(); ) {
-        MessagePublication messagePublication = it.next();
+      for (Iterator<MessagePublication> it = publications.iterator(); it.hasNext(); ) {
+        MessagePublication publication = it.next();
         try {
-          messagePublication.close();
+          publication.close();
         } catch (Exception ex) {
-          logger.warn("Exception occurred on closing {}, cause: {}", messagePublication, ex);
+          logger.warn("Exception occurred on closing {}, cause: {}", publication, ex);
         }
         it.remove();
       }

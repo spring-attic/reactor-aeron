@@ -27,6 +27,7 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
   private static final Logger logger = Loggers.getLogger(ServerHandler.class);
 
   private static final int CONTROL_SESSION_ID = 0;
+  private static final int CONTROL_STREAM_ID = 1;
 
   private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
@@ -53,7 +54,7 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
         aeronResources.controlSubscription(
             category,
             options.serverChannel(),
-            options.controlStreamId(),
+            CONTROL_STREAM_ID,
             "to receive control requests on",
             CONTROL_SESSION_ID,
             this,
@@ -171,21 +172,15 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
     private final Logger logger = Loggers.getLogger(SessionHandler.class);
 
     private final DefaultAeronOutbound outbound;
-
     private final AeronServerInbound inbound;
-
     private final String clientChannel;
-
     private final int clientSessionStreamId;
-
     private final int serverSessionStreamId;
-
     private final UUID connectRequestId;
-
     private final long sessionId;
-
     private final ServerConnector connector;
 
+    // TODO refactor OnDispose mechanism
     private final MonoProcessor<Void> onClose = MonoProcessor.create();
 
     SessionHandler(

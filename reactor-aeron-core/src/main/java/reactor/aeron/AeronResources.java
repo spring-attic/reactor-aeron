@@ -112,7 +112,6 @@ public class AeronResources implements Disposable, AutoCloseable {
   public Mono<MessagePublication> messagePublication(
       String category,
       String channel,
-      long sessionId,
       int streamId,
       AeronOptions options,
       AeronEventLoop eventLoop) {
@@ -134,12 +133,7 @@ public class AeronResources implements Disposable, AutoCloseable {
               publication.close();
             })
         .doOnSuccess(
-            avoid ->
-                logger.debug(
-                    "[{}] Added publication, sessionId={} {}",
-                    category,
-                    sessionId,
-                    AeronUtils.format(publication)))
+            avoid -> logger.debug("[{}] Added publication: {}", category, messagePublication))
         .thenReturn(messagePublication);
   }
 

@@ -67,14 +67,6 @@ public final class DefaultAeronOutbound implements OnDisposable, AeronOutbound {
     return publication != null ? publication.onDispose() : Mono.empty();
   }
 
-  private void setPublication(MessagePublication publication) {
-    this.publication = publication;
-  }
-
-  private void setSequencer(AeronWriteSequencer sequencer) {
-    this.sequencer = sequencer;
-  }
-
   /**
    * Init method.
    *
@@ -85,14 +77,14 @@ public final class DefaultAeronOutbound implements OnDisposable, AeronOutbound {
   public Mono<Void> initialise(long sessionId, int streamId) {
     return Mono.defer(
         () -> {
-          AeronEventLoop eventLoop = resources.nextEventLoop();
+          final AeronEventLoop eventLoop = resources.nextEventLoop();
 
           return resources
-              .messagePublication(category, channel, sessionId, streamId, options, eventLoop)
-              .doOnSuccess(this::setPublication)
+              .messagePublication(category, channel, streamId, options, eventLoop)
+              .doOnSuccess(result -> this.publication = result)
               .doOnSuccess(
                   result ->
-                      setSequencer(new AeronWriteSequencer(sessionId, publication, eventLoop)))
+                      this.sequencer = new AeronWriteSequencer(sessionId, publication, eventLoop))
               .flatMap(
                   result -> {
                     Duration retryInterval = Duration.ofMillis(100);
