@@ -1,6 +1,7 @@
 package reactor.aeron;
 
 import io.aeron.ChannelUriStringBuilder;
+import io.aeron.driver.Configuration;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -16,6 +17,7 @@ public final class AeronOptions {
   private final Duration ackTimeout;
   private final Duration connectTimeout;
   private final Duration backpressureTimeout;
+  private final int mtuLength;
 
   private AeronOptions(Builder builder) {
     this.serverChannel = builder.serverChannel.validate();
@@ -23,6 +25,7 @@ public final class AeronOptions {
     this.ackTimeout = validate(builder.ackTimeout, "ackTimeout");
     this.connectTimeout = validate(builder.connectTimeout, "connectTimeout");
     this.backpressureTimeout = validate(builder.backpressureTimeout, "backpressureTimeout");
+    this.mtuLength = builder.mtuLength;
   }
 
   public static Builder builder() {
@@ -49,6 +52,10 @@ public final class AeronOptions {
     return backpressureTimeout;
   }
 
+  public int mtuLength() {
+    return mtuLength;
+  }
+
   private Duration validate(Duration value, String message) {
     Objects.requireNonNull(value, message);
     if (value.compareTo(Duration.ZERO) <= 0) {
@@ -72,6 +79,7 @@ public final class AeronOptions {
     private Duration ackTimeout = ACK_TIMEOUT;
     private Duration connectTimeout = CONNECT_TIMEOUT;
     private Duration backpressureTimeout = BACKPRESSURE_TIMEOUT;
+    private int mtuLength = Configuration.MTU_LENGTH;
 
     private Builder() {}
 
@@ -122,6 +130,11 @@ public final class AeronOptions {
 
     public Builder ackTimeout(Duration ackTimeout) {
       this.ackTimeout = ackTimeout;
+      return this;
+    }
+
+    public Builder mtuLength(int mtuLength) {
+      this.mtuLength = mtuLength;
       return this;
     }
 

@@ -1,7 +1,6 @@
 package reactor.aeron;
 
 import io.aeron.Publication;
-import io.aeron.driver.Configuration;
 import io.aeron.logbuffer.BufferClaim;
 import java.nio.ByteBuffer;
 import java.time.Duration;
@@ -205,9 +204,8 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     }
 
     private long run() {
-      int mtuLength = Configuration.MTU_LENGTH; // TODO must come from options
       int capacity = msgBody.remaining() + Protocol.HEADER_SIZE;
-      if (capacity < mtuLength) {
+      if (capacity < options.mtuLength()) {
         BufferClaim bufferClaim = bufferClaims.get();
         long result = publication.tryClaim(capacity, bufferClaim);
         if (result > 0) {
