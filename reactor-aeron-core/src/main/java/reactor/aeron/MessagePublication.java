@@ -150,6 +150,9 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
   @Override
   public void close() {
+    if (!eventLoop.inEventLoop()) {
+      throw new IllegalStateException("Can only close aeron publication from within event loop");
+    }
     try {
       publication.close();
     } finally {
