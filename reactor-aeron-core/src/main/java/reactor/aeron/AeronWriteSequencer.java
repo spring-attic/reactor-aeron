@@ -287,7 +287,7 @@ final class AeronWriteSequencer {
           .subscribe(null, this::disposeCurrentDataStream);
     }
 
-    void disposeCurrentDataStream(Throwable th) {
+    private void disposeCurrentDataStream(Throwable th) {
       cancel();
       promise.error(new Exception("Failed to publish signal into session: " + sessionId, th));
       parent.drain();

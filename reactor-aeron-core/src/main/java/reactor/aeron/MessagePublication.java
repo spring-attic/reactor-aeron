@@ -21,6 +21,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
   private final ThreadLocal<BufferClaim> bufferClaims = ThreadLocal.withInitial(BufferClaim::new);
 
   private final String category;
+  private final int mtuLength;
   private final Publication publication;
   private final AeronOptions options;
   private final AeronEventLoop eventLoop;
@@ -38,8 +39,13 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
    * @param publication publication
    */
   MessagePublication(
-      String category, Publication publication, AeronOptions options, AeronEventLoop eventLoop) {
+      String category,
+      int mtuLength,
+      Publication publication,
+      AeronOptions options,
+      AeronEventLoop eventLoop) {
     this.category = category;
+    this.mtuLength = mtuLength;
     this.publication = publication;
     this.options = options;
     this.eventLoop = eventLoop;
@@ -205,7 +211,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
     private long run() {
       int capacity = msgBody.remaining() + Protocol.HEADER_SIZE;
-      if (capacity < options.mtuLength()) {
+      if (capacity < mtuLength) {
         BufferClaim bufferClaim = bufferClaims.get();
         long result = publication.tryClaim(capacity, bufferClaim);
         if (result > 0) {
