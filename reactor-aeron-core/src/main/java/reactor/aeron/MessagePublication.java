@@ -29,7 +29,6 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
   private final ManyToOneConcurrentLinkedQueue<PublishTask> publishTasks =
       new ManyToOneConcurrentLinkedQueue<>();
 
-  // TODO refactor OnDispose mechanism
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
   /**
