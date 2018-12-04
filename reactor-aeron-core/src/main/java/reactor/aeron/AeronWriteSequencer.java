@@ -261,7 +261,6 @@ final class AeronWriteSequencer {
 
     @Override
     public void onNext(ByteBuffer t) {
-      // TODO : think of lastWrite field
       AeronEventLoop eventLoop = parent.eventLoop;
       if (eventLoop.inEventLoop()) {
         onNextInternal(t, null);
@@ -273,7 +272,8 @@ final class AeronWriteSequencer {
     }
 
     private void onNextInternal(ByteBuffer byteBuffer, MonoSink<Void> sink) {
-      // TODO think what to do with passed sink
+      // TODO : think of lastWrite field
+      // TODO : think what to do with passed sink
       produced++;
 
       publication
