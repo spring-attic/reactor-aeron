@@ -150,9 +150,10 @@ public final class AeronEventLoop implements OnDisposable {
 
     @Override
     public void run() {
+      // Process commands, publications and subscriptions
       while (!dispose.isDisposed()) {
-        // Process commands
         for (; ; ) {
+          // Commands
           CommandTask task = commandTasks.poll();
           if (task == null) {
             break;
@@ -160,24 +161,26 @@ public final class AeronEventLoop implements OnDisposable {
           task.run();
         }
 
-        // Process publications
+        // Publications
         boolean result = false;
         //noinspection ForLoopReplaceableByForEach
         for (int i = 0, n = publications.size(); i < n; i++) {
           result |= publications.get(i).proceed();
         }
 
+        // TODO : add processing of subscriptinos (innerPollers)
+
         idleStrategy.idle(result ? 1 : 0);
       }
 
-      // Dispose commands
-      disposeCommandTasks();
-
-      // Dispose publications
-      disposePublications();
-
-      // Emit total dispose
-      onDispose.onComplete();
+      // Dispose publications, subscriptions and commands
+      try {
+        disposeCommandTasks();
+        disposeSubscriptions();
+        disposePublications();
+      } finally {
+        onDispose.onComplete();
+      }
     }
 
     private void disposeCommandTasks() {
@@ -196,7 +199,19 @@ public final class AeronEventLoop implements OnDisposable {
         try {
           publication.close();
         } catch (Exception ex) {
-          logger.warn("Exception occurred on closing {}, cause: {}", publication, ex);
+          logger.warn("Exception occurred on closing publication: {}, cause: {}", publication, ex);
+        }
+        it.remove();
+      }
+    }
+
+    private void disposeSubscriptions() {
+      for (Iterator<InnerPoller> it = subscriptions.iterator(); it.hasNext(); ) {
+        InnerPoller innerPoller = it.next();
+        try {
+          innerPoller.close();
+        } catch (Exception ex) {
+          logger.warn("Exception occurred on closing subscription: {}, cause: {}", innerPoller, ex);
         }
         it.remove();
       }

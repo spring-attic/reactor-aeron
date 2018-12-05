@@ -7,6 +7,7 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import org.reactivestreams.Subscription;
 import reactor.aeron.AeronInbound;
 import reactor.aeron.AeronOptions;
@@ -30,9 +31,6 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
   private static final Logger logger = Loggers.getLogger(ServerHandler.class);
 
-  private static final int CONTROL_SESSION_ID = 0;
-  private static final int CONTROL_STREAM_ID = 1;
-
   private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
   private final AeronServerSettings settings;
@@ -41,12 +39,10 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
   private final AeronResources resources;
   private final AtomicLong nextSessionId = new AtomicLong(0);
 
-  private final io.aeron.Subscription controlSubscription;
-
   private final List<SessionHandler> handlers = new CopyOnWriteArrayList<>();
 
-  // TODO refactor OnDispose mechanism
-  private final MonoProcessor<Void> onClose = MonoProcessor.create();
+  private final MonoProcessor<Void> dispose = MonoProcessor.create();
+  private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
   ServerHandler(AeronServerSettings settings) {
     this.settings = settings;
@@ -54,17 +50,8 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
     this.options = settings.options();
     this.resources = settings.aeronResources();
 
-    this.controlSubscription =
-        resources.controlSubscription(
-            category,
-            options.serverChannel(),
-            CONTROL_STREAM_ID,
-            this,
-            null,
-            null);
-
-    this.onClose
-        .doOnTerminate(this::dispose0)
+    this.dispose
+        .then(doDispose())
         .subscribe(null, th -> logger.warn("ServerHandler disposed with error: {}", th));
   }
 
@@ -148,25 +135,37 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
   @Override
   public void dispose() {
-    if (!isDisposed()) {
-      onClose.onComplete();
-    }
+    dispose.onComplete();
   }
 
   @Override
   public boolean isDisposed() {
-    return onClose.isDisposed();
+    return onDispose.isDisposed();
   }
 
   @Override
   public Mono<Void> onDispose() {
-    return onClose;
+    return onDispose;
   }
 
-  private void dispose0() {
-    handlers.forEach(SessionHandler::dispose);
-    handlers.clear();
-    resources.close(controlSubscription);
+  private Mono<Void> doDispose() {
+    // TODO : add logs before and after (in doFinally)
+    return Mono.defer(
+        () ->
+            Mono.whenDelayError(
+                    handlers
+                        .stream()
+                        .map(
+                            sessionHandler -> {
+                              sessionHandler.dispose();
+                              return sessionHandler.onDispose();
+                            })
+                        .collect(Collectors.toList()))
+                .doFinally(
+                    s -> {
+                      // TODO : add logs before and after (in doFinally)
+                      onDispose.onComplete();
+                    }));
   }
 
   private class SessionHandler implements Connection {
@@ -183,8 +182,8 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
     private final Mono<MessagePublication> controlPublication;
 
-    // TODO refactor OnDispose mechanism
-    private final MonoProcessor<Void> onClose = MonoProcessor.create();
+    private final MonoProcessor<Void> dispose = MonoProcessor.create();
+    private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
     private SessionHandler(
         String clientChannel,
@@ -204,8 +203,8 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
       this.controlPublication =
           Mono.defer(() -> newControlPublication(clientChannel, clientControlStreamId)).cache();
 
-      this.onClose
-          .doOnTerminate(this::dispose0)
+      this.dispose
+          .then(doDispose())
           .subscribe(null, th -> logger.warn("SessionHandler disposed with error: {}", th));
     }
 
@@ -262,11 +261,6 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
     }
 
     @Override
-    public Mono<Void> onDispose() {
-      return onClose;
-    }
-
-    @Override
     public String toString() {
       final StringBuilder sb = new StringBuilder("ServerSession{");
       sb.append("sessionId=").append(sessionId);
@@ -280,28 +274,36 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
     @Override
     public void dispose() {
-      if (!onClose.isDisposed()) {
-        onClose.onComplete();
-      }
+      dispose.onComplete();
     }
 
     @Override
     public boolean isDisposed() {
-      return onClose.isDisposed();
+      return onDispose.isDisposed();
     }
 
-    private void dispose0() {
-      handlers.remove(this);
+    @Override
+    public Mono<Void> onDispose() {
+      return onDispose;
+    }
 
-      // connector.dispose(); todo
-      // === connector.dispose() ===== BEGING ===
-      // resources.close(clientControlPublication);
-      // === connector.dispose() ===== END ===
+    private Mono<Void> doDispose() {
+      return Mono.defer(
+          () -> {
+            logger.debug("[{}] About to close session with sessionId: {}", category, sessionId);
 
-      outbound.dispose();
-      inbound.dispose();
+            handlers.remove(this);
 
-      logger.debug("[{}] Closed session with sessionId: {}", category, sessionId);
+            outbound.dispose();
+            inbound.dispose();
+
+            return Mono.whenDelayError(outbound.onDispose(), inbound.onDispose())
+                .doFinally(
+                    s -> {
+                      logger.debug("[{}] Closed session with sessionId: {}", category, sessionId);
+                      onDispose.onComplete();
+                    });
+          });
     }
 
     Mono<Void> connect() {

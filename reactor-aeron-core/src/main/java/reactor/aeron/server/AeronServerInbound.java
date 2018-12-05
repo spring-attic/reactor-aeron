@@ -9,13 +9,13 @@ import reactor.aeron.AeronResources;
 import reactor.aeron.ByteBufferFlux;
 import reactor.aeron.DataMessageSubscriber;
 import reactor.aeron.MessageType;
-import reactor.core.Disposable;
+import reactor.aeron.OnDisposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.TopicProcessor;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-final class AeronServerInbound implements AeronInbound, Disposable {
+final class AeronServerInbound implements OnDisposable, AeronInbound {
 
   private final TopicProcessor<ByteBuffer> processor;
   private final ByteBufferFlux flux;
@@ -65,6 +65,16 @@ final class AeronServerInbound implements AeronInbound, Disposable {
   public void dispose() {
     processor.onComplete();
     aeronResources.close(serverDataSubscription);
+  }
+
+  @Override
+  public Mono<Void> onDispose() {
+    return null;
+  }
+
+  @Override
+  public boolean isDisposed() {
+    return false;
   }
 
   static class ServerDataMessageProcessor implements DataMessageSubscriber, Publisher<ByteBuffer> {

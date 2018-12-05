@@ -3,6 +3,7 @@ package reactor.aeron.server;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.reactivestreams.Publisher;
+import reactor.aeron.AeronEventLoop;
 import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
@@ -10,6 +11,8 @@ import reactor.aeron.OnDisposable;
 import reactor.core.publisher.Mono;
 
 public final class AeronServer {
+
+  private static final int CONTROL_STREAM_ID = 1;
 
   private final AeronServerSettings settings;
 
@@ -44,7 +47,37 @@ public final class AeronServer {
   }
 
   public Mono<? extends OnDisposable> bind(AeronOptions options) {
-    return Mono.fromCallable(() -> new ServerHandler(settings.options(options)));
+    return Mono.defer(
+        () -> {
+          ServerHandler serverHandler = new ServerHandler(settings.options(options));
+
+          AeronResources resources = settings.aeronResources();
+          String category = settings.name();
+
+          AeronEventLoop eventLoop = resources.nextEventLoop();
+
+          return resources
+              .controlSubscription(
+                  category,
+                  options.serverChannel(),
+                  CONTROL_STREAM_ID,
+                  serverHandler,
+                  eventLoop,
+                  null,
+                  null)
+              .map(
+                  controlSubscription -> {
+                    serverHandler
+                        .onDispose()
+                        .doFinally(s -> controlSubscription.dispose())
+                        .subscribe(
+                            null,
+                            ex -> {
+                              // no-op
+                            });
+                    return serverHandler;
+                  });
+        });
   }
 
   /**

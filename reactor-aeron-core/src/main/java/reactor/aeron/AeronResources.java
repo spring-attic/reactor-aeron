@@ -24,6 +24,7 @@ public class AeronResources implements Disposable, AutoCloseable {
   private static final Logger logger = Loggers.getLogger(AeronResources.class);
 
   private final AeronResourcesConfig config;
+
   private final MonoProcessor<Void> onStart = MonoProcessor.create();
   private final MonoProcessor<Void> onClose = MonoProcessor.create();
 

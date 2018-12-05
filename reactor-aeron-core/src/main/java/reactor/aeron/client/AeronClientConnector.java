@@ -29,7 +29,6 @@ public final class AeronClientConnector implements Disposable {
 
   private static final Logger logger = Loggers.getLogger(AeronClientConnector.class);
 
-  private static final int CONTROL_SESSION_ID = 0;
   private static final int CONTROL_STREAM_ID = 1;
 
   private static final TimeBasedGenerator uuidGenerator = Generators.timeBasedGenerator();
