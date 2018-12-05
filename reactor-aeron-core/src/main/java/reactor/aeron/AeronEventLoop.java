@@ -32,8 +32,8 @@ public final class AeronEventLoop implements OnDisposable {
   // Commands
   private final Queue<CommandTask> commandTasks = new ConcurrentLinkedQueue<>();
 
-  // Senders
   private final List<MessagePublication> publications = new ArrayList<>();
+  private final List<InnerPoller> subscriptions = new ArrayList<>();
 
   AeronEventLoop() {
     workerMono = Mono.fromCallable(this::createWorker).cache();
@@ -65,19 +65,39 @@ public final class AeronEventLoop implements OnDisposable {
     sink.success();
   }
 
-  public Mono<Void> dispose(MessagePublication publication) {
-    return worker().flatMap(w -> command(sink -> dispose(publication, sink)));
+  public Mono<Void> register(InnerPoller innerPoller) {
+    return worker().flatMap(w -> command(sink -> register(innerPoller, sink)));
   }
 
-  @Override
-  public void dispose() {
-    dispose.onComplete();
+  private void register(InnerPoller innerPoller, MonoSink<Void> sink) {
+    Objects.requireNonNull(innerPoller, "innerPoller must be not null");
+    subscriptions.add(innerPoller);
+    sink.success();
+  }
+
+  public Mono<Void> dispose(MessagePublication publication) {
+    return worker().flatMap(w -> command(sink -> dispose(publication, sink)));
   }
 
   private void dispose(MessagePublication publication, MonoSink<Void> sink) {
     publications.removeIf(p -> p == publication);
     Optional.ofNullable(publication).ifPresent(MessagePublication::close);
     sink.success();
+  }
+
+  public Mono<Void> dispose(InnerPoller innerPoller) {
+    return worker().flatMap(w -> command(sink -> dispose(innerPoller, sink)));
+  }
+
+  private void dispose(InnerPoller innerPoller, MonoSink<Void> sink) {
+    subscriptions.removeIf(s -> s == innerPoller);
+    Optional.ofNullable(innerPoller).ifPresent(InnerPoller::close);
+    sink.success();
+  }
+
+  @Override
+  public void dispose() {
+    dispose.onComplete();
   }
 
   @Override

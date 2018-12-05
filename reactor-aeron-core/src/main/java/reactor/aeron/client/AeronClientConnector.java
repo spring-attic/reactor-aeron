@@ -59,8 +59,6 @@ public final class AeronClientConnector implements Disposable {
             name,
             clientChannel,
             clientControlStreamId,
-            "to receive control requests on",
-            CONTROL_SESSION_ID,
             controlMessageSubscriber,
             null,
             this::onUnavailableControlImage);

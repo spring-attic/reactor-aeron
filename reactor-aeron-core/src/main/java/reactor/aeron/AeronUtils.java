@@ -1,6 +1,7 @@
 package reactor.aeron;
 
 import io.aeron.Publication;
+import io.aeron.Subscription;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
@@ -29,6 +30,16 @@ public final class AeronUtils {
    */
   public static String format(Publication publication) {
     return format(publication.channel(), publication.streamId());
+  }
+
+  /**
+   * Returns formatted subscription.
+   *
+   * @param subscription subscription
+   * @return formatted subscription
+   */
+  public static String format(Subscription subscription) {
+    return format(subscription.channel(), subscription.streamId());
   }
 
   /**

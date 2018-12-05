@@ -59,8 +59,6 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
             category,
             options.serverChannel(),
             CONTROL_STREAM_ID,
-            "to receive control requests on",
-            CONTROL_SESSION_ID,
             this,
             null,
             null);

@@ -2,10 +2,12 @@ package reactor.aeron;
 
 import io.aeron.Aeron;
 import io.aeron.Aeron.Context;
+import io.aeron.FragmentAssembler;
 import io.aeron.Image;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
+import io.aeron.logbuffer.FragmentHandler;
 import java.io.File;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -14,8 +16,6 @@ import org.agrona.IoUtil;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -29,10 +29,7 @@ public class AeronResources implements Disposable, AutoCloseable {
 
   private Aeron aeron;
   private MediaDriver mediaDriver;
-
-  private Poller poller;
   private AeronEventLoop eventLoop;
-  private Scheduler receiver;
 
   private AeronResources(AeronResourcesConfig config) {
     this.config = config;
@@ -49,8 +46,8 @@ public class AeronResources implements Disposable, AutoCloseable {
     onClose
         .then(onClose())
         .subscribe(
-            avoid -> logger.info("{} has stopped", this),
-            th -> logger.warn("{} disposed with error: {}", this, th));
+            avoid -> logger.info("{} closed", this),
+            th -> logger.warn("{} closed with error: {}", this, th));
   }
 
   /**
@@ -86,6 +83,7 @@ public class AeronResources implements Disposable, AutoCloseable {
             .mtuLength(config.mtuLength())
             .imageLivenessTimeoutNs(config.imageLivenessTimeout().toNanos())
             .dirDeleteOnStart(config.isDirDeleteOnStart());
+
     mediaDriver = MediaDriver.launchEmbedded(mediaContext);
 
     Aeron.Context aeronContext = new Aeron.Context();
@@ -95,9 +93,6 @@ public class AeronResources implements Disposable, AutoCloseable {
     aeron = Aeron.connect(aeronContext);
 
     eventLoop = new AeronEventLoop();
-    receiver = Schedulers.newSingle("reactor-aeron-receiver");
-
-    receiver.schedule(poller = new Poller(() -> !receiver.isDisposed()));
 
     Runtime.getRuntime().addShutdownHook(new Thread(() -> deleteAeronDirectory(aeronContext)));
 
@@ -117,7 +112,7 @@ public class AeronResources implements Disposable, AutoCloseable {
    * @param streamId stream id
    * @param options options
    * @param eventLoop event loop where publocation would be registered
-   * @return mono handle of creation and registering of message publicartiotn
+   * @return mono handle of creation and registering of message publication
    */
   public Mono<MessagePublication> messagePublication(
       String category,
@@ -136,11 +131,14 @@ public class AeronResources implements Disposable, AutoCloseable {
         .doOnError(
             ex -> {
               logger.error(
-                  "Failed to register publication {} on eventLoop {}, cause: {}",
+                  "[{}] Failed to register publication {} on eventLoop {}, cause: {}",
+                  category,
                   AeronUtils.format(publication),
                   eventLoop,
                   ex);
-              publication.close();
+              if (!publication.isClosed()) {
+                publication.close();
+              }
             })
         .doOnSuccess(
             avoid -> logger.debug("[{}] Added publication: {}", category, messagePublication))
@@ -148,98 +146,69 @@ public class AeronResources implements Disposable, AutoCloseable {
   }
 
   /**
-   * Adds control subscription and register it in the {@link Poller}. Also see {@link
-   * #close(Subscription)}}.
+   * Adds control subscription and register it.
    *
    * @param channel channel
    * @param streamId stream id
-   * @param purpose purpose
-   * @param sessionId session id
-   * @param controlMessageSubscriber control message subscriber
-   * @param onAvailableImage called when {@link Image}s become available for consumption. Null is
-   *     valid if no action is to be taken.
-   * @param onUnavailableImage called when {@link Image}s go unavailable for consumption. Null is
-   *     valid if no action is to be taken.
-   * @return control subscription
+   * @param subscriber control message subscriber
+   * @param eventLoop event loop where to assign control subscription
+   * @param availableImageHandler called when {@link Image}s become available for consumption. Null
+   *     is valid if no action is to be taken.
+   * @param unavailableImageHandler called when {@link Image}s go unavailable for consumption. Null
+   *     is valid if no action is to be taken.
+   * @return mono handle of creation and registering of control message subscription
    */
-  public Subscription controlSubscription(
+  public Mono<InnerPoller> controlSubscription(
       String category,
       String channel,
       int streamId,
-      String purpose,
-      long sessionId,
-      ControlMessageSubscriber controlMessageSubscriber,
-      Consumer<Image> onAvailableImage,
-      Consumer<Image> onUnavailableImage) {
-    Subscription subscription =
-        addSubscription(
-            category + "-control",
-            channel,
-            streamId,
-            purpose,
-            sessionId,
-            onAvailableImage,
-            onUnavailableImage);
-    poller.addControlSubscription(subscription, controlMessageSubscriber);
-    return subscription;
+      ControlMessageSubscriber subscriber,
+      AeronEventLoop eventLoop,
+      Consumer<Image> availableImageHandler,
+      Consumer<Image> unavailableImageHandler) {
+
+    return messageSubscription(
+        category + "-control",
+        channel,
+        streamId,
+        subscriber,
+        new ControlFragmentHandler(subscriber),
+        eventLoop,
+        availableImageHandler,
+        unavailableImageHandler);
   }
 
   /**
-   * Adds data subscription and register it in the {@link Poller}. Also see {@link
-   * #close(Subscription)}}.
+   * Adds data subscription and register it.
    *
    * @param channel channel
    * @param streamId stream id
-   * @param purpose purpose
-   * @param sessionId session id
-   * @param dataMessageSubscriber data message subscriber
-   * @param onAvailableImage called when {@link Image}s become available for consumption. Null is
-   *     valid if no action is to be taken.
-   * @param onUnavailableImage called when {@link Image}s go unavailable for consumption. Null is
-   *     valid if no action is to be taken.
-   * @return control subscription
+   * @param subscriber data message subscriber
+   * @param eventLoop event loop where to assign data subscription
+   * @param availableImageHandler called when {@link Image}s become available for consumption. Null
+   *     is valid if no action is to be taken.
+   * @param unavailableImageHandler called when {@link Image}s go unavailable for consumption. Null
+   *     is valid if no action is to be taken.
+   * @return mono handle of creation and registering of data message subscription
    */
-  public Subscription dataSubscription(
+  public Mono<InnerPoller> dataSubscription(
       String category,
       String channel,
       int streamId,
-      String purpose,
-      long sessionId,
-      DataMessageSubscriber dataMessageSubscriber,
-      Consumer<Image> onAvailableImage,
-      Consumer<Image> onUnavailableImage) {
-    Subscription subscription =
-        addSubscription(
-            category + "-data",
-            channel,
-            streamId,
-            purpose,
-            sessionId,
-            onAvailableImage,
-            onUnavailableImage);
-    poller.addDataSubscription(subscription, dataMessageSubscriber);
-    return subscription;
-  }
+      DataMessageSubscriber subscriber,
+      AeronEventLoop eventLoop,
+      Consumer<Image> availableImageHandler,
+      Consumer<Image> unavailableImageHandler) {
 
-  /**
-   * Closes the given subscription.
-   *
-   * @param subscription subscription
-   */
-  public void close(Subscription subscription) {
-    // todo wait for commandQueue
-    Schedulers.single()
-        .schedule(
-            () -> {
-              if (subscription != null) {
-                poller.removeSubscription(subscription);
-                try {
-                  subscription.close();
-                } catch (Exception e) {
-                  logger.warn("Subscription closed with error: {}", e);
-                }
-              }
-            });
+    return messageSubscription(
+        category + "-data",
+        channel,
+        streamId,
+        subscriber,
+        new DataFragmentHandler(subscriber),
+        eventLoop,
+        availableImageHandler,
+        unavailableImageHandler);
   }
 
   @Override
@@ -258,11 +227,6 @@ public class AeronResources implements Disposable, AutoCloseable {
     return Mono.defer(
         () -> {
           logger.info("{} shutdown initiated", this);
-
-          // TODO get rid of receivers
-          Optional.ofNullable(receiver) //
-              .filter(s -> !s.isDisposed())
-              .ifPresent(Scheduler::dispose);
 
           eventLoop.dispose();
 
@@ -286,28 +250,15 @@ public class AeronResources implements Disposable, AutoCloseable {
     return onClose.isDisposed();
   }
 
-  /**
-   * Adds a subscription by given channel and stream id.
-   *
-   * @param category category
-   * @param channel channel
-   * @param streamId stream id
-   * @param purpose purpose
-   * @param sessionId session id
-   * @param availableImageConsumer called when {@link Image}s become available for consumption. Null
-   *     is valid if no action is to be taken.
-   * @param unavailableImageConsumer called when {@link Image}s go unavailable for consumption. Null
-   *     is valid if no action is to be taken.
-   * @return subscription for channel and stream id
-   */
-  Subscription addSubscription(
+  private Mono<InnerPoller> messageSubscription(
       String category,
       String channel,
       int streamId,
-      String purpose,
-      long sessionId,
-      Consumer<Image> availableImageConsumer,
-      Consumer<Image> unavailableImageConsumer) {
+      PollerSubscriber subscriber,
+      FragmentHandler fragmentHandler,
+      AeronEventLoop eventLoop,
+      Consumer<Image> availableImageHandler,
+      Consumer<Image> unavailableImageHandler) {
 
     Subscription subscription =
         aeron.addSubscription(
@@ -316,38 +267,54 @@ public class AeronResources implements Disposable, AutoCloseable {
             image -> {
               if (logger.isDebugEnabled()) {
                 logger.debug(
-                    "[{}] {} available image, sessionId={}, source={}",
+                    "[{}] {} available image, imageSessionId={}, imageSource={}",
                     category,
                     AeronUtils.format(channel, streamId),
                     image.sessionId(),
                     image.sourceIdentity());
               }
-              if (availableImageConsumer != null) {
-                availableImageConsumer.accept(image);
+              if (availableImageHandler != null) {
+                availableImageHandler.accept(image);
               }
             },
             image -> {
               if (logger.isDebugEnabled()) {
                 logger.debug(
-                    "[{}] {} unavailable image, sessionId={}, source={}",
+                    "[{}] {} unavailable image, imageSessionId={}, imageSource={}",
                     category,
                     AeronUtils.format(channel, streamId),
                     image.sessionId(),
                     image.sourceIdentity());
               }
-              if (unavailableImageConsumer != null) {
-                unavailableImageConsumer.accept(image);
+              if (unavailableImageHandler != null) {
+                unavailableImageHandler.accept(image);
               }
             });
-    if (logger.isDebugEnabled()) {
-      logger.debug(
-          "[{}] Added subscription, sessionId={} {} {}",
-          category,
-          sessionId,
-          purpose,
-          AeronUtils.format(channel, streamId));
-    }
-    return subscription;
+
+    InnerPoller innerPoller =
+        new InnerPoller(eventLoop, subscription, new FragmentAssembler(fragmentHandler));
+
+    subscriber.onSubscribe(innerPoller);
+
+    return eventLoop
+        .register(innerPoller)
+        .doOnError(
+            ex -> {
+              logger.error(
+                  "[{}] Failed to register subscription {} on eventLoop {}, cause: {}",
+                  category,
+                  AeronUtils.format(subscription),
+                  eventLoop,
+                  ex);
+              if (!subscription.isClosed()) {
+                subscription.close();
+              }
+            })
+        .doOnSuccess(
+            avoid ->
+                logger.debug(
+                    "[{}] Added subscription: {}", category, AeronUtils.format(subscription)))
+        .thenReturn(innerPoller);
   }
 
   private void deleteAeronDirectory(Context context) {

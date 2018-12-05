@@ -45,8 +45,6 @@ final class AeronServerInbound implements AeronInbound, Disposable {
                   name,
                   channel,
                   serverSessionStreamId,
-                  "to receive client data on",
-                  sessionId,
                   messageProcessor,
                   null,
                   dataImage -> {
