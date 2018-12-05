@@ -98,7 +98,8 @@ public final class AeronOptions {
       return this;
     }
 
-    public Builder controlStreamId(int controlStreamId) {
+    public Builder backpressureTimeout(Duration backpressureTimeout) {
+      this.backpressureTimeout = backpressureTimeout;
       return this;
     }
 
