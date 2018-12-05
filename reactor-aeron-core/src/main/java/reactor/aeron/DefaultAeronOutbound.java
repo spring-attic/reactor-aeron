@@ -42,7 +42,11 @@ public final class DefaultAeronOutbound implements OnDisposable, AeronOutbound {
 
   @Override
   public AeronOutbound send(Publisher<? extends ByteBuffer> dataStream) {
-    return then(Objects.requireNonNull(sequencer).write(dataStream));
+    return then(Objects.requireNonNull(sequencer).write(dataStream).doOnError(
+        throwable -> {
+          // todo
+          throwable.printStackTrace();
+        }));
   }
 
   @Override
