@@ -49,6 +49,18 @@ public final class AeronOptions {
     return backpressureTimeout;
   }
 
+  @Override
+  public String toString() {
+    final StringBuilder sb = new StringBuilder("AeronOptions{");
+    sb.append("serverChannel=").append(serverChannel);
+    sb.append(", clientChannel=").append(clientChannel);
+    sb.append(", ackTimeout=").append(ackTimeout);
+    sb.append(", connectTimeout=").append(connectTimeout);
+    sb.append(", backpressureTimeout=").append(backpressureTimeout);
+    sb.append('}');
+    return sb.toString();
+  }
+
   private Duration validate(Duration value, String message) {
     Objects.requireNonNull(value, message);
     if (value.compareTo(Duration.ZERO) <= 0) {

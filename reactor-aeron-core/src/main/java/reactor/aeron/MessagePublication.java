@@ -114,11 +114,11 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     if (result == Publication.BACK_PRESSURED) {
       if (task.isTimeoutElapsed(options.backpressureTimeout())) {
         logger.warn(
-            "[{}] Publication BACK_PRESSURED during {} millis: {}",
+            "[{}] Publication BACK_PRESSURED during {}: {}",
             category,
             toString(),
             options.backpressureTimeout());
-        ex = new RuntimeException("Failed to resolve backpressure withinh timouet");
+        ex = new RuntimeException("Failed to resolve backpressure within timeout");
       }
     }
 
@@ -130,7 +130,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
             category,
             toString(),
             options.connectTimeout());
-        ex = new RuntimeException("Failed to resolve admin_action withinh timouet");
+        ex = new RuntimeException("Failed to resolve admin_action within timeout");
       }
     }
 
