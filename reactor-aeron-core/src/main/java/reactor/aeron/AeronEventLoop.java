@@ -21,6 +21,8 @@ public final class AeronEventLoop implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronEventLoop.class);
 
+  private final IdleStrategy idleStrategy;
+
   // Dispose signals
   private final MonoProcessor<Void> dispose = MonoProcessor.create();
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
@@ -35,8 +37,9 @@ public final class AeronEventLoop implements OnDisposable {
   private final List<MessagePublication> publications = new ArrayList<>();
   private final List<InnerPoller> subscriptions = new ArrayList<>();
 
-  AeronEventLoop() {
-    workerMono = Mono.fromCallable(this::createWorker).cache();
+  AeronEventLoop(IdleStrategy idleStrategy) {
+    this.idleStrategy = idleStrategy;
+    this.workerMono = Mono.fromCallable(this::createWorker).cache();
   }
 
   private Worker createWorker() {
@@ -145,8 +148,6 @@ public final class AeronEventLoop implements OnDisposable {
    * </ul>
    */
   private class Worker implements Runnable {
-
-    private final IdleStrategy idleStrategy = AeronUtils.newBackoffIdleStrategy();
 
     @Override
     public void run() {

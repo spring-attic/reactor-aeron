@@ -93,7 +93,7 @@ public class AeronResources implements Disposable, AutoCloseable {
 
     aeron = Aeron.connect(aeronContext);
 
-    eventLoop = new AeronEventLoop();
+    eventLoop = new AeronEventLoop(config.idleStrategySupplier().get());
 
     Runtime.getRuntime().addShutdownHook(new Thread(() -> deleteAeronDirectory(aeronContext)));
 
