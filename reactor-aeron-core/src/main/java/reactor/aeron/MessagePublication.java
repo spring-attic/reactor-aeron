@@ -74,26 +74,26 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
   /**
    * Proceed with processing of tasks.
    *
-   * @return true - success; false - failure
+   * @return 1 - some progress was done; 0 - denotes no progress was done
    */
-  public boolean proceed() {
+  public int proceed() {
     PublishTask task = publishTasks.peek();
     if (task == null) {
-      return false;
+      return 0;
     }
 
     long result = task.run();
     if (result > 0) {
       publishTasks.poll();
       task.success();
-      return true;
+      return 1;
     }
 
     // Handle closed publoication
     if (result == Publication.CLOSED) {
       logger.warn("[{}] Publication CLOSED: {}", category, toString());
       dispose();
-      return false;
+      return 0;
     }
 
     Exception ex = null;
@@ -139,7 +139,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
       task.error(ex);
     }
 
-    return false;
+    return 0;
   }
 
   @Override

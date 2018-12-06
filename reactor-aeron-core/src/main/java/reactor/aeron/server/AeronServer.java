@@ -46,6 +46,12 @@ public final class AeronServer {
     return bind(settings.options());
   }
 
+  /**
+   * Binds server with given options.
+   *
+   * @param options server options
+   * @return mono handle of result
+   */
   public Mono<? extends OnDisposable> bind(AeronOptions options) {
     return Mono.defer(
         () -> {

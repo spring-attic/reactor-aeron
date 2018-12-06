@@ -161,16 +161,18 @@ public final class AeronEventLoop implements OnDisposable {
           task.run();
         }
 
-        // Publications
-        boolean result = false;
+        int result = 0;
         //noinspection ForLoopReplaceableByForEach
         for (int i = 0, n = publications.size(); i < n; i++) {
-          result |= publications.get(i).proceed();
+          result += publications.get(i).proceed();
         }
 
-        // TODO : add processing of subscriptinos (innerPollers)
+        //noinspection ForLoopReplaceableByForEach
+        for (int i = 0, n = subscriptions.size(); i < n; i++) {
+          result += subscriptions.get(i).poll();
+        }
 
-        idleStrategy.idle(result ? 1 : 0);
+        idleStrategy.idle(result);
       }
 
       // Dispose publications, subscriptions and commands
