@@ -15,8 +15,8 @@ public class ClientThroughput {
    * @param args program arguments.
    */
   public static void main(String[] args) throws Exception {
-    try (AeronResources aeronResources = AeronResources.start()) {
-
+    AeronResources aeronResources = AeronResources.start();
+    try {
       ByteBuffer buffer = ByteBuffer.allocate(1024);
 
       AeronClient.create("client", aeronResources)
@@ -47,6 +47,9 @@ public class ClientThroughput {
 
       System.out.println("main completed");
       Thread.currentThread().join();
+    } finally {
+      aeronResources.dispose();
+      aeronResources.onDispose().block();
     }
   }
 }

@@ -14,10 +14,9 @@ public class ClientDemo {
    * @param args program arguments.
    */
   public static void main(String[] args) {
-
     Connection connection = null;
-    try (AeronResources aeronResources = AeronResources.start()) {
-
+    AeronResources aeronResources = AeronResources.start();
+    try {
       connection =
           AeronClient.create("client", aeronResources)
               .options(
@@ -39,6 +38,8 @@ public class ClientDemo {
               .block();
     } finally {
       Objects.requireNonNull(connection).dispose();
+      aeronResources.dispose();
+      aeronResources.onDispose().block();
     }
     System.out.println("main completed");
   }

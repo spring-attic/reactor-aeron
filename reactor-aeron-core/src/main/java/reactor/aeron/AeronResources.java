@@ -13,20 +13,20 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import org.agrona.CloseHelper;
 import org.agrona.IoUtil;
-import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-public class AeronResources implements Disposable, AutoCloseable {
+public class AeronResources implements OnDisposable {
 
   private static final Logger logger = Loggers.getLogger(AeronResources.class);
 
   private final AeronResourcesConfig config;
 
-  private final MonoProcessor<Void> onStart = MonoProcessor.create();
-  private final MonoProcessor<Void> onClose = MonoProcessor.create();
+  private final MonoProcessor<Void> start = MonoProcessor.create();
+  private final MonoProcessor<Void> dispose = MonoProcessor.create();
+  private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
   private Aeron aeron;
   private MediaDriver mediaDriver;
@@ -35,8 +35,8 @@ public class AeronResources implements Disposable, AutoCloseable {
   private AeronResources(AeronResourcesConfig config) {
     this.config = config;
 
-    onStart
-        .doOnTerminate(this::onStart)
+    start
+        .doOnTerminate(this::doStart)
         .subscribe(
             avoid -> logger.info("{} has started", this),
             th -> {
@@ -44,8 +44,9 @@ public class AeronResources implements Disposable, AutoCloseable {
               dispose();
             });
 
-    onClose
-        .then(onClose())
+    dispose
+        .then(doDispose())
+        .doFinally(s -> onDispose.onComplete())
         .subscribe(
             avoid -> logger.info("{} closed", this),
             th -> logger.warn("{} closed with error: {}", this, th));
@@ -74,11 +75,11 @@ public class AeronResources implements Disposable, AutoCloseable {
 
   private void start0() {
     if (!isDisposed()) {
-      onStart.onComplete();
+      start.onComplete();
     }
   }
 
-  private void onStart() {
+  private void doStart() {
     MediaDriver.Context mediaContext =
         new MediaDriver.Context()
             .mtuLength(config.mtuLength())
@@ -211,18 +212,23 @@ public class AeronResources implements Disposable, AutoCloseable {
   }
 
   @Override
-  public void close() {
-    dispose();
-  }
-
-  @Override
   public void dispose() {
     if (!isDisposed()) {
-      onClose.onComplete();
+      dispose.onComplete();
     }
   }
 
-  private Mono<Void> onClose() {
+  @Override
+  public boolean isDisposed() {
+    return onDispose.isDisposed();
+  }
+
+  @Override
+  public Mono<Void> onDispose() {
+    return onDispose;
+  }
+
+  private Mono<Void> doDispose() {
     return Mono.defer(
         () -> {
           logger.info("{} shutdown initiated", this);
@@ -242,11 +248,6 @@ public class AeronResources implements Disposable, AutoCloseable {
                     logger.info("{} shutdown complete", this);
                   });
         });
-  }
-
-  @Override
-  public boolean isDisposed() {
-    return onClose.isDisposed();
   }
 
   private Mono<InnerPoller> messageSubscription(

@@ -11,9 +11,8 @@ public class ClientServerSends {
    * @param args program arguments.
    */
   public static void main(String[] args) throws Exception {
-
-    try (AeronResources aeronResources = AeronResources.start()) {
-
+    AeronResources aeronResources = AeronResources.start();
+    try {
       AeronClient.create("client", aeronResources)
           .options(
               options -> {
@@ -35,6 +34,9 @@ public class ClientServerSends {
 
       System.out.println("main completed");
       Thread.currentThread().join();
+    } finally {
+      aeronResources.dispose();
+      aeronResources.onDispose().block();
     }
   }
 }

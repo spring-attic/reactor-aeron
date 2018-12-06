@@ -33,11 +33,11 @@ public class ServerThroughput {
    * @param args program arguments.
    */
   public static void main(String[] args) throws Exception {
-
-    try (AeronResources aeronResources = AeronResources.start()) {
-
+    AeronResources aeronResources = AeronResources.start();
+    try {
       Queue<Data> queue = new ConcurrentLinkedDeque<>();
       AtomicLong counter = new AtomicLong();
+
       Schedulers.single()
           .schedulePeriodically(
               () -> {
@@ -85,6 +85,9 @@ public class ServerThroughput {
           .block();
 
       Thread.currentThread().join();
+    } finally {
+      aeronResources.dispose();
+      aeronResources.onDispose().block();
     }
   }
 

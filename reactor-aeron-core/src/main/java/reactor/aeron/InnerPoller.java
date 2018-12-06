@@ -66,7 +66,6 @@ public final class InnerPoller
     if (!eventLoop.inEventLoop()) {
       throw new IllegalStateException("Can only close aeron subscription from within event loop");
     }
-
     try {
       subscription.close();
     } finally {

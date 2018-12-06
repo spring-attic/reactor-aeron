@@ -58,6 +58,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
 
     dispose
         .then(doDispose())
+        .doFinally(s -> onDispose.onComplete())
         .subscribe(null, th -> logger.warn("AeronServerHandler disposed with error: {}", th));
   }
 
@@ -154,23 +155,17 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
   }
 
   private Mono<Void> doDispose() {
-    // TODO : add logs before and after (in doFinally)
     return Mono.defer(
         () ->
             Mono.whenDelayError(
-                    handlers
-                        .stream()
-                        .map(
-                            sessionHandler -> {
-                              sessionHandler.dispose();
-                              return sessionHandler.onDispose();
-                            })
-                        .collect(Collectors.toList()))
-                .doFinally(
-                    s -> {
-                      // TODO : add logs before and after (in doFinally)
-                      onDispose.onComplete();
-                    }));
+                handlers
+                    .stream()
+                    .map(
+                        sessionHandler -> {
+                          sessionHandler.dispose();
+                          return sessionHandler.onDispose();
+                        })
+                    .collect(Collectors.toList())));
   }
 
   private class SessionHandler implements Connection {
@@ -210,6 +205,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
 
       this.dispose
           .then(doDispose())
+          .doFinally(s -> onDispose.onComplete())
           .subscribe(null, th -> logger.warn("SessionHandler disposed with error: {}", th));
     }
 
@@ -303,10 +299,9 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
                         .map(AeronServerInbound::onDispose)
                         .orElse(Mono.empty()))
                 .doFinally(
-                    s -> {
-                      logger.debug("[{}] Closed session with sessionId: {}", category, sessionId);
-                      onDispose.onComplete();
-                    });
+                    s ->
+                        logger.debug(
+                            "[{}] Closed session with sessionId: {}", category, sessionId));
           });
     }
 
