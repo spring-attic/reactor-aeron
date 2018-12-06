@@ -39,8 +39,6 @@ final class AeronServerInbound implements AeronInbound, OnDisposable {
           ServerDataMessageProcessor messageProcessor =
               new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
 
-          messageProcessor.subscribe(processor);
-
           AeronEventLoop eventLoop = resources.nextEventLoop();
 
           return resources
@@ -52,7 +50,10 @@ final class AeronServerInbound implements AeronInbound, OnDisposable {
                   eventLoop,
                   null,
                   image -> Optional.ofNullable(onCompleteHandler).ifPresent(Runnable::run))
-              .doOnSuccess(result -> subscription = result)
+              .doOnSuccess(result -> {
+                subscription = result;
+                messageProcessor.subscribe(processor);
+              })
               .then()
               .log("serverInbound");
         });
