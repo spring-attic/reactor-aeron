@@ -79,33 +79,35 @@ public final class AeronClient {
                   null,
                   image -> clientConnector.dispose())
               .flatMap(
-                  controlSubscription ->
-                      clientConnector
-                          .start()
-                          .doOnError(
-                              ex -> {
-                                controlSubscription.dispose();
-                                clientConnector.dispose();
-                              })
-                          .doOnSuccess(
-                              connection -> {
-                                settings
-                                    .handler() //
-                                    .apply(connection)
-                                    .subscribe(connection.disposeSubscriber());
-                                connection
-                                    .onDispose()
-                                    .doFinally(
-                                        s -> {
-                                          controlSubscription.dispose();
-                                          clientConnector.dispose();
-                                        })
-                                    .subscribe(
-                                        null,
-                                        th -> {
-                                          // no-op
-                                        });
-                              }));
+                  controlSubscription -> {
+                    clientConnector.accept(controlSubscription);
+                    return clientConnector
+                        .start()
+                        .doOnError(
+                            ex -> {
+                              controlSubscription.dispose();
+                              clientConnector.dispose();
+                            })
+                        .doOnSuccess(
+                            connection -> {
+                              settings
+                                  .handler() //
+                                  .apply(connection)
+                                  .subscribe(connection.disposeSubscriber());
+                              connection
+                                  .onDispose()
+                                  .doFinally(
+                                      s -> {
+                                        controlSubscription.dispose();
+                                        clientConnector.dispose();
+                                      })
+                                  .subscribe(
+                                      null,
+                                      th -> {
+                                        // no-op
+                                      });
+                            });
+                  });
         });
   }
 

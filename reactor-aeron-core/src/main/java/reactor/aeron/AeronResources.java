@@ -172,7 +172,6 @@ public class AeronResources implements Disposable, AutoCloseable {
         category + "-control",
         channel,
         streamId,
-        subscriber,
         new ControlFragmentHandler(subscriber),
         eventLoop,
         availableImageHandler,
@@ -205,7 +204,6 @@ public class AeronResources implements Disposable, AutoCloseable {
         category + "-data",
         channel,
         streamId,
-        subscriber,
         new DataFragmentHandler(subscriber),
         eventLoop,
         availableImageHandler,
@@ -255,7 +253,6 @@ public class AeronResources implements Disposable, AutoCloseable {
       String category,
       String channel,
       int streamId,
-      PollerSubscriber subscriber,
       FragmentHandler fragmentHandler,
       AeronEventLoop eventLoop,
       Consumer<Image> availableImageHandler,
@@ -294,8 +291,6 @@ public class AeronResources implements Disposable, AutoCloseable {
 
     InnerPoller innerPoller =
         new InnerPoller(eventLoop, subscription, new FragmentAssembler(fragmentHandler));
-
-    subscriber.onSubscribe(innerPoller);
 
     return eventLoop
         .register(innerPoller)

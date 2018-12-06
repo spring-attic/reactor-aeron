@@ -50,10 +50,12 @@ final class AeronServerInbound implements AeronInbound, OnDisposable {
                   eventLoop,
                   null,
                   image -> Optional.ofNullable(onCompleteHandler).ifPresent(Runnable::run))
-              .doOnSuccess(result -> {
-                subscription = result;
-                messageProcessor.subscribe(processor);
-              })
+              .doOnSuccess(
+                  result -> {
+                    subscription = result;
+                    messageProcessor.accept(subscription);
+                    messageProcessor.subscribe(processor);
+                  })
               .then()
               .log("serverInbound");
         });
@@ -102,7 +104,7 @@ final class AeronServerInbound implements AeronInbound, OnDisposable {
     }
 
     @Override
-    public void onSubscribe(org.reactivestreams.Subscription subscription) {
+    public void accept(org.reactivestreams.Subscription subscription) {
       this.subscription = subscription;
     }
 

@@ -65,9 +65,16 @@ public final class AeronServer {
 
           return resources
               .controlSubscription(
-                  category, serverChannel, CONTROL_STREAM_ID, serverHandler, eventLoop, null, null)
+                  category,
+                  serverChannel,
+                  CONTROL_STREAM_ID,
+                  serverHandler,
+                  eventLoop,
+                  null,
+                  null /**/)
               .map(
                   controlSubscription -> {
+                    serverHandler.accept(controlSubscription);
                     serverHandler
                         .onDispose()
                         .doFinally(s -> controlSubscription.dispose())

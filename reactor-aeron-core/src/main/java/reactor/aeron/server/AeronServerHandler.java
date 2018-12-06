@@ -62,7 +62,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
   }
 
   @Override
-  public void onSubscribe(Subscription subscription) {
+  public void accept(Subscription subscription) {
     subscription.request(Long.MAX_VALUE);
   }
 

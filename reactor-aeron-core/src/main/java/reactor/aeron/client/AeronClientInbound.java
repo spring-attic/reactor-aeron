@@ -33,10 +33,10 @@ final class AeronClientInbound implements AeronInbound, OnDisposable {
   Mono<Void> start(String channel, int streamId, long sessionId, Runnable onCompleteHandler) {
     return Mono.defer(
         () -> {
-          ClientDataMessageProcessor processor =
+          ClientDataMessageProcessor messageProcessor =
               new ClientDataMessageProcessor(name, sessionId, onCompleteHandler);
 
-          flux = new ByteBufferFlux(processor);
+          flux = new ByteBufferFlux(messageProcessor);
 
           AeronEventLoop eventLoop = resources.nextEventLoop();
 
@@ -45,11 +45,15 @@ final class AeronClientInbound implements AeronInbound, OnDisposable {
                   name,
                   channel,
                   streamId,
-                  processor,
+                  messageProcessor,
                   eventLoop,
                   null,
                   image -> Optional.ofNullable(onCompleteHandler).ifPresent(Runnable::run))
-              .doOnSuccess(result -> subscription = result)
+              .doOnSuccess(
+                  result -> {
+                    subscription = result;
+                    messageProcessor.accept(subscription);
+                  })
               .then()
               .log("clientInbound");
         });
@@ -97,7 +101,7 @@ final class AeronClientInbound implements AeronInbound, OnDisposable {
     }
 
     @Override
-    public void onSubscribe(org.reactivestreams.Subscription subscription) {
+    public void accept(org.reactivestreams.Subscription subscription) {
       this.subscription = subscription;
     }
 
