@@ -40,6 +40,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
   private final AeronOptions options;
   private final AeronResources resources;
   private final Function<? super Connection, ? extends Publisher<Void>> handler;
+  private final String serverChannel;
 
   private final AtomicLong nextSessionId = new AtomicLong(0);
 
@@ -53,6 +54,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
     options = settings.options();
     resources = settings.aeronResources();
     handler = settings.handler();
+    serverChannel = options.serverChannel();
 
     dispose
         .then(doDispose())
@@ -218,7 +220,6 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
     }
 
     private Mono<? extends Connection> start() {
-      String serverChannel = options.serverChannel();
       return connect()
           .then(outbound.start(sessionId, clientSessionStreamId))
           .then(inbound.start(serverChannel, serverSessionStreamId, sessionId, this::dispose))

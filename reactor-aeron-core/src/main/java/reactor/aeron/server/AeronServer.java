@@ -49,22 +49,17 @@ public final class AeronServer {
   public Mono<? extends OnDisposable> bind(AeronOptions options) {
     return Mono.defer(
         () -> {
-          AeronServerHandler serverHandler = new AeronServerHandler(settings.options(options));
+          AeronServerSettings settings = this.settings.options(options);
+          AeronServerHandler serverHandler = new AeronServerHandler(settings);
 
           AeronResources resources = settings.aeronResources();
           String category = settings.name();
-
+          String serverChannel = settings.options().serverChannel();
           AeronEventLoop eventLoop = resources.nextEventLoop();
 
           return resources
               .controlSubscription(
-                  category,
-                  options.serverChannel(),
-                  CONTROL_STREAM_ID,
-                  serverHandler,
-                  eventLoop,
-                  null,
-                  null)
+                  category, serverChannel, CONTROL_STREAM_ID, serverHandler, eventLoop, null, null)
               .map(
                   controlSubscription -> {
                     serverHandler

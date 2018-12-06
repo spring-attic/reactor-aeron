@@ -1,14 +1,20 @@
 package reactor.aeron.client;
 
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import org.reactivestreams.Publisher;
+import reactor.aeron.AeronEventLoop;
 import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
 import reactor.core.publisher.Mono;
 
 public final class AeronClient {
+
+  private static final AtomicInteger STREAM_ID_COUNTER = new AtomicInteger();
 
   private final AeronClientSettings settings;
 
@@ -47,25 +53,60 @@ public final class AeronClient {
   }
 
   private Mono<? extends Connection> connect0(AeronOptions options) {
-    AeronClientConnector connector = new AeronClientConnector(settings.options(options));
-    return connector
-        .newHandler()
-        .doOnError(ex -> connector.dispose())
-        .doOnSuccess(
-            connection -> {
-              settings
-                  .handler() //
-                  .apply(connection)
-                  .subscribe(connection.disposeSubscriber());
-              connection
-                  .onDispose()
-                  .doOnTerminate(connector::dispose)
-                  .subscribe(
-                      null,
-                      th -> {
-                        // no-op
-                      });
-            });
+    return Mono.defer(
+        () -> {
+          AeronClientSettings settings = this.settings.options(options);
+
+          int clientControlStreamId = STREAM_ID_COUNTER.incrementAndGet();
+          Supplier<Integer> clientSessionStreamIdCounter = STREAM_ID_COUNTER::incrementAndGet;
+
+          AeronClientConnector clientConnector =
+              new AeronClientConnector(
+                  settings, clientControlStreamId, clientSessionStreamIdCounter);
+
+          String category = Optional.ofNullable(settings.name()).orElse("client");
+          AeronResources resources = settings.aeronResources();
+          String clientChannel = settings.options().clientChannel();
+          AeronEventLoop eventLoop = resources.nextEventLoop();
+
+          return resources
+              .controlSubscription(
+                  category,
+                  clientChannel,
+                  clientControlStreamId,
+                  clientConnector,
+                  eventLoop,
+                  null,
+                  image -> clientConnector.dispose())
+              .flatMap(
+                  controlSubscription ->
+                      clientConnector
+                          .start()
+                          .doOnError(
+                              ex -> {
+                                controlSubscription.dispose();
+                                clientConnector.dispose();
+                              })
+                          .doOnSuccess(
+                              connection -> {
+                                settings
+                                    .handler() //
+                                    .apply(connection)
+                                    .subscribe(connection.disposeSubscriber());
+                                connection
+                                    .onDispose()
+                                    .doFinally(
+                                        s -> {
+                                          controlSubscription.dispose();
+                                          clientConnector.dispose();
+                                        })
+                                    .subscribe(
+                                        null,
+                                        th -> {
+                                          // no-op
+                                        });
+                              }));
+        });
   }
 
   /**
