@@ -8,8 +8,7 @@ import reactor.core.publisher.Mono;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-/** Default aeron outbound. */
-public final class DefaultAeronOutbound implements OnDisposable, AeronOutbound {
+public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
 
   private static final Logger logger = Loggers.getLogger(DefaultAeronOutbound.class);
 
@@ -40,55 +39,26 @@ public final class DefaultAeronOutbound implements OnDisposable, AeronOutbound {
     this.options = options;
   }
 
-  @Override
-  public AeronOutbound send(Publisher<? extends ByteBuffer> dataStream) {
-    return then(Objects.requireNonNull(sequencer).write(dataStream).doOnError(
-        throwable -> {
-          // todo
-          throwable.printStackTrace();
-        }));
-  }
-
-  @Override
-  public Mono<Void> then() {
-    return Mono.empty();
-  }
-
-  @Override
-  public void dispose() {
-    if (publication != null) {
-      publication.dispose();
-    }
-  }
-
-  @Override
-  public boolean isDisposed() {
-    return publication != null && publication.isDisposed();
-  }
-
-  @Override
-  public Mono<Void> onDispose() {
-    return publication != null ? publication.onDispose() : Mono.empty();
-  }
-
   /**
-   * Init method.
+   * Init method. Creates data publication and assigns it to event loop. Makes this object eligible
+   * for calling {@link #send(Publisher)} function.
    *
    * @param sessionId session id
    * @param streamId stream id
    * @return initialization handle
    */
-  public Mono<Void> initialise(long sessionId, int streamId) {
+  public Mono<Void> start(long sessionId, int streamId) {
     return Mono.defer(
         () -> {
           final AeronEventLoop eventLoop = resources.nextEventLoop();
 
           return resources
               .messagePublication(category, channel, streamId, options, eventLoop)
-              .doOnSuccess(result -> this.publication = result)
               .doOnSuccess(
-                  result ->
-                      this.sequencer = new AeronWriteSequencer(sessionId, publication, eventLoop))
+                  result -> {
+                    publication = result;
+                    sequencer = new AeronWriteSequencer(sessionId, publication, eventLoop);
+                  })
               .flatMap(
                   result -> {
                     Duration retryInterval = Duration.ofMillis(100);
@@ -102,14 +72,44 @@ public final class DefaultAeronOutbound implements OnDisposable, AeronOutbound {
                         .timeout(connectTimeout)
                         .then()
                         .onErrorResume(
-                            throwable -> {
+                            th -> {
                               logger.warn(
                                   "Failed to connect publication {} for sending data during {}",
                                   publication,
                                   connectTimeout);
-                              return Mono.error(throwable);
+                              return Mono.error(th);
                             });
-                  });
+                  })
+              .log("defaultOutbound");
         });
+  }
+
+  @Override
+  public AeronOutbound send(Publisher<? extends ByteBuffer> dataStream) {
+    Objects.requireNonNull(sequencer, "sequencer must be initialized");
+    return then(sequencer.write(dataStream));
+  }
+
+  @Override
+  public Mono<Void> then() {
+    return Mono.empty();
+  }
+
+  @Override
+  public void dispose() {
+    // TODO : at this moment dispose sequencer's pending writes queue as well
+    if (publication != null) {
+      publication.dispose();
+    }
+  }
+
+  @Override
+  public boolean isDisposed() {
+    return publication != null && publication.isDisposed();
+  }
+
+  @Override
+  public Mono<Void> onDispose() {
+    return publication != null ? publication.onDispose() : Mono.empty();
   }
 }

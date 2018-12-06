@@ -7,7 +7,6 @@ import java.util.function.Consumer;
 import reactor.aeron.ControlMessageSubscriber;
 import reactor.aeron.MessageType;
 import reactor.aeron.Protocol;
-import reactor.aeron.client.AeronClientInbound.ClientDataMessageProcessor;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
@@ -55,8 +54,7 @@ class ClientControlMessageSubscriber implements ControlMessageSubscriber {
    * Handler for complete signal from server. At the moment of writing this javadoc the server
    * doesn't emit complete signal. Method is left with logging.
    *
-   * <p>See for details: {@link MessageType#COMPLETE}, {@link Protocol#createDisconnectBody(long)},
-   * {@link ClientDataMessageProcessor#onComplete(long)}.
+   * <p>See for details: {@link MessageType#COMPLETE}, {@link Protocol#createDisconnectBody(long)}.
    *
    * @param sessionId session id
    */

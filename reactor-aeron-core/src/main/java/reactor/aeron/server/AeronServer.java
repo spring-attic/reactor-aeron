@@ -49,7 +49,7 @@ public final class AeronServer {
   public Mono<? extends OnDisposable> bind(AeronOptions options) {
     return Mono.defer(
         () -> {
-          ServerHandler serverHandler = new ServerHandler(settings.options(options));
+          AeronServerHandler serverHandler = new AeronServerHandler(settings.options(options));
 
           AeronResources resources = settings.aeronResources();
           String category = settings.name();

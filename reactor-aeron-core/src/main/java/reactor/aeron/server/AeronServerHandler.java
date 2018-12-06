@@ -3,11 +3,14 @@ package reactor.aeron.server;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
 import reactor.aeron.AeronInbound;
 import reactor.aeron.AeronOptions;
@@ -27,16 +30,17 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
+final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable {
 
-  private static final Logger logger = Loggers.getLogger(ServerHandler.class);
+  private static final Logger logger = Loggers.getLogger(AeronServerHandler.class);
 
   private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
-  private final AeronServerSettings settings;
   private final String category;
   private final AeronOptions options;
   private final AeronResources resources;
+  private final Function<? super Connection, ? extends Publisher<Void>> handler;
+
   private final AtomicLong nextSessionId = new AtomicLong(0);
 
   private final List<SessionHandler> handlers = new CopyOnWriteArrayList<>();
@@ -44,15 +48,15 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
   private final MonoProcessor<Void> dispose = MonoProcessor.create();
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
-  ServerHandler(AeronServerSettings settings) {
-    this.settings = settings;
-    this.category = settings.name();
-    this.options = settings.options();
-    this.resources = settings.aeronResources();
+  AeronServerHandler(AeronServerSettings settings) {
+    category = settings.name();
+    options = settings.options();
+    resources = settings.aeronResources();
+    handler = settings.handler();
 
-    this.dispose
+    dispose
         .then(doDispose())
-        .subscribe(null, th -> logger.warn("ServerHandler disposed with error: {}", th));
+        .subscribe(null, th -> logger.warn("AeronServerHandler disposed with error: {}", th));
   }
 
   @Override
@@ -91,13 +95,12 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
             serverSessionStreamId);
 
     sessionHandler
-        .initialise()
+        .start()
         .subscribeOn(Schedulers.single())
         .subscribe(
             connection ->
-                settings
-                    .handler() //
-                    .apply(connection)
+                handler
+                    .apply(connection) //
                     .subscribe(connection.disposeSubscriber()),
             th ->
                 logger.error(
@@ -214,19 +217,11 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
           category, clientChannel, clientControlStreamId, options, resources.nextEventLoop());
     }
 
-    Mono<? extends Connection> initialise() {
-
+    private Mono<? extends Connection> start() {
+      String serverChannel = options.serverChannel();
       return connect()
-          .then(outbound.initialise(sessionId, clientSessionStreamId))
-          .log("outbound ")
-          .then(
-              inbound.initialise(
-                  category,
-                  options.serverChannel(),
-                  serverSessionStreamId,
-                  sessionId,
-                  this::dispose))
-          .log("inbound ")
+          .then(outbound.start(sessionId, clientSessionStreamId))
+          .then(inbound.start(serverChannel, serverSessionStreamId, sessionId, this::dispose))
           .thenReturn(this)
           .doOnSuccess(
               connection -> {
@@ -294,10 +289,18 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
 
             handlers.remove(this);
 
-            outbound.dispose();
-            inbound.dispose();
+            Optional.ofNullable(outbound) //
+                .ifPresent(DefaultAeronOutbound::dispose);
+            Optional.ofNullable(inbound) //
+                .ifPresent(AeronServerInbound::dispose);
 
-            return Mono.whenDelayError(outbound.onDispose(), inbound.onDispose())
+            return Mono.whenDelayError(
+                    Optional.ofNullable(outbound)
+                        .map(DefaultAeronOutbound::onDispose)
+                        .orElse(Mono.empty()),
+                    Optional.ofNullable(inbound)
+                        .map(AeronServerInbound::onDispose)
+                        .orElse(Mono.empty()))
                 .doFinally(
                     s -> {
                       logger.debug("[{}] Closed session with sessionId: {}", category, sessionId);

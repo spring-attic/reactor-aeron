@@ -1,54 +1,58 @@
 package reactor.aeron.client;
 
-import io.aeron.Image;
 import java.nio.ByteBuffer;
+import java.util.Optional;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.aeron.AeronEventLoop;
 import reactor.aeron.AeronInbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.ByteBufferFlux;
 import reactor.aeron.DataMessageSubscriber;
+import reactor.aeron.InnerPoller;
 import reactor.aeron.MessageType;
-import reactor.core.Disposable;
-import reactor.util.Logger;
-import reactor.util.Loggers;
+import reactor.aeron.OnDisposable;
+import reactor.core.publisher.Mono;
 
-final class AeronClientInbound implements AeronInbound, Disposable {
+final class AeronClientInbound implements AeronInbound, OnDisposable {
 
-  private static final Logger logger = Loggers.getLogger(AeronClientInbound.class);
+  private final String name;
+  private final AeronResources resources;
 
-  private final ByteBufferFlux flux;
+  private volatile ByteBufferFlux flux;
+  private volatile InnerPoller subscription;
 
-  private final io.aeron.Subscription serverDataSubscription;
+  AeronClientInbound(String name, AeronResources resources) {
+    this.name = name;
+    this.resources = resources;
+  }
 
-  private final AeronResources aeronResources;
+  Mono<Void> start(String channel, int streamId, long sessionId, Runnable onCompleteHandler) {
+    return Mono.defer(
+        () -> {
+          ClientDataMessageProcessor processor =
+              new ClientDataMessageProcessor(name, sessionId, onCompleteHandler);
 
-  private final long sessionId;
+          flux = new ByteBufferFlux(processor);
 
-  private final Runnable onComplete;
+          AeronEventLoop eventLoop = resources.nextEventLoop();
 
-  AeronClientInbound(
-      String name,
-      AeronResources aeronResources,
-      String channel,
-      int streamId,
-      long sessionId,
-      Runnable onComplete) {
-    this.aeronResources = aeronResources;
-    this.onComplete = onComplete;
-    ClientDataMessageProcessor processor =
-        new ClientDataMessageProcessor(name, sessionId, onComplete);
-    this.flux = new ByteBufferFlux(processor);
-    this.sessionId = sessionId;
-    this.serverDataSubscription =
-        aeronResources.dataSubscription(
-            name,
-            channel,
-            streamId,
-            processor,
-            null,
-            this::onUnavailableDataImage);
+          return resources
+              .dataSubscription(
+                  name,
+                  channel,
+                  streamId,
+                  processor,
+                  eventLoop,
+                  null,
+                  image -> Optional.ofNullable(onCompleteHandler).ifPresent(Runnable::run))
+              .doOnSuccess(result -> subscription = result)
+              .then()
+              .log("clientInbound");
+        });
   }
 
   @Override
@@ -58,28 +62,35 @@ final class AeronClientInbound implements AeronInbound, Disposable {
 
   @Override
   public void dispose() {
-    aeronResources.close(serverDataSubscription);
-  }
-
-  private void onUnavailableDataImage(Image image) {
-    if (serverDataSubscription.hasNoImages()) {
-      onComplete.run();
+    if (subscription != null) {
+      subscription.dispose();
     }
   }
 
-  static class ClientDataMessageProcessor implements DataMessageSubscriber, Publisher<ByteBuffer> {
+  @Override
+  public Mono<Void> onDispose() {
+    return subscription != null ? subscription.onDispose() : Mono.empty();
+  }
+
+  @Override
+  public boolean isDisposed() {
+    return subscription != null && subscription.isDisposed();
+  }
+
+  private static class ClientDataMessageProcessor
+      implements DataMessageSubscriber, Publisher<ByteBuffer> {
+
+    private static final Logger logger = LoggerFactory.getLogger(ClientDataMessageProcessor.class);
 
     private final String category;
-
     private final long sessionId;
-
-    private volatile Subscription subscription;
-
-    private volatile Subscriber<? super ByteBuffer> subscriber;
-
     private final Runnable onCompleteHandler;
 
-    ClientDataMessageProcessor(String category, long sessionId, Runnable onCompleteHandler) {
+    private volatile Subscription subscription;
+    private volatile Subscriber<? super ByteBuffer> subscriber;
+
+    private ClientDataMessageProcessor(
+        String category, long sessionId, Runnable onCompleteHandler) {
       this.category = category;
       this.sessionId = sessionId;
       this.onCompleteHandler = onCompleteHandler;
@@ -120,7 +131,6 @@ final class AeronClientInbound implements AeronInbound, Disposable {
     @Override
     public void subscribe(Subscriber<? super ByteBuffer> subscriber) {
       this.subscriber = subscriber;
-
       subscriber.onSubscribe(subscription);
     }
   }

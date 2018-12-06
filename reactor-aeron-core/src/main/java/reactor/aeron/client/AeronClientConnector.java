@@ -76,7 +76,7 @@ public final class AeronClientConnector implements Disposable {
    *     (server, client connection...) or failing with the connection error.
    */
   public Mono<Connection> newHandler() {
-    return new ClientHandler().initialise();
+    return new ClientHandler().init();
   }
 
   @Override
@@ -113,6 +113,9 @@ public final class AeronClientConnector implements Disposable {
       this.clientSessionStreamId = streamIdCounter.incrementAndGet();
       this.serverChannel = options.serverChannel();
 
+      this.inbound = //
+          new AeronClientInbound(name, resources);
+
       this.outbound = //
           new DefaultAeronOutbound(name, serverChannel, resources, options);
 
@@ -128,25 +131,19 @@ public final class AeronClientConnector implements Disposable {
           name, serverChannel, CONTROL_STREAM_ID, options, resources.nextEventLoop());
     }
 
-    Mono<Connection> initialise() {
+    private Mono<Connection> init() {
       handlers.add(this);
 
       return connect()
           .flatMap(
-              connectAckResponse -> {
-                this.sessionId = connectAckResponse.sessionId;
-                this.serverSessionStreamId = connectAckResponse.serverSessionStreamId;
+              response -> {
+                sessionId = response.sessionId;
+                serverSessionStreamId = response.serverSessionStreamId;
 
-                inbound =
-                    new AeronClientInbound(
-                        name,
-                        resources,
-                        clientChannel,
-                        clientSessionStreamId,
-                        sessionId,
-                        this::dispose);
-
-                return outbound.initialise(sessionId, serverSessionStreamId);
+                return inbound
+                    .start(clientChannel, clientSessionStreamId, sessionId, this::dispose)
+                    .then(outbound.start(sessionId, serverSessionStreamId))
+                    .thenReturn(this);
               })
           .doOnError(
               ex -> {
@@ -156,6 +153,7 @@ public final class AeronClientConnector implements Disposable {
                     sessionId,
                     clientSessionStreamId,
                     ex);
+
                 dispose();
               })
           .thenReturn(this);
@@ -177,14 +175,12 @@ public final class AeronClientConnector implements Disposable {
                               MessageType.CONNECT_ACK,
                               options.ackTimeout().toMillis())))
           .doOnSuccess(
-              response -> {
-                this.sessionId = response.sessionId;
-                logger.debug(
-                    "[{}] Successfully connected to server at {}, sessionId: {}",
-                    name,
-                    AeronUtils.minifyChannel(serverChannel),
-                    sessionId);
-              })
+              response ->
+                  logger.debug(
+                      "[{}] Successfully connected to server at {}, sessionId: {}",
+                      name,
+                      AeronUtils.minifyChannel(serverChannel),
+                      response.sessionId))
           .doOnTerminate(connectAckSubscription::dispose)
           .doOnError(
               ex ->
@@ -280,6 +276,7 @@ public final class AeronClientConnector implements Disposable {
       return onClose.isDisposed();
     }
 
+    // TODO refactor this damn method
     public void dispose0() {
       handlers.remove(this);
 
