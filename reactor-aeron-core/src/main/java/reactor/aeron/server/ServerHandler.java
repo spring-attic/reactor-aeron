@@ -306,7 +306,7 @@ final class ServerHandler implements ControlMessageSubscriber, OnDisposable {
           });
     }
 
-    Mono<Void> connect() {
+    private Mono<Void> connect() {
       return Mono.defer(
           () -> {
             Duration retryInterval = Duration.ofMillis(100);
