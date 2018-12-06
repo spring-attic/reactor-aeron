@@ -52,7 +52,7 @@ final class AeronClientInbound implements AeronInbound, OnDisposable {
               .doOnSuccess(
                   result -> {
                     subscription = result;
-                    messageProcessor.accept(subscription);
+                    messageProcessor.onSubscription(subscription);
                   })
               .then()
               .log("clientInbound");
@@ -101,7 +101,7 @@ final class AeronClientInbound implements AeronInbound, OnDisposable {
     }
 
     @Override
-    public void accept(org.reactivestreams.Subscription subscription) {
+    public void onSubscription(org.reactivestreams.Subscription subscription) {
       this.subscription = subscription;
     }
 

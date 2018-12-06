@@ -74,7 +74,7 @@ public final class AeronServer {
                   null /**/)
               .map(
                   controlSubscription -> {
-                    serverHandler.accept(controlSubscription);
+                    serverHandler.onSubscription(controlSubscription);
                     serverHandler
                         .onDispose()
                         .doFinally(s -> controlSubscription.dispose())

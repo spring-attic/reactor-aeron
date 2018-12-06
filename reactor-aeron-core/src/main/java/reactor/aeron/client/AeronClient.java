@@ -80,7 +80,7 @@ public final class AeronClient {
                   image -> clientConnector.dispose())
               .flatMap(
                   controlSubscription -> {
-                    clientConnector.accept(controlSubscription);
+                    clientConnector.onSubscription(controlSubscription);
                     return clientConnector
                         .start()
                         .doOnError(

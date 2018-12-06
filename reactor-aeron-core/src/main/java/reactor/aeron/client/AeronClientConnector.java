@@ -335,7 +335,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
   }
 
   @Override
-  public void accept(org.reactivestreams.Subscription subscription) {
+  public void onSubscription(org.reactivestreams.Subscription subscription) {
     subscription.request(Long.MAX_VALUE);
   }
 

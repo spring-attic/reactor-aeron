@@ -1,10 +1,11 @@
 package reactor.aeron;
 
 import java.util.UUID;
-import java.util.function.Consumer;
 import org.reactivestreams.Subscription;
 
-public interface ControlMessageSubscriber extends Consumer<Subscription> {
+public interface ControlMessageSubscriber {
+
+  void onSubscription(Subscription subscription);
 
   void onConnect(
       UUID connectRequestId,
