@@ -43,8 +43,16 @@ public class BaseAeronTest {
   public final void baseTearDown(TestInfo testInfo) {
     try {
       disposables.forEach(Disposable::dispose);
-      disposables.clear();
+      Mono.when(
+              disposables
+                  .stream()
+                  .filter(disposable -> disposable instanceof OnDisposable)
+                  .map(value -> (OnDisposable) value)
+                  .map(OnDisposable::onDispose)
+                  .toArray(Mono[]::new))
+          .block(TIMEOUT);
     } finally {
+      disposables.clear();
       logger.info("***** Test finished : " + testInfo.getDisplayName() + " *****");
     }
   }

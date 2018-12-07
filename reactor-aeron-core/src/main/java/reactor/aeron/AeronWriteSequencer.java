@@ -1,27 +1,33 @@
 package reactor.aeron;
 
 import java.nio.ByteBuffer;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscription;
+import reactor.core.CoreSubscriber;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Operators;
-import reactor.core.scheduler.Scheduler;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 import reactor.util.concurrent.Queues;
 
-public class AeronWriteSequencer {
+final class AeronWriteSequencer {
 
   @SuppressWarnings("rawtypes")
   static final AtomicIntegerFieldUpdater<AeronWriteSequencer> WIP =
       AtomicIntegerFieldUpdater.newUpdater(AeronWriteSequencer.class, "wip");
 
   private static final Logger logger = Loggers.getLogger(AeronWriteSequencer.class);
+
+  private final AeronEventLoop eventLoop;
 
   private final PublisherSender inner;
 
@@ -32,31 +38,25 @@ public class AeronWriteSequencer {
   private final BiPredicate<MonoSink<?>, Object> pendingWriteOffer;
   private final Queue<?> pendingWrites;
   private final Consumer<Object> discardedHandler;
-  private final Scheduler scheduler;
 
   @SuppressWarnings("unused")
   private volatile int wip;
 
-  AeronWriteSequencer(
-      Scheduler scheduler, String category, MessagePublication publication, long sessionId) {
+  AeronWriteSequencer(long sessionId, MessagePublication publication, AeronEventLoop eventLoop) {
+    this.eventLoop = eventLoop;
     this.discardedHandler =
         o -> {
           // no-op
         };
-    this.scheduler = scheduler;
     this.pendingWrites = Queues.unbounded().get();
     //noinspection unchecked
     this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
-    this.errorHandler = th -> logger.error("[{}] Unexpected exception", category, th);
+    this.errorHandler = throwable -> logger.error("Unexpected exception", throwable);
     this.inner = new PublisherSender(this, publication, sessionId);
   }
 
   Consumer<Throwable> getErrorHandler() {
     return errorHandler;
-  }
-
-  PublisherSender getInner() {
-    return inner;
   }
 
   /**
@@ -65,31 +65,27 @@ public class AeronWriteSequencer {
    * @param publisher data publisher
    * @return mono handle
    */
-  public Mono<Void> add(Publisher<?> publisher) {
-    return Mono.create(
-        sink -> {
-          boolean success = pendingWriteOffer.test(sink, publisher);
-          if (!success) {
-            sink.error(new Exception("Failed to enqueue publisher"));
-          }
-
-          scheduleDrain();
-        });
+  public Mono<Void> write(Publisher<?> publisher) {
+    return Mono.defer(
+        () ->
+            eventLoop.execute(
+                sink -> {
+                  boolean result = pendingWriteOffer.test(sink, publisher);
+                  if (!result) {
+                    sink.error(new Exception("Failed to enqueue publisher"));
+                  }
+                  drain();
+                }));
   }
 
-  boolean isReady() {
-    return !getInner().isCancelled();
-  }
-
-  private void drain() {
-    PublisherSender inner = getInner();
+  void drain() {
     if (WIP.getAndIncrement(this) == 0) {
 
       for (; ; ) {
-        if (inner.isCancelled()) {
+        if (inner.isCancelled) {
           discard();
 
-          inner.setCancelled(false);
+          inner.isCancelled = false;
 
           if (WIP.decrementAndGet(this) == 0) {
             break;
@@ -97,7 +93,7 @@ public class AeronWriteSequencer {
           continue;
         }
 
-        if (inner.isActive()) {
+        if (inner.isActive) {
           if (WIP.decrementAndGet(this) == 0) {
             break;
           }
@@ -145,12 +141,12 @@ public class AeronWriteSequencer {
             continue;
           }
 
-          inner.setActive(true);
-          inner.setResultSink(promise);
+          inner.isActive = true;
+          inner.promise = promise;
           inner.onSubscribe(Operators.scalarSubscription(inner, (ByteBuffer) vr));
         } else {
-          inner.setActive(true);
-          inner.setResultSink(promise);
+          inner.isActive = true;
+          inner.promise = promise;
           //noinspection ConstantConditions
           p.subscribe(inner);
         }
@@ -179,9 +175,314 @@ public class AeronWriteSequencer {
     }
   }
 
-  void scheduleDrain() {
-    if (!scheduler.isDisposed()) {
-      scheduler.schedule(this::drain);
+  static class PublisherSender implements CoreSubscriber<ByteBuffer>, Subscription {
+
+    static final AtomicReferenceFieldUpdater<PublisherSender, Subscription> MISSED_SUBSCRIPTION =
+        AtomicReferenceFieldUpdater.newUpdater(
+            PublisherSender.class, Subscription.class, "missedSubscription");
+
+    static final AtomicLongFieldUpdater<PublisherSender> MISSED_REQUESTED =
+        AtomicLongFieldUpdater.newUpdater(PublisherSender.class, "missedRequested");
+
+    static final AtomicLongFieldUpdater<PublisherSender> MISSED_PRODUCED =
+        AtomicLongFieldUpdater.newUpdater(PublisherSender.class, "missedProduced");
+
+    static final AtomicIntegerFieldUpdater<PublisherSender> WIP =
+        AtomicIntegerFieldUpdater.newUpdater(PublisherSender.class, "wip");
+
+    private final int batchSize;
+    private final AeronWriteSequencer parent;
+
+    private final long sessionId;
+
+    private final MessagePublication publication;
+    private volatile Subscription missedSubscription;
+    private volatile long missedRequested;
+    private volatile long missedProduced;
+    private volatile int wip;
+
+    // a subscription has been cancelled
+    private volatile boolean isCancelled;
+
+    // a publisher is being drained
+    private volatile boolean isActive;
+
+    /** The current outstanding request amount. */
+    private long requested;
+
+    private boolean unbounded;
+    /** The current subscription which may null if no Subscriptions have been set. */
+    private Subscription actual;
+
+    private long produced;
+    private MonoSink<?> promise;
+    private long upstreamRequested;
+
+    PublisherSender(AeronWriteSequencer parent, MessagePublication publication, long sessionId) {
+      this.batchSize = 16;
+      this.parent = parent;
+      this.sessionId = sessionId;
+      this.publication = publication;
+    }
+
+    @Override
+    public final void cancel() {
+      // full stop
+      if (!isCancelled) {
+        isCancelled = true;
+
+        drain();
+      }
+    }
+
+    @Override
+    public void onComplete() {
+      long p = produced;
+      isActive = false;
+
+      produced = 0L;
+      produced(p);
+
+      promise.success();
+      parent.drain();
+    }
+
+    @Override
+    public void onError(Throwable t) {
+      long p = produced;
+      isActive = false;
+
+      produced = 0L;
+      produced(p);
+
+      promise.error(t);
+      parent.drain();
+    }
+
+    @Override
+    public void onNext(ByteBuffer t) {
+      AeronEventLoop eventLoop = parent.eventLoop;
+      if (eventLoop.inEventLoop()) {
+        onNextInternal(t, null);
+      } else {
+        eventLoop
+            .execute(sink -> onNextInternal(t, sink))
+            .subscribe(null, this::disposeCurrentDataStream);
+      }
+    }
+
+    private void onNextInternal(ByteBuffer byteBuffer, MonoSink<Void> sink) {
+      // TODO : think of lastWrite field
+      // TODO : think what to do with passed sink
+      produced++;
+
+      publication
+          .enqueue(MessageType.NEXT, byteBuffer, sessionId)
+          .doFinally(
+              s -> {
+                if (upstreamRequested - produced == 0 && requested - produced > 0) {
+                  requestFromUpstream(actual);
+                }
+              })
+          .subscribe(null, this::disposeCurrentDataStream);
+    }
+
+    private void disposeCurrentDataStream(Throwable th) {
+      cancel();
+      promise.error(new Exception("Failed to publish signal into session: " + sessionId, th));
+      parent.drain();
+    }
+
+    @Override
+    public void onSubscribe(Subscription s) {
+      Objects.requireNonNull(s);
+
+      if (isCancelled) {
+        s.cancel();
+        return;
+      }
+
+      if (wip == 0 && WIP.compareAndSet(this, 0, 1)) {
+        actual = s;
+        upstreamRequested = 0;
+
+        request(Long.MAX_VALUE);
+
+        long r = requested;
+
+        if (WIP.decrementAndGet(this) != 0) {
+          drainLoop();
+        }
+
+        if (r != 0L) {
+          requestFromUpstream(s);
+        }
+
+        return;
+      }
+
+      MISSED_SUBSCRIPTION.set(this, s);
+      drain();
+    }
+
+    @Override
+    public final void request(long n) {
+      if (Operators.validate(n)) {
+        if (unbounded) {
+          return;
+        }
+        if (wip == 0 && WIP.compareAndSet(this, 0, 1)) {
+          long r = requested;
+
+          if (r != Long.MAX_VALUE) {
+            r = Operators.addCap(r, n);
+            requested = r;
+            if (r == Long.MAX_VALUE) {
+              unbounded = true;
+            }
+          }
+          Subscription a = actual;
+
+          if (WIP.decrementAndGet(this) != 0) {
+            drainLoop();
+          }
+
+          if (a != null) {
+            requestFromUpstream(a);
+          }
+
+          return;
+        }
+
+        Operators.addCap(MISSED_REQUESTED, this, n);
+
+        drain();
+      }
+    }
+
+    final void requestFromUpstream(Subscription s) {
+      if (upstreamRequested < requested) {
+        upstreamRequested += batchSize;
+
+        s.request(batchSize);
+      }
+    }
+
+    final void drain() {
+      if (WIP.getAndIncrement(this) != 0) {
+        return;
+      }
+      drainLoop();
+    }
+
+    final void drainLoop() {
+      int missed = 1;
+
+      long requestAmount = 0L;
+      Subscription requestTarget = null;
+
+      for (; ; ) {
+
+        Subscription ms = missedSubscription;
+
+        if (ms != null) {
+          ms = MISSED_SUBSCRIPTION.getAndSet(this, null);
+        }
+
+        long mr = missedRequested;
+        if (mr != 0L) {
+          mr = MISSED_REQUESTED.getAndSet(this, 0L);
+        }
+
+        long mp = missedProduced;
+        if (mp != 0L) {
+          mp = MISSED_PRODUCED.getAndSet(this, 0L);
+        }
+
+        Subscription a = actual;
+
+        if (isCancelled) {
+          if (a != null) {
+            a.cancel();
+            actual = null;
+            upstreamRequested = 0;
+          }
+          if (ms != null) {
+            ms.cancel();
+          }
+
+          isActive = false;
+        } else {
+          long r = requested;
+          if (r != Long.MAX_VALUE) {
+            long u = Operators.addCap(r, mr);
+
+            if (u != Long.MAX_VALUE) {
+              long v = u - mp;
+              if (v < 0L) {
+                Operators.reportMoreProduced();
+                v = 0;
+              }
+              r = v;
+            } else {
+              r = u;
+            }
+            requested = r;
+          }
+
+          if (ms != null) {
+            actual = ms;
+            upstreamRequested = 0;
+            if (r != 0L) {
+              requestAmount = Operators.addCap(requestAmount, r);
+              requestTarget = ms;
+            }
+          } else if (mr != 0L && a != null) {
+            requestAmount = Operators.addCap(requestAmount, mr);
+            requestTarget = a;
+          }
+        }
+
+        missed = WIP.addAndGet(this, -missed);
+        if (missed == 0) {
+          if (requestAmount != 0L) {
+            requestFromUpstream(requestTarget);
+          }
+          return;
+        }
+      }
+    }
+
+    final void produced(long n) {
+      if (unbounded) {
+        return;
+      }
+      if (wip == 0 && WIP.compareAndSet(this, 0, 1)) {
+        long r = requested;
+
+        if (r != Long.MAX_VALUE) {
+          long u = r - n;
+          if (u < 0L) {
+            Operators.reportMoreProduced();
+            u = 0;
+          }
+          requested = u;
+        } else {
+          unbounded = true;
+        }
+
+        if (WIP.decrementAndGet(this) == 0) {
+          return;
+        }
+
+        drainLoop();
+
+        return;
+      }
+
+      Operators.addCap(MISSED_PRODUCED, this, n);
+
+      drain();
     }
   }
 }

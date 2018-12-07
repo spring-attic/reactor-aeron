@@ -1,47 +1,93 @@
 package reactor.aeron;
 
-import io.aeron.Publication;
 import java.nio.ByteBuffer;
+import java.time.Duration;
+import java.util.Objects;
 import org.reactivestreams.Publisher;
-import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.MonoSink;
-import reactor.core.scheduler.Schedulers;
+import reactor.util.Logger;
+import reactor.util.Loggers;
 
-/** Default aeron outbound. */
-public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
+public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
+
+  private static final Logger logger = Loggers.getLogger(DefaultAeronOutbound.class);
+
+  private static final RuntimeException NOT_CONNECTED_EXCEPTION =
+      new RuntimeException("publication is not connected");
 
   private final String category;
-
-  private final AeronResources aeronResources;
-
   private final String channel;
-
+  private final AeronResources resources;
   private final AeronOptions options;
 
   private volatile AeronWriteSequencer sequencer;
-
-  private volatile DefaultMessagePublication publication;
+  private volatile MessagePublication publication;
 
   /**
    * Constructor.
    *
    * @param category category
-   * @param aeronResources aeronResources
    * @param channel channel
+   * @param resources resources
    * @param options options
    */
   public DefaultAeronOutbound(
-      String category, AeronResources aeronResources, String channel, AeronOptions options) {
+      String category, String channel, AeronResources resources, AeronOptions options) {
     this.category = category;
-    this.aeronResources = aeronResources;
     this.channel = channel;
+    this.resources = resources;
     this.options = options;
+  }
+
+  /**
+   * Init method. Creates data publication and assigns it to event loop. Makes this object eligible
+   * for calling {@link #send(Publisher)} function.
+   *
+   * @param sessionId session id
+   * @param streamId stream id
+   * @return initialization handle
+   */
+  public Mono<Void> start(long sessionId, int streamId) {
+    return Mono.defer(
+        () -> {
+          final AeronEventLoop eventLoop = resources.nextEventLoop();
+
+          return resources
+              .messagePublication(category, channel, streamId, options, eventLoop)
+              .doOnSuccess(
+                  result -> {
+                    publication = result;
+                    sequencer = new AeronWriteSequencer(sessionId, publication, eventLoop);
+                  })
+              .flatMap(
+                  result -> {
+                    Duration retryInterval = Duration.ofMillis(100);
+                    Duration connectTimeout = options.connectTimeout();
+                    long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
+
+                    return Mono.fromCallable(publication::isConnected)
+                        .filter(isConnected -> isConnected)
+                        .switchIfEmpty(Mono.error(NOT_CONNECTED_EXCEPTION))
+                        .retryBackoff(retryCount, retryInterval, retryInterval)
+                        .timeout(connectTimeout)
+                        .then()
+                        .onErrorResume(
+                            th -> {
+                              logger.warn(
+                                  "Failed to connect publication {} for sending data during {}",
+                                  publication,
+                                  connectTimeout);
+                              return Mono.error(th);
+                            });
+                  })
+              .log("defaultOutbound");
+        });
   }
 
   @Override
   public AeronOutbound send(Publisher<? extends ByteBuffer> dataStream) {
-    return then(sequencer.add(dataStream));
+    Objects.requireNonNull(sequencer, "sequencer must be initialized");
+    return then(sequencer.write(dataStream));
   }
 
   @Override
@@ -51,59 +97,19 @@ public final class DefaultAeronOutbound implements Disposable, AeronOutbound {
 
   @Override
   public void dispose() {
+    // TODO : at this moment dispose sequencer's pending writes queue as well
     if (publication != null) {
       publication.dispose();
     }
   }
 
-  /**
-   * Init method.
-   *
-   * @param sessionId session id
-   * @param streamId stream id
-   * @return initialization handle
-   */
-  public Mono<Void> initialise(long sessionId, int streamId) {
-    return Mono.create(
-        sink -> {
-          Publication aeronPublication =
-              aeronResources.publication(category, channel, streamId, "to send data to", sessionId);
-          this.publication =
-              new DefaultMessagePublication(
-                  aeronPublication,
-                  category,
-                  options.connectTimeoutMillis(),
-                  options.backpressureTimeoutMillis());
-          this.sequencer = aeronResources.writeSequencer(category, publication, sessionId);
-          int timeoutMillis = options.connectTimeoutMillis();
-
-          createRetryTask(sink, aeronPublication, timeoutMillis).schedule();
-        });
+  @Override
+  public boolean isDisposed() {
+    return publication != null && publication.isDisposed();
   }
 
-  private RetryTask createRetryTask(
-      MonoSink<Void> sink, Publication aeronPublication, int timeoutMillis) {
-    return new RetryTask(
-        Schedulers.single(),
-        100,
-        timeoutMillis,
-        () -> {
-          if (aeronPublication.isConnected()) {
-            sink.success();
-            return true;
-          }
-          return false;
-        },
-        throwable -> {
-          String errMessage =
-              String.format(
-                  "Publication %s for sending data in not connected during %d millis",
-                  publication.asString(), timeoutMillis);
-          sink.error(new Exception(errMessage, throwable));
-        });
-  }
-
-  public MessagePublication getPublication() {
-    return publication;
+  @Override
+  public Mono<Void> onDispose() {
+    return publication != null ? publication.onDispose() : Mono.empty();
   }
 }

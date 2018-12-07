@@ -1,18 +1,32 @@
 package reactor.aeron;
 
+import io.aeron.driver.Configuration;
 import io.aeron.driver.ThreadingMode;
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
+import org.agrona.concurrent.BackoffIdleStrategy;
+import org.agrona.concurrent.IdleStrategy;
 
 public class AeronResourcesConfig {
 
-  public static final boolean DELETE_AERON_DIR_ON_START = true;
-  public static final ThreadingMode THREADING_MODE = ThreadingMode.DEDICATED;
-
   private final ThreadingMode threadingMode;
   private final boolean dirDeleteOnStart;
+  private final int mtuLength;
+  private final Duration imageLivenessTimeout;
+  private final Supplier<IdleStrategy> idleStrategySupplier;
 
   private AeronResourcesConfig(Builder builder) {
     this.threadingMode = builder.threadingMode;
     this.dirDeleteOnStart = builder.dirDeleteOnStart;
+    this.mtuLength = builder.mtuLength;
+    this.imageLivenessTimeout = builder.imageLivenessTimeout;
+    this.idleStrategySupplier = builder.idleStrategySupplier;
+  }
+
+  private static BackoffIdleStrategy defaultBackoffIdleStrategy() {
+    return new BackoffIdleStrategy(
+        100, 10, TimeUnit.MICROSECONDS.toNanos(1), TimeUnit.MICROSECONDS.toNanos(100));
   }
 
   public static AeronResourcesConfig defaultConfig() {
@@ -31,19 +45,39 @@ public class AeronResourcesConfig {
     return threadingMode;
   }
 
+  public int mtuLength() {
+    return mtuLength;
+  }
+
+  public Duration imageLivenessTimeout() {
+    return imageLivenessTimeout;
+  }
+
+  public Supplier<IdleStrategy> idleStrategySupplier() {
+    return idleStrategySupplier;
+  }
+
   @Override
   public String toString() {
     final StringBuilder sb = new StringBuilder("AeronResourcesConfig{");
     sb.append(", threadingMode=").append(threadingMode);
     sb.append(", dirDeleteOnStart=").append(dirDeleteOnStart);
+    sb.append(", mtuLength=").append(mtuLength);
+    sb.append(", imageLivenessTimeout=").append(imageLivenessTimeout);
+    sb.append(", idleStrategySupplier=").append(idleStrategySupplier);
     sb.append('}');
     return sb.toString();
   }
 
   public static class Builder {
 
-    private ThreadingMode threadingMode = THREADING_MODE;
-    private boolean dirDeleteOnStart = DELETE_AERON_DIR_ON_START;
+    private ThreadingMode threadingMode = ThreadingMode.DEDICATED;
+    private boolean dirDeleteOnStart = true;
+    private int mtuLength = Configuration.MTU_LENGTH;
+    private Duration imageLivenessTimeout =
+        Duration.ofNanos(Configuration.IMAGE_LIVENESS_TIMEOUT_NS);
+    private Supplier<IdleStrategy> idleStrategySupplier =
+        AeronResourcesConfig::defaultBackoffIdleStrategy;
 
     private Builder() {}
 
@@ -69,6 +103,21 @@ public class AeronResourcesConfig {
 
     public Builder dirDeleteOnStart(boolean dirDeleteOnStart) {
       this.dirDeleteOnStart = dirDeleteOnStart;
+      return this;
+    }
+
+    public Builder mtuLength(int mtuLength) {
+      this.mtuLength = mtuLength;
+      return this;
+    }
+
+    public Builder imageLivenessTimeout(Duration imageLivenessTimeout) {
+      this.imageLivenessTimeout = imageLivenessTimeout;
+      return this;
+    }
+
+    public Builder idleStrategySupplier(Supplier<IdleStrategy> idleStrategySupplier) {
+      this.idleStrategySupplier = idleStrategySupplier;
       return this;
     }
 

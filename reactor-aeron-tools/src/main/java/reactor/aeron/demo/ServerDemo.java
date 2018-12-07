@@ -11,10 +11,13 @@ public class ServerDemo {
    * @param args program arguments.
    */
   public static void main(String[] args) throws Exception {
-    try (AeronResources aeronResources = AeronResources.start()) {
-
+    AeronResources aeronResources = AeronResources.start();
+    try {
       AeronServer.create("server", aeronResources)
-          .options(options -> options.serverChannel("aeron:udp?endpoint=localhost:13000"))
+          .options(
+              options ->
+                  options.serverChannel(
+                      channel -> channel.media("udp").reliable(true).endpoint("localhost:13000")))
           .handle(
               connection ->
                   connection
@@ -27,6 +30,9 @@ public class ServerDemo {
           .block();
 
       Thread.currentThread().join();
+    } finally {
+      aeronResources.dispose();
+      aeronResources.onDispose().block();
     }
   }
 }

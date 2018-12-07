@@ -1,13 +1,20 @@
 package reactor.aeron.client;
 
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import org.reactivestreams.Publisher;
+import reactor.aeron.AeronEventLoop;
+import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
 import reactor.core.publisher.Mono;
 
 public final class AeronClient {
+
+  private static final AtomicInteger STREAM_ID_COUNTER = new AtomicInteger();
 
   private final AeronClientSettings settings;
 
@@ -41,39 +48,76 @@ public final class AeronClient {
     return connect(settings.options());
   }
 
-  public Mono<? extends Connection> connect(AeronClientOptions options) {
+  public Mono<? extends Connection> connect(AeronOptions options) {
     return Mono.defer(() -> connect0(options));
   }
 
-  private Mono<? extends Connection> connect0(AeronClientOptions options) {
-    AeronClientConnector connector = new AeronClientConnector(settings.options(options));
-    return connector
-        .newHandler()
-        .doOnError(ex -> connector.dispose())
-        .doOnSuccess(
-            connection -> {
-              settings
-                  .handler() //
-                  .apply(connection)
-                  .subscribe(connection.disposeSubscriber());
-              connection
-                  .onDispose()
-                  .doOnTerminate(connector::dispose)
-                  .subscribe(
-                      null,
-                      th -> {
-                        // no-op
-                      });
-            });
+  private Mono<? extends Connection> connect0(AeronOptions options) {
+    return Mono.defer(
+        () -> {
+          AeronClientSettings settings = this.settings.options(options);
+
+          int clientControlStreamId = STREAM_ID_COUNTER.incrementAndGet();
+          Supplier<Integer> clientSessionStreamIdCounter = STREAM_ID_COUNTER::incrementAndGet;
+
+          AeronClientConnector clientConnector =
+              new AeronClientConnector(
+                  settings, clientControlStreamId, clientSessionStreamIdCounter);
+
+          String category = Optional.ofNullable(settings.name()).orElse("client");
+          AeronResources resources = settings.aeronResources();
+          String clientChannel = settings.options().clientChannel();
+          AeronEventLoop eventLoop = resources.nextEventLoop();
+
+          return resources
+              .controlSubscription(
+                  category,
+                  clientChannel,
+                  clientControlStreamId,
+                  clientConnector,
+                  eventLoop,
+                  null,
+                  image -> clientConnector.dispose())
+              .flatMap(
+                  controlSubscription -> {
+                    clientConnector.onSubscription(controlSubscription);
+                    return clientConnector
+                        .start()
+                        .doOnError(
+                            ex -> {
+                              controlSubscription.dispose();
+                              clientConnector.dispose();
+                            })
+                        .doOnSuccess(
+                            connection -> {
+                              settings
+                                  .handler() //
+                                  .apply(connection)
+                                  .subscribe(connection.disposeSubscriber());
+                              connection
+                                  .onDispose()
+                                  .doFinally(
+                                      s -> {
+                                        controlSubscription.dispose();
+                                        clientConnector.dispose();
+                                      })
+                                  .subscribe(
+                                      null,
+                                      th -> {
+                                        // no-op
+                                      });
+                            });
+                  });
+        });
   }
 
   /**
-   * Apply {@link AeronClientOptions} on the given options consumer.
+   * Apply {@link AeronOptions} on the given options consumer.
    *
    * @param options a consumer aeron client options
    * @return a new {@link AeronClient}
    */
-  public AeronClient options(Consumer<AeronClientOptions> options) {
+  public AeronClient options(Consumer<AeronOptions.Builder> options) {
     return new AeronClient(settings.options(options));
   }
 

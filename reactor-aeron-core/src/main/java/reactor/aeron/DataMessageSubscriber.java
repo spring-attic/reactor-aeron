@@ -1,8 +1,11 @@
 package reactor.aeron;
 
 import java.nio.ByteBuffer;
+import org.reactivestreams.Subscription;
 
-public interface DataMessageSubscriber extends PollerSubscriber {
+public interface DataMessageSubscriber {
+
+  void onSubscription(Subscription subscription);
 
   void onNext(long sessionId, ByteBuffer buffer);
 

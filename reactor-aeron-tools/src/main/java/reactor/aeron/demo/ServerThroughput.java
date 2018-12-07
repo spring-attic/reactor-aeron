@@ -33,11 +33,11 @@ public class ServerThroughput {
    * @param args program arguments.
    */
   public static void main(String[] args) throws Exception {
-
-    try (AeronResources aeronResources = AeronResources.start()) {
-
+    AeronResources aeronResources = AeronResources.start();
+    try {
       Queue<Data> queue = new ConcurrentLinkedDeque<>();
       AtomicLong counter = new AtomicLong();
+
       Schedulers.single()
           .schedulePeriodically(
               () -> {
@@ -65,7 +65,10 @@ public class ServerThroughput {
               TimeUnit.SECONDS);
 
       AeronServer.create("server", aeronResources)
-          .options(options -> options.serverChannel("aeron:udp?endpoint=" + HOST + ":13000"))
+          .options(
+              options ->
+                  options.serverChannel(
+                      channel -> channel.media("udp").reliable(true).endpoint(HOST + ":13000")))
           .handle(
               connection ->
                   connection
@@ -82,6 +85,9 @@ public class ServerThroughput {
           .block();
 
       Thread.currentThread().join();
+    } finally {
+      aeronResources.dispose();
+      aeronResources.onDispose().block();
     }
   }
 

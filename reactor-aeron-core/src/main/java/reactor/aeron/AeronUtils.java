@@ -1,25 +1,14 @@
 package reactor.aeron;
 
 import io.aeron.Publication;
+import io.aeron.Subscription;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.TimeUnit;
-import org.agrona.concurrent.BackoffIdleStrategy;
 
 /** Aeron utils. */
 public final class AeronUtils {
 
   public static final String CHANNEL_PREFIX = "aeron:udp?endpoint=";
-
-  /**
-   * Factory for backoff idle strategy.
-   *
-   * @return backoff idle strategy
-   */
-  public static BackoffIdleStrategy newBackoffIdleStrategy() {
-    return new BackoffIdleStrategy(
-        100, 10, TimeUnit.MICROSECONDS.toNanos(1), TimeUnit.MICROSECONDS.toNanos(100));
-  }
 
   /**
    * Returns formatted publication.
@@ -29,6 +18,16 @@ public final class AeronUtils {
    */
   public static String format(Publication publication) {
     return format(publication.channel(), publication.streamId());
+  }
+
+  /**
+   * Returns formatted subscription.
+   *
+   * @param subscription subscription
+   * @return formatted subscription
+   */
+  public static String format(Subscription subscription) {
+    return format(subscription.channel(), subscription.streamId());
   }
 
   /**

@@ -1,39 +1,42 @@
 package reactor.aeron;
 
 import io.aeron.Aeron;
-import io.aeron.CommonContext;
+import io.aeron.Aeron.Context;
+import io.aeron.FragmentAssembler;
+import io.aeron.Image;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
+import io.aeron.logbuffer.FragmentHandler;
+import java.io.File;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.agrona.CloseHelper;
-import reactor.core.Disposable;
+import org.agrona.IoUtil;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-public class AeronResources implements Disposable, AutoCloseable {
+public class AeronResources implements OnDisposable {
 
   private static final Logger logger = Loggers.getLogger(AeronResources.class);
 
   private final AeronResourcesConfig config;
-  private final MonoProcessor<Void> onStart = MonoProcessor.create();
-  private final MonoProcessor<Void> onClose = MonoProcessor.create();
+
+  private final MonoProcessor<Void> start = MonoProcessor.create();
+  private final MonoProcessor<Void> dispose = MonoProcessor.create();
+  private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
   private Aeron aeron;
   private MediaDriver mediaDriver;
-
-  private Poller poller;
-  private Scheduler sender;
-  private Scheduler receiver;
+  private AeronEventLoop eventLoop;
 
   private AeronResources(AeronResourcesConfig config) {
     this.config = config;
 
-    onStart
-        .doOnTerminate(this::onStart)
+    start
+        .doOnTerminate(this::doStart)
         .subscribe(
             avoid -> logger.info("{} has started", this),
             th -> {
@@ -41,11 +44,12 @@ public class AeronResources implements Disposable, AutoCloseable {
               dispose();
             });
 
-    onClose
-        .doOnTerminate(this::onClose)
+    dispose
+        .then(doDispose())
+        .doFinally(s -> onDispose.onComplete())
         .subscribe(
-            avoid -> logger.info("{} has stopped", this),
-            th -> logger.warn("{} disposed with error: {}", this, th));
+            avoid -> logger.info("{} closed", this),
+            th -> logger.warn("{} closed with error: {}", this, th));
   }
 
   /**
@@ -71,13 +75,17 @@ public class AeronResources implements Disposable, AutoCloseable {
 
   private void start0() {
     if (!isDisposed()) {
-      onStart.onComplete();
+      start.onComplete();
     }
   }
 
-  private void onStart() {
-    MediaDriver.Context mediaContext = new MediaDriver.Context();
-    mediaContext.dirDeleteOnStart(config.isDirDeleteOnStart());
+  private void doStart() {
+    MediaDriver.Context mediaContext =
+        new MediaDriver.Context()
+            .mtuLength(config.mtuLength())
+            .imageLivenessTimeoutNs(config.imageLivenessTimeout().toNanos())
+            .dirDeleteOnStart(config.isDirDeleteOnStart());
+
     mediaDriver = MediaDriver.launchEmbedded(mediaContext);
 
     Aeron.Context aeronContext = new Aeron.Context();
@@ -86,199 +94,231 @@ public class AeronResources implements Disposable, AutoCloseable {
 
     aeron = Aeron.connect(aeronContext);
 
-    sender = Schedulers.newSingle("reactor-aeron-sender");
-    receiver = Schedulers.newSingle("reactor-aeron-receiver");
+    eventLoop = new AeronEventLoop(config.idleStrategySupplier().get());
 
-    receiver.schedule(poller = new Poller(() -> !receiver.isDisposed()));
-
-    Runtime.getRuntime()
-        .addShutdownHook(
-            new Thread(
-                () -> {
-                  try {
-                    aeronContext.deleteAeronDirectory();
-                  } catch (Throwable th) {
-                    logger.warn(
-                        "Exception occurred at deleting aeron directory: {}, cause: {}",
-                        directoryName,
-                        th);
-                  }
-                }));
+    Runtime.getRuntime().addShutdownHook(new Thread(() -> deleteAeronDirectory(aeronContext)));
 
     logger.info(
         "{} has initialized embedded media mediaDriver, aeron directory: {}", this, directoryName);
   }
 
+  public AeronEventLoop nextEventLoop() {
+    return eventLoop;
+  }
+
   /**
-   * Adds publication. Also see {@link #close(Publication)}}.
+   * Adds and registers new message publication.
    *
+   * @param category category
    * @param channel channel
    * @param streamId stream id
-   * @param purpose purpose
-   * @param sessionId session id
-   * @return publication
+   * @param options options
+   * @param eventLoop event loop where publocation would be registered
+   * @return mono handle of creation and registering of message publication
    */
-  public Publication publication(
-      String category, String channel, int streamId, String purpose, long sessionId) {
+  public Mono<MessagePublication> messagePublication(
+      String category,
+      String channel,
+      int streamId,
+      AeronOptions options,
+      AeronEventLoop eventLoop) {
 
     Publication publication = aeron.addPublication(channel, streamId);
-    if (logger.isDebugEnabled()) {
-      logger.debug(
-          "[{}] Added publication, sessionId={} {} {}",
-          category,
-          sessionId,
-          purpose,
-          AeronUtils.format(channel, streamId));
-    }
-    return publication;
+
+    MessagePublication messagePublication =
+        new MessagePublication(category, config.mtuLength(), publication, options, eventLoop);
+
+    return eventLoop
+        .register(messagePublication)
+        .doOnError(
+            ex -> {
+              logger.error(
+                  "[{}] Failed to register publication {} on eventLoop {}, cause: {}",
+                  category,
+                  AeronUtils.format(publication),
+                  eventLoop,
+                  ex);
+              if (!publication.isClosed()) {
+                publication.close();
+              }
+            })
+        .doOnSuccess(
+            avoid -> logger.debug("[{}] Added publication: {}", category, messagePublication))
+        .thenReturn(messagePublication);
   }
 
   /**
-   * Adds control subscription and register it in the {@link Poller}. Also see {@link
-   * #close(Subscription)}}.
+   * Adds control subscription and register it.
    *
    * @param channel channel
    * @param streamId stream id
-   * @param purpose purpose
-   * @param sessionId session id
-   * @param controlMessageSubscriber control message subscriber
-   * @return control subscription
+   * @param subscriber control message subscriber
+   * @param eventLoop event loop where to assign control subscription
+   * @param availableImageHandler called when {@link Image}s become available for consumption. Null
+   *     is valid if no action is to be taken.
+   * @param unavailableImageHandler called when {@link Image}s go unavailable for consumption. Null
+   *     is valid if no action is to be taken.
+   * @return mono handle of creation and registering of control message subscription
    */
-  public Subscription controlSubscription(
+  public Mono<InnerPoller> controlSubscription(
       String category,
       String channel,
       int streamId,
-      String purpose,
-      long sessionId,
-      ControlMessageSubscriber controlMessageSubscriber) {
-    Subscription subscription = addSubscription(category, channel, streamId, purpose, sessionId);
-    poller.addControlSubscription(subscription, controlMessageSubscriber);
-    return subscription;
+      ControlMessageSubscriber subscriber,
+      AeronEventLoop eventLoop,
+      Consumer<Image> availableImageHandler,
+      Consumer<Image> unavailableImageHandler) {
+
+    return messageSubscription(
+        category + "-control",
+        channel,
+        streamId,
+        new ControlFragmentHandler(subscriber),
+        eventLoop,
+        availableImageHandler,
+        unavailableImageHandler);
   }
 
   /**
-   * Adds data subscription and register it in the {@link Poller}. Also see {@link
-   * #close(Subscription)}}.
+   * Adds data subscription and register it.
    *
    * @param channel channel
    * @param streamId stream id
-   * @param purpose purpose
-   * @param sessionId session id
-   * @param dataMessageSubscriber data message subscriber
-   * @return control subscription
+   * @param subscriber data message subscriber
+   * @param eventLoop event loop where to assign data subscription
+   * @param availableImageHandler called when {@link Image}s become available for consumption. Null
+   *     is valid if no action is to be taken.
+   * @param unavailableImageHandler called when {@link Image}s go unavailable for consumption. Null
+   *     is valid if no action is to be taken.
+   * @return mono handle of creation and registering of data message subscription
    */
-  public Subscription dataSubscription(
+  public Mono<InnerPoller> dataSubscription(
       String category,
       String channel,
       int streamId,
-      String purpose,
-      long sessionId,
-      DataMessageSubscriber dataMessageSubscriber) {
-    Subscription subscription = addSubscription(category, channel, streamId, purpose, sessionId);
-    poller.addDataSubscription(subscription, dataMessageSubscriber);
-    return subscription;
-  }
+      DataMessageSubscriber subscriber,
+      AeronEventLoop eventLoop,
+      Consumer<Image> availableImageHandler,
+      Consumer<Image> unavailableImageHandler) {
 
-  /**
-   * Closes the given subscription.
-   *
-   * @param subscription subscription
-   */
-  public void close(Subscription subscription) {
-    if (subscription != null) {
-      poller.removeSubscription(subscription);
-      CloseHelper.quietClose(subscription);
-    }
-  }
-
-  /**
-   * Closes the given publication.
-   *
-   * @param publication publication
-   */
-  public void close(Publication publication) {
-    CloseHelper.quietClose(publication);
-  }
-
-  @Override
-  public void close() {
-    dispose();
+    return messageSubscription(
+        category + "-data",
+        channel,
+        streamId,
+        new DataFragmentHandler(subscriber),
+        eventLoop,
+        availableImageHandler,
+        unavailableImageHandler);
   }
 
   @Override
   public void dispose() {
     if (!isDisposed()) {
-      onClose.onComplete();
+      dispose.onComplete();
     }
-  }
-
-  private void onClose() {
-    logger.info("{} shutdown initiated", this);
-
-    Optional.ofNullable(sender) //
-        .filter(s -> !s.isDisposed())
-        .ifPresent(Scheduler::dispose);
-
-    Optional.ofNullable(receiver) //
-        .filter(s -> !s.isDisposed())
-        .ifPresent(Scheduler::dispose);
-
-    CloseHelper.quietClose(aeron);
-
-    CloseHelper.quietClose(mediaDriver);
-
-    Optional.ofNullable(mediaDriver) //
-        .map(MediaDriver::context)
-        .ifPresent(CommonContext::deleteAeronDirectory);
-
-    logger.info("{} shutdown complete", this);
   }
 
   @Override
   public boolean isDisposed() {
-    return onClose.isDisposed();
+    return onDispose.isDisposed();
   }
 
-  /**
-   * Creates new {@link AeronWriteSequencer}.
-   *
-   * @param category category
-   * @param publication publication (see {@link #publication(String, String, int, String, long)}
-   * @param sessionId session id
-   * @return new write sequencer
-   */
-  public AeronWriteSequencer writeSequencer(
-      String category, MessagePublication publication, long sessionId) {
-    AeronWriteSequencer writeSequencer =
-        new AeronWriteSequencer(sender, category, publication, sessionId);
-    if (logger.isDebugEnabled()) {
-      logger.debug("[{}] Created {}, sessionId={}", category, writeSequencer, sessionId);
-    }
-    return writeSequencer;
+  @Override
+  public Mono<Void> onDispose() {
+    return onDispose;
   }
 
-  /**
-   * Adds a subscription by given channel and stream id.
-   *
-   * @param category category
-   * @param channel channel
-   * @param streamId stream id
-   * @param purpose purpose
-   * @param sessionId session id
-   * @return subscription for channel and stream id
-   */
-  Subscription addSubscription(
-      String category, String channel, int streamId, String purpose, long sessionId) {
-    Subscription subscription = aeron.addSubscription(channel, streamId);
-    if (logger.isDebugEnabled()) {
-      logger.debug(
-          "[{}] Added subscription, sessionId={} {} {}",
-          category,
-          sessionId,
-          purpose,
-          AeronUtils.format(channel, streamId));
+  private Mono<Void> doDispose() {
+    return Mono.defer(
+        () -> {
+          logger.info("{} shutdown initiated", this);
+
+          eventLoop.dispose();
+
+          return eventLoop
+              .onDispose()
+              .doFinally(
+                  s -> {
+                    CloseHelper.quietClose(aeron);
+                    CloseHelper.quietClose(mediaDriver);
+                    Optional.ofNullable(mediaDriver) //
+                        .map(MediaDriver::context)
+                        .ifPresent(context -> IoUtil.delete(context.aeronDirectory(), true));
+
+                    logger.info("{} shutdown complete", this);
+                  });
+        });
+  }
+
+  private Mono<InnerPoller> messageSubscription(
+      String category,
+      String channel,
+      int streamId,
+      FragmentHandler fragmentHandler,
+      AeronEventLoop eventLoop,
+      Consumer<Image> availableImageHandler,
+      Consumer<Image> unavailableImageHandler) {
+
+    Subscription subscription =
+        aeron.addSubscription(
+            channel,
+            streamId,
+            image -> {
+              if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "[{}] {} available image, imageSessionId={}, imageSource={}",
+                    category,
+                    AeronUtils.format(channel, streamId),
+                    image.sessionId(),
+                    image.sourceIdentity());
+              }
+              if (availableImageHandler != null) {
+                availableImageHandler.accept(image);
+              }
+            },
+            image -> {
+              if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "[{}] {} unavailable image, imageSessionId={}, imageSource={}",
+                    category,
+                    AeronUtils.format(channel, streamId),
+                    image.sessionId(),
+                    image.sourceIdentity());
+              }
+              if (unavailableImageHandler != null) {
+                unavailableImageHandler.accept(image);
+              }
+            });
+
+    InnerPoller innerPoller =
+        new InnerPoller(eventLoop, subscription, new FragmentAssembler(fragmentHandler));
+
+    return eventLoop
+        .register(innerPoller)
+        .doOnError(
+            ex -> {
+              logger.error(
+                  "[{}] Failed to register subscription {} on eventLoop {}, cause: {}",
+                  category,
+                  AeronUtils.format(subscription),
+                  eventLoop,
+                  ex);
+              if (!subscription.isClosed()) {
+                subscription.close();
+              }
+            })
+        .doOnSuccess(
+            avoid ->
+                logger.debug(
+                    "[{}] Added subscription: {}", category, AeronUtils.format(subscription)))
+        .thenReturn(innerPoller);
+  }
+
+  private void deleteAeronDirectory(Context context) {
+    File file = context.aeronDirectory();
+    if (file.exists()) {
+      IoUtil.delete(file, true);
     }
-    return subscription;
   }
 
   @Override

@@ -1,54 +1,63 @@
 package reactor.aeron.server;
 
-import io.aeron.Subscription;
 import java.nio.ByteBuffer;
+import java.util.Optional;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.aeron.AeronEventLoop;
 import reactor.aeron.AeronInbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.ByteBufferFlux;
 import reactor.aeron.DataMessageSubscriber;
+import reactor.aeron.InnerPoller;
 import reactor.aeron.MessageType;
-import reactor.core.Disposable;
+import reactor.aeron.OnDisposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.TopicProcessor;
-import reactor.util.Logger;
-import reactor.util.Loggers;
 
-final class AeronServerInbound implements AeronInbound, Disposable {
+final class AeronServerInbound implements AeronInbound, OnDisposable {
 
+  private final String name;
+  private final AeronResources resources;
   private final TopicProcessor<ByteBuffer> processor;
   private final ByteBufferFlux flux;
 
-  private final AeronResources aeronResources;
+  private volatile InnerPoller subscription;
 
-  private Subscription serverDataSubscription;
-  private ServerDataMessageProcessor messageProcessor;
-
-  AeronServerInbound(String name, AeronResources aeronResources) {
+  AeronServerInbound(String name, AeronResources resources) {
+    this.name = name;
+    this.resources = resources;
     this.processor = TopicProcessor.<ByteBuffer>builder().name(name).build();
-    this.aeronResources = aeronResources;
     this.flux = new ByteBufferFlux(processor);
   }
 
-  Mono<Void> initialise(
-      String name,
-      String channel,
-      int serverSessionStreamId,
-      long sessionId,
-      Runnable onCompleteHandler) {
-    return Mono.fromRunnable(
+  Mono<Void> start(String channel, int streamId, long sessionId, Runnable onCompleteHandler) {
+    return Mono.defer(
         () -> {
-          messageProcessor = new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
-          serverDataSubscription =
-              aeronResources.dataSubscription(
+          ServerDataMessageProcessor messageProcessor =
+              new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
+
+          AeronEventLoop eventLoop = resources.nextEventLoop();
+
+          return resources
+              .dataSubscription(
                   name,
                   channel,
-                  serverSessionStreamId,
-                  "to receive client data on",
-                  sessionId,
-                  messageProcessor);
-          messageProcessor.subscribe(processor);
+                  streamId,
+                  messageProcessor,
+                  eventLoop,
+                  null,
+                  image -> Optional.ofNullable(onCompleteHandler).ifPresent(Runnable::run))
+              .doOnSuccess(
+                  result -> {
+                    subscription = result;
+                    messageProcessor.onSubscription(subscription);
+                    messageProcessor.subscribe(processor);
+                  })
+              .then()
+              .log("serverInbound");
         });
   }
 
@@ -59,38 +68,43 @@ final class AeronServerInbound implements AeronInbound, Disposable {
 
   @Override
   public void dispose() {
+    if (subscription != null) {
+      subscription.dispose();
+    }
     processor.onComplete();
-    aeronResources.close(serverDataSubscription);
   }
 
-  long lastSignalTimeNs() {
-    return messageProcessor.lastSignalTimeNs;
+  @Override
+  public Mono<Void> onDispose() {
+    return subscription != null ? subscription.onDispose() : Mono.empty();
   }
 
-  static class ServerDataMessageProcessor implements DataMessageSubscriber, Publisher<ByteBuffer> {
+  @Override
+  public boolean isDisposed() {
+    return subscription != null && subscription.isDisposed();
+  }
 
-    private static final Logger logger = Loggers.getLogger(ServerDataMessageProcessor.class);
+  private static class ServerDataMessageProcessor
+      implements DataMessageSubscriber, Publisher<ByteBuffer> {
+
+    private static final Logger logger = LoggerFactory.getLogger(ServerDataMessageProcessor.class);
 
     private final String category;
-
-    private volatile org.reactivestreams.Subscription subscription;
-
-    private volatile long lastSignalTimeNs;
-
-    private volatile Subscriber<? super ByteBuffer> subscriber;
-
     private final long sessionId;
-
     private final Runnable onCompleteHandler;
 
-    ServerDataMessageProcessor(String category, long sessionId, Runnable onCompleteHandler) {
+    private volatile org.reactivestreams.Subscription subscription;
+    private volatile Subscriber<? super ByteBuffer> subscriber;
+
+    private ServerDataMessageProcessor(
+        String category, long sessionId, Runnable onCompleteHandler) {
       this.category = category;
       this.sessionId = sessionId;
       this.onCompleteHandler = onCompleteHandler;
     }
 
     @Override
-    public void onSubscribe(org.reactivestreams.Subscription subscription) {
+    public void onSubscription(org.reactivestreams.Subscription subscription) {
       this.subscription = subscription;
     }
 
@@ -104,8 +118,6 @@ final class AeronServerInbound implements AeronInbound, Disposable {
             sessionId,
             buffer);
       }
-
-      lastSignalTimeNs = System.nanoTime();
 
       if (this.sessionId == sessionId) {
         subscriber.onNext(buffer);
