@@ -160,7 +160,7 @@ public class AeronResources implements OnDisposable {
    *     is valid if no action is to be taken.
    * @return mono handle of creation and registering of control message subscription
    */
-  public Mono<InnerPoller> controlSubscription(
+  public Mono<MessageSubscription> controlSubscription(
       String category,
       String channel,
       int streamId,
@@ -192,7 +192,7 @@ public class AeronResources implements OnDisposable {
    *     is valid if no action is to be taken.
    * @return mono handle of creation and registering of data message subscription
    */
-  public Mono<InnerPoller> dataSubscription(
+  public Mono<MessageSubscription> dataSubscription(
       String category,
       String channel,
       int streamId,
@@ -250,7 +250,7 @@ public class AeronResources implements OnDisposable {
         });
   }
 
-  private Mono<InnerPoller> messageSubscription(
+  private Mono<MessageSubscription> messageSubscription(
       String category,
       String channel,
       int streamId,
@@ -290,11 +290,11 @@ public class AeronResources implements OnDisposable {
               }
             });
 
-    InnerPoller innerPoller =
-        new InnerPoller(eventLoop, subscription, new FragmentAssembler(fragmentHandler));
+    MessageSubscription messageSubscription =
+        new MessageSubscription(eventLoop, subscription, new FragmentAssembler(fragmentHandler));
 
     return eventLoop
-        .register(innerPoller)
+        .register(messageSubscription)
         .doOnError(
             ex -> {
               logger.error(
@@ -311,7 +311,7 @@ public class AeronResources implements OnDisposable {
             avoid ->
                 logger.debug(
                     "[{}] Added subscription: {}", category, AeronUtils.format(subscription)))
-        .thenReturn(innerPoller);
+        .thenReturn(messageSubscription);
   }
 
   private void deleteAeronDirectory(Context context) {

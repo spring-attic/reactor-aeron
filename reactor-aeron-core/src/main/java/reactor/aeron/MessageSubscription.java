@@ -7,11 +7,11 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.Operators;
 
-public final class InnerPoller
+public final class MessageSubscription
     implements org.reactivestreams.Subscription, OnDisposable, AutoCloseable {
 
-  private static final AtomicLongFieldUpdater<InnerPoller> REQUESTED =
-      AtomicLongFieldUpdater.newUpdater(InnerPoller.class, "requested");
+  private static final AtomicLongFieldUpdater<MessageSubscription> REQUESTED =
+      AtomicLongFieldUpdater.newUpdater(MessageSubscription.class, "requested");
 
   private final AeronEventLoop eventLoop;
   private final Subscription subscription;
@@ -29,7 +29,7 @@ public final class InnerPoller
    * @param subscription aeron subscription
    * @param fragmentHandler aeron fragment handler
    */
-  public InnerPoller(
+  public MessageSubscription(
       AeronEventLoop eventLoop, Subscription subscription, FragmentHandler fragmentHandler) {
     this.eventLoop = eventLoop;
     this.subscription = subscription;
