@@ -11,7 +11,7 @@ import reactor.aeron.AeronInbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.ByteBufferFlux;
 import reactor.aeron.DataMessageSubscriber;
-import reactor.aeron.InnerPoller;
+import reactor.aeron.MessageSubscription;
 import reactor.aeron.MessageType;
 import reactor.aeron.OnDisposable;
 import reactor.core.publisher.Mono;
@@ -24,7 +24,7 @@ final class AeronServerInbound implements AeronInbound, OnDisposable {
   private final TopicProcessor<ByteBuffer> processor;
   private final ByteBufferFlux flux;
 
-  private volatile InnerPoller subscription;
+  private volatile MessageSubscription subscription;
 
   AeronServerInbound(String name, AeronResources resources) {
     this.name = name;

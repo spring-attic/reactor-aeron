@@ -12,7 +12,7 @@ import reactor.aeron.AeronInbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.ByteBufferFlux;
 import reactor.aeron.DataMessageSubscriber;
-import reactor.aeron.InnerPoller;
+import reactor.aeron.MessageSubscription;
 import reactor.aeron.MessageType;
 import reactor.aeron.OnDisposable;
 import reactor.core.publisher.Mono;
@@ -23,7 +23,7 @@ final class AeronClientInbound implements AeronInbound, OnDisposable {
   private final AeronResources resources;
 
   private volatile ByteBufferFlux flux;
-  private volatile InnerPoller subscription;
+  private volatile MessageSubscription subscription;
 
   AeronClientInbound(String name, AeronResources resources) {
     this.name = name;
