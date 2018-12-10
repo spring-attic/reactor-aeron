@@ -12,6 +12,7 @@ import java.util.function.Consumer;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
 import reactor.core.CoreSubscriber;
+import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Operators;
@@ -19,7 +20,7 @@ import reactor.util.Logger;
 import reactor.util.Loggers;
 import reactor.util.concurrent.Queues;
 
-final class AeronWriteSequencer {
+final class AeronWriteSequencer implements Disposable {
 
   @SuppressWarnings("rawtypes")
   static final AtomicIntegerFieldUpdater<AeronWriteSequencer> WIP =
@@ -41,9 +42,7 @@ final class AeronWriteSequencer {
   private final Queue<?> pendingWrites;
 
   private volatile boolean innerActive;
-  // todo help wanted, do we need to implement Disposable in AeronWriteSequencer?
   private volatile boolean removed;
-
   private volatile int wip;
 
   AeronWriteSequencer(long sessionId, MessagePublication publication, AeronEventLoop eventLoop) {
@@ -78,24 +77,29 @@ final class AeronWriteSequencer {
                 }));
   }
 
+  @Override
+  public void dispose() {
+    if (!removed) {
+      removed = true;
+      inner.cancel();
+      drain();
+    }
+  }
+
+  @Override
+  public boolean isDisposed() {
+    return removed;
+  }
+
   void drain() {
     if (WIP.getAndIncrement(this) == 0) {
 
       for (; ; ) {
 
-        if (removed) { // todo maybe cancel of message publication or inner.isCancelled?
+        if (removed) {
           discard();
           return;
         }
-
-        //  if (inner.isCancelled) {
-        //    discard();
-        //    inner.isCancelled = false;
-        //    if (WIP.decrementAndGet(this) == 0) {
-        //      break;
-        //    }
-        //    continue;
-        //  }
 
         if (innerActive) {
           if (WIP.decrementAndGet(this) == 0) {
