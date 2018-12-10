@@ -262,23 +262,10 @@ final class AeronWriteSequencer implements Disposable {
 
     @Override
     public void onNext(ByteBuffer t) {
-      AeronEventLoop eventLoop = parent.eventLoop;
-      if (eventLoop.inEventLoop()) {
-        onNextInternal(t, null);
-      } else {
-        eventLoop
-            .execute(sink -> onNextInternal(t, sink))
-            .subscribe(null, this::disposeCurrentDataStream);
-      }
-    }
-
-    private void onNextInternal(ByteBuffer byteBuffer, MonoSink<Void> sink) {
-      // TODO : think of lastWrite field
-      // TODO : think what to do with passed sink
       produced++;
 
       publication
-          .enqueue(MessageType.NEXT, byteBuffer, sessionId)
+          .enqueue(MessageType.NEXT, t, sessionId)
           .doOnSuccess(avoid -> request(1L))
           .subscribe(null, this::disposeCurrentDataStream);
     }
