@@ -12,6 +12,7 @@ import java.util.function.Consumer;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
 import reactor.core.CoreSubscriber;
+import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Operators;
@@ -19,7 +20,7 @@ import reactor.util.Logger;
 import reactor.util.Loggers;
 import reactor.util.concurrent.Queues;
 
-final class AeronWriteSequencer {
+final class AeronWriteSequencer implements Disposable {
 
   @SuppressWarnings("rawtypes")
   static final AtomicIntegerFieldUpdater<AeronWriteSequencer> WIP =
@@ -30,16 +31,18 @@ final class AeronWriteSequencer {
   private final AeronEventLoop eventLoop;
 
   private final PublisherSender inner;
+  private final int prefetch = 32;
 
   private final Consumer<Throwable> errorHandler;
+  private final Consumer<Object> discardedHandler;
 
   // Cast the supplied queue (SpscLinkedArrayQueue) to use its atomic dual-insert backed by {@link
   // BiPredicate#test)
   private final BiPredicate<MonoSink<?>, Object> pendingWriteOffer;
   private final Queue<?> pendingWrites;
-  private final Consumer<Object> discardedHandler;
 
-  @SuppressWarnings("unused")
+  private volatile boolean innerActive;
+  private volatile boolean removed;
   private volatile int wip;
 
   AeronWriteSequencer(long sessionId, MessagePublication publication, AeronEventLoop eventLoop) {
@@ -53,10 +56,6 @@ final class AeronWriteSequencer {
     this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
     this.errorHandler = throwable -> logger.error("Unexpected exception", throwable);
     this.inner = new PublisherSender(this, publication, sessionId);
-  }
-
-  Consumer<Throwable> getErrorHandler() {
-    return errorHandler;
   }
 
   /**
@@ -78,22 +77,31 @@ final class AeronWriteSequencer {
                 }));
   }
 
+  @Override
+  public void dispose() {
+    if (!removed) {
+      removed = true;
+      inner.cancel();
+      drain();
+    }
+  }
+
+  @Override
+  public boolean isDisposed() {
+    return removed;
+  }
+
   void drain() {
     if (WIP.getAndIncrement(this) == 0) {
 
       for (; ; ) {
-        if (inner.isCancelled) {
+
+        if (removed) {
           discard();
-
-          inner.isCancelled = false;
-
-          if (WIP.decrementAndGet(this) == 0) {
-            break;
-          }
-          continue;
+          return;
         }
 
-        if (inner.isActive) {
+        if (innerActive) {
           if (WIP.decrementAndGet(this) == 0) {
             break;
           }
@@ -106,7 +114,7 @@ final class AeronWriteSequencer {
         try {
           promise = (MonoSink<?>) v;
         } catch (Throwable e) {
-          getErrorHandler().accept(e);
+          errorHandler.accept(e);
           return;
         }
 
@@ -141,11 +149,11 @@ final class AeronWriteSequencer {
             continue;
           }
 
-          inner.isActive = true;
+          innerActive = true;
           inner.promise = promise;
           inner.onSubscribe(Operators.scalarSubscription(inner, (ByteBuffer) vr));
         } else {
-          inner.isActive = true;
+          innerActive = true;
           inner.promise = promise;
           //noinspection ConstantConditions
           p.subscribe(inner);
@@ -161,7 +169,7 @@ final class AeronWriteSequencer {
       try {
         promise = (MonoSink<?>) v;
       } catch (Throwable e) {
-        getErrorHandler().accept(e);
+        errorHandler.accept(e);
         return;
       }
       v = pendingWrites.poll();
@@ -171,7 +179,7 @@ final class AeronWriteSequencer {
 
       discardedHandler.accept(v);
 
-      promise.error(new AbortedException());
+      promise.error(new AbortedException("Something has been discarded"));
     }
   }
 
@@ -190,7 +198,6 @@ final class AeronWriteSequencer {
     static final AtomicIntegerFieldUpdater<PublisherSender> WIP =
         AtomicIntegerFieldUpdater.newUpdater(PublisherSender.class, "wip");
 
-    private final int batchSize;
     private final AeronWriteSequencer parent;
 
     private final long sessionId;
@@ -201,11 +208,7 @@ final class AeronWriteSequencer {
     private volatile long missedProduced;
     private volatile int wip;
 
-    // a subscription has been cancelled
-    private volatile boolean isCancelled;
-
-    // a publisher is being drained
-    private volatile boolean isActive;
+    private boolean inactive;
 
     /** The current outstanding request amount. */
     private long requested;
@@ -216,10 +219,8 @@ final class AeronWriteSequencer {
 
     private long produced;
     private MonoSink<?> promise;
-    private long upstreamRequested;
 
     PublisherSender(AeronWriteSequencer parent, MessagePublication publication, long sessionId) {
-      this.batchSize = 16;
       this.parent = parent;
       this.sessionId = sessionId;
       this.publication = publication;
@@ -228,8 +229,8 @@ final class AeronWriteSequencer {
     @Override
     public final void cancel() {
       // full stop
-      if (!isCancelled) {
-        isCancelled = true;
+      if (!inactive) {
+        inactive = true;
 
         drain();
       }
@@ -238,7 +239,7 @@ final class AeronWriteSequencer {
     @Override
     public void onComplete() {
       long p = produced;
-      isActive = false;
+      parent.innerActive = false;
 
       produced = 0L;
       produced(p);
@@ -250,7 +251,7 @@ final class AeronWriteSequencer {
     @Override
     public void onError(Throwable t) {
       long p = produced;
-      isActive = false;
+      parent.innerActive = false;
 
       produced = 0L;
       produced(p);
@@ -278,12 +279,7 @@ final class AeronWriteSequencer {
 
       publication
           .enqueue(MessageType.NEXT, byteBuffer, sessionId)
-          .doFinally(
-              s -> {
-                if (upstreamRequested - produced == 0 && requested - produced > 0) {
-                  requestFromUpstream(actual);
-                }
-              })
+          .doOnSuccess(avoid -> request(1L))
           .subscribe(null, this::disposeCurrentDataStream);
     }
 
@@ -295,18 +291,16 @@ final class AeronWriteSequencer {
 
     @Override
     public void onSubscribe(Subscription s) {
-      Objects.requireNonNull(s);
-
-      if (isCancelled) {
+      if (inactive) {
         s.cancel();
         return;
       }
 
+      Objects.requireNonNull(s);
+
       if (wip == 0 && WIP.compareAndSet(this, 0, 1)) {
         actual = s;
-        upstreamRequested = 0;
-
-        request(Long.MAX_VALUE);
+        request(parent.prefetch);
 
         long r = requested;
 
@@ -315,7 +309,7 @@ final class AeronWriteSequencer {
         }
 
         if (r != 0L) {
-          requestFromUpstream(s);
+          s.request(r);
         }
 
         return;
@@ -348,7 +342,7 @@ final class AeronWriteSequencer {
           }
 
           if (a != null) {
-            requestFromUpstream(a);
+            a.request(n);
           }
 
           return;
@@ -357,14 +351,6 @@ final class AeronWriteSequencer {
         Operators.addCap(MISSED_REQUESTED, this, n);
 
         drain();
-      }
-    }
-
-    final void requestFromUpstream(Subscription s) {
-      if (upstreamRequested < requested) {
-        upstreamRequested += batchSize;
-
-        s.request(batchSize);
       }
     }
 
@@ -387,6 +373,15 @@ final class AeronWriteSequencer {
 
         if (ms != null) {
           ms = MISSED_SUBSCRIPTION.getAndSet(this, null);
+
+          if (ms == Operators.cancelledSubscription()) {
+            parent.innerActive = false;
+            Subscription a = actual;
+            if (a != null) {
+              a.cancel();
+              actual = null;
+            }
+          }
         }
 
         long mr = missedRequested;
@@ -401,17 +396,14 @@ final class AeronWriteSequencer {
 
         Subscription a = actual;
 
-        if (isCancelled) {
+        if (inactive) {
           if (a != null) {
             a.cancel();
             actual = null;
-            upstreamRequested = 0;
           }
           if (ms != null) {
             ms.cancel();
           }
-
-          isActive = false;
         } else {
           long r = requested;
           if (r != Long.MAX_VALUE) {
@@ -432,7 +424,6 @@ final class AeronWriteSequencer {
 
           if (ms != null) {
             actual = ms;
-            upstreamRequested = 0;
             if (r != 0L) {
               requestAmount = Operators.addCap(requestAmount, r);
               requestTarget = ms;
@@ -446,7 +437,7 @@ final class AeronWriteSequencer {
         missed = WIP.addAndGet(this, -missed);
         if (missed == 0) {
           if (requestAmount != 0L) {
-            requestFromUpstream(requestTarget);
+            requestTarget.request(requestAmount);
           }
           return;
         }

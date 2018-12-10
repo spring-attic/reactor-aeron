@@ -35,7 +35,7 @@ public class ClientThroughput {
                           Flux.create(
                               sink -> {
                                 System.out.println("About to send");
-                                for (int i = 0; i < 1000 * 1024; i++) {
+                                for (int i = 0; i < 10_000 * 1024; i++) {
                                   sink.next(buffer);
                                 }
                                 sink.complete();

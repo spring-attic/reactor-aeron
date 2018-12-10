@@ -77,6 +77,7 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
                                   "Failed to connect publication {} for sending data during {}",
                                   publication,
                                   connectTimeout);
+                              dispose();
                               return Mono.error(th);
                             });
                   })
@@ -97,7 +98,9 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
 
   @Override
   public void dispose() {
-    // TODO : at this moment dispose sequencer's pending writes queue as well
+    if (sequencer != null) {
+      sequencer.dispose();
+    }
     if (publication != null) {
       publication.dispose();
     }
