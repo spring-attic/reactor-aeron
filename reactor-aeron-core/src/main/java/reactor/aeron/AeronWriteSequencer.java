@@ -72,6 +72,7 @@ final class AeronWriteSequencer implements Disposable {
                   boolean result = pendingWriteOffer.test(sink, publisher);
                   if (!result) {
                     sink.error(new Exception("Failed to enqueue publisher"));
+                    return;
                   }
                   drain();
                 }));
