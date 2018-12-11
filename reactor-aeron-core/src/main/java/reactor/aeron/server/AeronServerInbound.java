@@ -21,16 +21,13 @@ final class AeronServerInbound implements AeronInbound, OnDisposable {
 
   private final String name;
   private final AeronResources resources;
-  private final TopicProcessor<ByteBuffer> processor;
-  private final ByteBufferFlux flux;
 
+  private volatile ByteBufferFlux flux;
   private volatile MessageSubscription subscription;
 
   AeronServerInbound(String name, AeronResources resources) {
     this.name = name;
     this.resources = resources;
-    this.processor = TopicProcessor.<ByteBuffer>builder().name(name).build();
-    this.flux = new ByteBufferFlux(processor);
   }
 
   Mono<Void> start(String channel, int streamId, long sessionId, Runnable onCompleteHandler) {
@@ -38,6 +35,8 @@ final class AeronServerInbound implements AeronInbound, OnDisposable {
         () -> {
           ServerDataMessageProcessor messageProcessor =
               new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
+
+          flux = new ByteBufferFlux(messageProcessor);
 
           AeronEventLoop eventLoop = resources.nextEventLoop();
 
@@ -54,7 +53,6 @@ final class AeronServerInbound implements AeronInbound, OnDisposable {
                   result -> {
                     subscription = result;
                     messageProcessor.onSubscription(subscription);
-                    messageProcessor.subscribe(processor);
                   })
               .then()
               .log("serverInbound");
@@ -71,7 +69,6 @@ final class AeronServerInbound implements AeronInbound, OnDisposable {
     if (subscription != null) {
       subscription.dispose();
     }
-    processor.onComplete();
   }
 
   @Override
