@@ -19,6 +19,7 @@ import reactor.aeron.AeronResources;
 import reactor.aeron.AeronUtils;
 import reactor.aeron.Connection;
 import reactor.aeron.ControlMessageSubscriber;
+import reactor.aeron.DefaultAeronInbound;
 import reactor.aeron.DefaultAeronOutbound;
 import reactor.aeron.MessagePublication;
 import reactor.aeron.MessageType;
@@ -173,7 +174,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
     private final Logger logger = Loggers.getLogger(SessionHandler.class);
 
     private final DefaultAeronOutbound outbound;
-    private final AeronServerInbound inbound;
+    private final DefaultAeronInbound inbound;
     private final String clientChannel;
     private final int clientSessionStreamId;
     private final int serverSessionStreamId;
@@ -198,7 +199,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
       this.connectRequestId = connectRequestId;
       this.sessionId = sessionId;
       this.serverSessionStreamId = serverSessionStreamId;
-      this.inbound = new AeronServerInbound(category, resources);
+      this.inbound = new DefaultAeronInbound(category, resources);
 
       this.controlPublication =
           Mono.defer(() -> newControlPublication(clientChannel, clientControlStreamId)).cache();
@@ -289,14 +290,14 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
             Optional.ofNullable(outbound) //
                 .ifPresent(DefaultAeronOutbound::dispose);
             Optional.ofNullable(inbound) //
-                .ifPresent(AeronServerInbound::dispose);
+                .ifPresent(DefaultAeronInbound::dispose);
 
             return Mono.whenDelayError(
                     Optional.ofNullable(outbound)
                         .map(DefaultAeronOutbound::onDispose)
                         .orElse(Mono.empty()),
                     Optional.ofNullable(inbound)
-                        .map(AeronServerInbound::onDispose)
+                        .map(DefaultAeronInbound::onDispose)
                         .orElse(Mono.empty()))
                 .doFinally(
                     s ->

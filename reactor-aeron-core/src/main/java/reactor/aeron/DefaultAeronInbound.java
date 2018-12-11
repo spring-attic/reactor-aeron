@@ -1,23 +1,15 @@
-package reactor.aeron.server;
+package reactor.aeron;
 
 import java.nio.ByteBuffer;
 import java.util.Optional;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.aeron.AeronEventLoop;
-import reactor.aeron.AeronInbound;
-import reactor.aeron.AeronResources;
-import reactor.aeron.ByteBufferFlux;
-import reactor.aeron.DataMessageSubscriber;
-import reactor.aeron.MessageSubscription;
-import reactor.aeron.MessageType;
-import reactor.aeron.OnDisposable;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.TopicProcessor;
 
-final class AeronServerInbound implements AeronInbound, OnDisposable {
+public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
 
   private final String name;
   private final AeronResources resources;
@@ -25,12 +17,13 @@ final class AeronServerInbound implements AeronInbound, OnDisposable {
   private volatile ByteBufferFlux flux;
   private volatile MessageSubscription subscription;
 
-  AeronServerInbound(String name, AeronResources resources) {
+  public DefaultAeronInbound(String name, AeronResources resources) {
     this.name = name;
     this.resources = resources;
   }
 
-  Mono<Void> start(String channel, int streamId, long sessionId, Runnable onCompleteHandler) {
+  public Mono<Void> start(
+      String channel, int streamId, long sessionId, Runnable onCompleteHandler) {
     return Mono.defer(
         () -> {
           ServerDataMessageProcessor messageProcessor =
@@ -55,7 +48,7 @@ final class AeronServerInbound implements AeronInbound, OnDisposable {
                     messageProcessor.onSubscription(subscription);
                   })
               .then()
-              .log("serverInbound");
+              .log("inbound");
         });
   }
 
@@ -90,7 +83,7 @@ final class AeronServerInbound implements AeronInbound, OnDisposable {
     private final long sessionId;
     private final Runnable onCompleteHandler;
 
-    private volatile org.reactivestreams.Subscription subscription;
+    private volatile Subscription subscription;
     private volatile Subscriber<? super ByteBuffer> subscriber;
 
     private ServerDataMessageProcessor(
@@ -101,7 +94,7 @@ final class AeronServerInbound implements AeronInbound, OnDisposable {
     }
 
     @Override
-    public void onSubscription(org.reactivestreams.Subscription subscription) {
+    public void onSubscription(Subscription subscription) {
       this.subscription = subscription;
     }
 

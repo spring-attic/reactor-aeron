@@ -18,6 +18,7 @@ import reactor.aeron.AeronResources;
 import reactor.aeron.AeronUtils;
 import reactor.aeron.Connection;
 import reactor.aeron.ControlMessageSubscriber;
+import reactor.aeron.DefaultAeronInbound;
 import reactor.aeron.DefaultAeronOutbound;
 import reactor.aeron.MessagePublication;
 import reactor.aeron.MessageType;
@@ -125,7 +126,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
 
     private volatile long sessionId;
     private volatile int serverSessionStreamId;
-    private volatile AeronClientInbound inbound;
+    private volatile DefaultAeronInbound inbound;
 
     private final MonoProcessor<Void> dispose = MonoProcessor.create();
     private final MonoProcessor<Void> onDispose = MonoProcessor.create();
@@ -133,7 +134,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
     private ClientHandler() {
       clientSessionStreamId = clientSessionStreamIdCounter.get();
       serverChannel = options.serverChannel();
-      inbound = new AeronClientInbound(category, resources);
+      inbound = new DefaultAeronInbound(category, resources);
       outbound = new DefaultAeronOutbound(category, serverChannel, resources, options);
       controlPublication = Mono.defer(this::newControlPublication).cache();
 
@@ -308,14 +309,14 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
                           Optional.ofNullable(outbound) //
                               .ifPresent(DefaultAeronOutbound::dispose);
                           Optional.ofNullable(inbound) //
-                              .ifPresent(AeronClientInbound::dispose);
+                              .ifPresent(DefaultAeronInbound::dispose);
 
                           return Mono.whenDelayError(
                                   Optional.ofNullable(outbound)
                                       .map(DefaultAeronOutbound::onDispose)
                                       .orElse(Mono.empty()),
                                   Optional.ofNullable(inbound)
-                                      .map(AeronClientInbound::onDispose)
+                                      .map(DefaultAeronInbound::onDispose)
                                       .orElse(Mono.empty()))
                               .doFinally(
                                   s ->
