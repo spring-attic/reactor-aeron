@@ -22,6 +22,15 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
     this.resources = resources;
   }
 
+  /**
+   * Starts inbound.
+   *
+   * @param channel server or client channel uri
+   * @param streamId stream id
+   * @param sessionId session id
+   * @param onCompleteHandler callback which will be invoked when this finishes
+   * @return success result
+   */
   public Mono<Void> start(
       String channel, int streamId, long sessionId, Runnable onCompleteHandler) {
     return Mono.defer(
