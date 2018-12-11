@@ -26,8 +26,8 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
       String channel, int streamId, long sessionId, Runnable onCompleteHandler) {
     return Mono.defer(
         () -> {
-          ServerDataMessageProcessor messageProcessor =
-              new ServerDataMessageProcessor(name, sessionId, onCompleteHandler);
+          DataMessageProcessor messageProcessor =
+              new DataMessageProcessor(name, sessionId, onCompleteHandler);
 
           flux = new ByteBufferFlux(messageProcessor);
 
@@ -74,10 +74,10 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
     return subscription != null && subscription.isDisposed();
   }
 
-  private static class ServerDataMessageProcessor
+  private static class DataMessageProcessor
       implements DataMessageSubscriber, Publisher<ByteBuffer> {
 
-    private static final Logger logger = LoggerFactory.getLogger(ServerDataMessageProcessor.class);
+    private static final Logger logger = LoggerFactory.getLogger(DataMessageProcessor.class);
 
     private final String category;
     private final long sessionId;
@@ -86,8 +86,7 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
     private volatile Subscription subscription;
     private volatile Subscriber<? super ByteBuffer> subscriber;
 
-    private ServerDataMessageProcessor(
-        String category, long sessionId, Runnable onCompleteHandler) {
+    private DataMessageProcessor(String category, long sessionId, Runnable onCompleteHandler) {
       this.category = category;
       this.sessionId = sessionId;
       this.onCompleteHandler = onCompleteHandler;
