@@ -201,7 +201,8 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     private final ByteBuffer msgBody;
     private final long sessionId;
     private final MonoSink<Void> sink;
-    private final long start = System.currentTimeMillis();
+
+    private long start;
 
     private PublishTask(
         MessageType msgType, ByteBuffer msgBody, long sessionId, MonoSink<Void> sink) {
@@ -212,6 +213,9 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     }
 
     private long run() {
+      if (start == 0) {
+        start = System.currentTimeMillis();
+      }
       int capacity = msgBody.remaining() + Protocol.HEADER_SIZE;
       if (capacity < mtuLength) {
         BufferClaim bufferClaim = bufferClaims.get();
