@@ -1,4 +1,4 @@
-package reactor.aeron.client;
+package reactor.aeron;
 
 import java.nio.ByteBuffer;
 import java.util.Optional;
@@ -7,34 +7,36 @@ import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.aeron.AeronEventLoop;
-import reactor.aeron.AeronInbound;
-import reactor.aeron.AeronResources;
-import reactor.aeron.ByteBufferFlux;
-import reactor.aeron.DataMessageSubscriber;
-import reactor.aeron.InnerPoller;
-import reactor.aeron.MessageType;
-import reactor.aeron.OnDisposable;
 import reactor.core.publisher.Mono;
 
-final class AeronClientInbound implements AeronInbound, OnDisposable {
+public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
 
   private final String name;
   private final AeronResources resources;
 
   private volatile ByteBufferFlux flux;
-  private volatile InnerPoller subscription;
+  private volatile MessageSubscription subscription;
 
-  AeronClientInbound(String name, AeronResources resources) {
+  public DefaultAeronInbound(String name, AeronResources resources) {
     this.name = name;
     this.resources = resources;
   }
 
-  Mono<Void> start(String channel, int streamId, long sessionId, Runnable onCompleteHandler) {
+  /**
+   * Starts inbound.
+   *
+   * @param channel server or client channel uri
+   * @param streamId stream id
+   * @param sessionId session id
+   * @param onCompleteHandler callback which will be invoked when this finishes
+   * @return success result
+   */
+  public Mono<Void> start(
+      String channel, int streamId, long sessionId, Runnable onCompleteHandler) {
     return Mono.defer(
         () -> {
-          ClientDataMessageProcessor messageProcessor =
-              new ClientDataMessageProcessor(name, sessionId, onCompleteHandler);
+          DataMessageProcessor messageProcessor =
+              new DataMessageProcessor(name, sessionId, onCompleteHandler);
 
           flux = new ByteBufferFlux(messageProcessor);
 
@@ -55,7 +57,7 @@ final class AeronClientInbound implements AeronInbound, OnDisposable {
                     messageProcessor.onSubscription(subscription);
                   })
               .then()
-              .log("clientInbound");
+              .log("inbound");
         });
   }
 
@@ -81,10 +83,10 @@ final class AeronClientInbound implements AeronInbound, OnDisposable {
     return subscription != null && subscription.isDisposed();
   }
 
-  private static class ClientDataMessageProcessor
+  private static class DataMessageProcessor
       implements DataMessageSubscriber, Publisher<ByteBuffer> {
 
-    private static final Logger logger = LoggerFactory.getLogger(ClientDataMessageProcessor.class);
+    private static final Logger logger = LoggerFactory.getLogger(DataMessageProcessor.class);
 
     private final String category;
     private final long sessionId;
@@ -93,25 +95,34 @@ final class AeronClientInbound implements AeronInbound, OnDisposable {
     private volatile Subscription subscription;
     private volatile Subscriber<? super ByteBuffer> subscriber;
 
-    private ClientDataMessageProcessor(
-        String category, long sessionId, Runnable onCompleteHandler) {
+    private DataMessageProcessor(String category, long sessionId, Runnable onCompleteHandler) {
       this.category = category;
       this.sessionId = sessionId;
       this.onCompleteHandler = onCompleteHandler;
     }
 
     @Override
-    public void onSubscription(org.reactivestreams.Subscription subscription) {
+    public void onSubscription(Subscription subscription) {
       this.subscription = subscription;
     }
 
     @Override
     public void onNext(long sessionId, ByteBuffer buffer) {
-      if (sessionId != this.sessionId) {
-        throw new RuntimeException(
-            "Received " + MessageType.NEXT + " for unknown sessionId: " + sessionId);
+      if (logger.isTraceEnabled()) {
+        logger.trace(
+            "[{}] Received {} for sessionId: {}, buffer: {}",
+            category,
+            MessageType.NEXT,
+            sessionId,
+            buffer);
       }
-      subscriber.onNext(buffer);
+
+      if (this.sessionId == sessionId) {
+        subscriber.onNext(buffer);
+      } else {
+        logger.error(
+            "[{}] Received {} for unexpected sessionId: {}", category, MessageType.NEXT, sessionId);
+      }
     }
 
     @Override

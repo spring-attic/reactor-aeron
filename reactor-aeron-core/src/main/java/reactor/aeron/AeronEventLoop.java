@@ -35,7 +35,7 @@ public final class AeronEventLoop implements OnDisposable {
   private final Queue<CommandTask> commandTasks = new ConcurrentLinkedQueue<>();
 
   private final List<MessagePublication> publications = new ArrayList<>();
-  private final List<InnerPoller> subscriptions = new ArrayList<>();
+  private final List<MessageSubscription> subscriptions = new ArrayList<>();
 
   AeronEventLoop(IdleStrategy idleStrategy) {
     this.idleStrategy = idleStrategy;
@@ -68,13 +68,13 @@ public final class AeronEventLoop implements OnDisposable {
     sink.success();
   }
 
-  public Mono<Void> register(InnerPoller innerPoller) {
-    return worker().flatMap(w -> command(sink -> register(innerPoller, sink)));
+  public Mono<Void> register(MessageSubscription subscription) {
+    return worker().flatMap(w -> command(sink -> register(subscription, sink)));
   }
 
-  private void register(InnerPoller innerPoller, MonoSink<Void> sink) {
-    Objects.requireNonNull(innerPoller, "innerPoller must be not null");
-    subscriptions.add(innerPoller);
+  private void register(MessageSubscription subscription, MonoSink<Void> sink) {
+    Objects.requireNonNull(subscription, "messageSubscription must be not null");
+    subscriptions.add(subscription);
     sink.success();
   }
 
@@ -88,13 +88,13 @@ public final class AeronEventLoop implements OnDisposable {
     sink.success();
   }
 
-  public Mono<Void> dispose(InnerPoller innerPoller) {
-    return worker().flatMap(w -> command(sink -> dispose(innerPoller, sink)));
+  public Mono<Void> dispose(MessageSubscription subscription) {
+    return worker().flatMap(w -> command(sink -> dispose(subscription, sink)));
   }
 
-  private void dispose(InnerPoller innerPoller, MonoSink<Void> sink) {
-    subscriptions.removeIf(s -> s == innerPoller);
-    Optional.ofNullable(innerPoller).ifPresent(InnerPoller::close);
+  private void dispose(MessageSubscription subscription, MonoSink<Void> sink) {
+    subscriptions.removeIf(s -> s == subscription);
+    Optional.ofNullable(subscription).ifPresent(MessageSubscription::close);
     sink.success();
   }
 
@@ -209,12 +209,13 @@ public final class AeronEventLoop implements OnDisposable {
     }
 
     private void disposeSubscriptions() {
-      for (Iterator<InnerPoller> it = subscriptions.iterator(); it.hasNext(); ) {
-        InnerPoller innerPoller = it.next();
+      for (Iterator<MessageSubscription> it = subscriptions.iterator(); it.hasNext(); ) {
+        MessageSubscription subscription = it.next();
         try {
-          innerPoller.close();
+          subscription.close();
         } catch (Exception ex) {
-          logger.warn("Exception occurred on closing subscription: {}, cause: {}", innerPoller, ex);
+          logger.warn("Exception occurred on closing subscription: {}, cause: {}",
+              subscription, ex);
         }
         it.remove();
       }
