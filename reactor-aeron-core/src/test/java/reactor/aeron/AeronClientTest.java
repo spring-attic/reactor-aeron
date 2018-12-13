@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.aeron.ChannelUriStringBuilder;
 import io.aeron.driver.Configuration;
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Optional;
@@ -15,10 +16,13 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
 import reactor.aeron.client.AeronClient;
 import reactor.aeron.server.AeronServer;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.test.StepVerifier;
 
@@ -119,6 +123,92 @@ class AeronClientTest extends BaseAeronTest {
         .expectNoEvent(Duration.ofMillis(100))
         .thenCancel()
         .verify();
+  }
+
+  @Test
+  public void testClientsReceiveDataFromServer200000() {
+    int count = 200_000;
+    Flux<ByteBuffer> payloads =
+        Flux.range(0, count).map(String::valueOf).map(AeronUtils::stringToByteBuffer);
+
+    createServer(
+        connection ->
+            connection.outbound().send(ByteBufferFlux.from(payloads)).then(connection.onDispose()));
+
+    Connection connection1 = createConnection();
+
+    StepVerifier.create(connection1.inbound().receive().asString())
+        .expectNextCount(count)
+        .expectNoEvent(Duration.ofMillis(100))
+        .thenCancel()
+        .verify();
+  }
+
+  @Test
+  public void testRequestResponse200000() {
+    int count = 200_000;
+    createServer(
+        connection ->
+            connection
+                .inbound()
+                .receive()
+                .flatMap(byteBuffer -> connection.outbound().send(Mono.just(byteBuffer)).then())
+                .then(connection.onDispose()));
+
+    Connection connection1 = createConnection();
+
+    Flux.range(0, count)
+        .flatMap(i -> connection1.outbound().send(ByteBufferFlux.from("client_send:" + i)).then())
+        .then()
+        .subscribe();
+
+    StepVerifier.create(connection1.inbound().receive().asString())
+        .expectNextCount(count)
+        .expectNoEvent(Duration.ofMillis(100))
+        .thenCancel()
+        .verify();
+  }
+
+  @Test
+  @Disabled
+  public void testTwoClientsRequestResponse200000() {
+    int count = 200_000;
+    createServer(
+        connection ->
+            connection
+                .inbound()
+                .receive()
+                .flatMap(byteBuffer -> connection.outbound().send(Mono.just(byteBuffer)).then())
+                .then(connection.onDispose()));
+
+    Connection connection1 = createConnection();
+    Flux.range(0, count)
+        .flatMap(i -> connection1.outbound().send(ByteBufferFlux.from("client-1 send:" + i)).then())
+        .then()
+        .subscribe();
+
+    Connection connection2 = createConnection();
+    Flux.range(0, count)
+        .flatMap(i -> connection2.outbound().send(ByteBufferFlux.from("client-2 send:" + i)).then())
+        .then()
+        .subscribe();
+
+    StepVerifier.create(
+            Flux.merge(
+                connection1
+                    .inbound()
+                    .receive()
+                    .asString()
+                    .take(count)
+                    .filter(response -> !response.startsWith("client-1 ")),
+                connection2
+                    .inbound()
+                    .receive()
+                    .asString()
+                    .take(count)
+                    .filter(response -> !response.startsWith("client-2 "))))
+        .expectComplete()
+        .verify(Duration.ofSeconds(20));
   }
 
   @Test
