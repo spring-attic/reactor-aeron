@@ -137,7 +137,7 @@ public class AeronResources implements OnDisposable {
                   category,
                   AeronUtils.format(publication),
                   eventLoop,
-                  ex);
+                  ex.toString());
               if (!publication.isClosed()) {
                 publication.close();
               }
@@ -302,7 +302,7 @@ public class AeronResources implements OnDisposable {
                   category,
                   AeronUtils.format(subscription),
                   eventLoop,
-                  ex);
+                  ex.toString());
               if (!subscription.isClosed()) {
                 subscription.close();
               }

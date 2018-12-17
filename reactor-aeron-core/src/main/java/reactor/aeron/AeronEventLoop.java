@@ -231,7 +231,10 @@ public final class AeronEventLoop implements OnDisposable {
         try {
           publication.close();
         } catch (Exception ex) {
-          logger.warn("Exception occurred on closing publication: {}, cause: {}", publication, ex);
+          logger.warn(
+              "Exception occurred on closing publication: {}, cause: {}",
+              publication,
+              ex.toString());
         }
         it.remove();
       }
@@ -244,7 +247,9 @@ public final class AeronEventLoop implements OnDisposable {
           subscription.close();
         } catch (Exception ex) {
           logger.warn(
-              "Exception occurred on closing subscription: {}, cause: {}", subscription, ex);
+              "Exception occurred on closing subscription: {}, cause: {}",
+              subscription,
+              ex.toString());
         }
         it.remove();
       }
