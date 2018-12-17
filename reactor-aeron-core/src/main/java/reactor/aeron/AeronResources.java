@@ -133,7 +133,7 @@ public class AeronResources implements OnDisposable {
         .doOnError(
             ex -> {
               logger.error(
-                  "[{}] Failed to register publication {} on eventLoopGroup {}, cause: {}",
+                  "[{}] Failed to register publication {} on eventLoop {}, cause: {}",
                   category,
                   AeronUtils.format(publication),
                   eventLoop,
@@ -298,7 +298,7 @@ public class AeronResources implements OnDisposable {
         .doOnError(
             ex -> {
               logger.error(
-                  "[{}] Failed to register subscription {} on eventLoopGroup {}, cause: {}",
+                  "[{}] Failed to register subscription {} on eventLoop {}, cause: {}",
                   category,
                   AeronUtils.format(subscription),
                   eventLoop,

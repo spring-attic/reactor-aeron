@@ -17,9 +17,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.MonoSink;
 
-/**
- * The worker.
- */
 public final class AeronEventLoop implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronEventLoop.class);
@@ -32,10 +29,13 @@ public final class AeronEventLoop implements OnDisposable {
 
   // Worker
   private final Mono<Worker> workerMono;
+
   // Commands
   private final Queue<CommandTask> commandTasks = new ConcurrentLinkedQueue<>();
+
   private final List<MessagePublication> publications = new ArrayList<>();
   private final List<MessageSubscription> subscriptions = new ArrayList<>();
+
   private volatile Thread thread;
 
   AeronEventLoop(IdleStrategy idleStrategy) {
