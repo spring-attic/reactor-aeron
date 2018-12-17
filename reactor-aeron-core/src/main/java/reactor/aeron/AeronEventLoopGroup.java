@@ -1,7 +1,10 @@
 package reactor.aeron;
 
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.agrona.concurrent.IdleStrategy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
@@ -11,10 +14,11 @@ import reactor.core.publisher.MonoProcessor;
  */
 public class AeronEventLoopGroup implements OnDisposable {
 
-  // State:
+  private static final Logger LOGGER = LoggerFactory.getLogger(AeronEventLoopGroup.class);
+
+  // State
   private final AeronEventLoop[] eventLoops;
   private final AtomicInteger idx = new AtomicInteger();
-  private final AtomicInteger terminatedWorkers = new AtomicInteger();
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
   /**
@@ -36,18 +40,15 @@ public class AeronEventLoopGroup implements OnDisposable {
   public AeronEventLoopGroup(IdleStrategy idleStrategy, int workers) {
     this.eventLoops = new AeronEventLoop[workers];
     for (int i = 0; i < workers; i++) {
-      AeronEventLoop aeronEventLoop = new AeronEventLoop(idleStrategy);
-      // if only all workers disposed - dispose group
-      aeronEventLoop
-          .onDispose()
-          .subscribe(
-              disposed -> {
-                if (terminatedWorkers.incrementAndGet() == workers) {
-                  onDispose.onComplete();
-                }
-              });
-      eventLoops[i] = aeronEventLoop;
+      eventLoops[i] = new AeronEventLoop(idleStrategy);
     }
+    // Setup shutdown
+    Mono.whenDelayError(
+            Arrays.stream(eventLoops) //
+                .map(AeronEventLoop::onDispose)
+                .toArray(Mono<?>[]::new))
+        .doFinally(s -> onDispose.onComplete())
+        .subscribe(null, ex -> LOGGER.error("Unexpected exception occurred: " + ex));
   }
 
   /**
@@ -73,9 +74,7 @@ public class AeronEventLoopGroup implements OnDisposable {
   @Override
   public void dispose() {
     if (!isDisposed()) {
-      for (AeronEventLoop worker : eventLoops) {
-        worker.dispose();
-      }
+      Arrays.stream(eventLoops).forEach(AeronEventLoop::dispose);
     }
   }
 
