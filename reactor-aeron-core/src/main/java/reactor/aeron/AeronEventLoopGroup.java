@@ -28,7 +28,7 @@ public class AeronEventLoopGroup implements OnDisposable {
    * @param idleStrategy - idle strategy to follow between work cycles
    */
   public AeronEventLoopGroup(IdleStrategy idleStrategy) {
-    this(idleStrategy, Runtime.getRuntime().availableProcessors());
+    this(idleStrategy, 1);
   }
 
   /**
