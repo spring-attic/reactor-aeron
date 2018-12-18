@@ -35,7 +35,7 @@ final class AeronWriteSequencer implements Disposable {
   private final AeronEventLoop eventLoop;
 
   private final PublisherSender inner;
-  private final int prefetch = 32;
+  private final int prefetch = 1;
 
   private final Consumer<Throwable> errorHandler = th -> logger.error("Unexpected exception: ", th);
 
