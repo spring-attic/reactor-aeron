@@ -305,8 +305,6 @@ final class AeronWriteSequencer implements Disposable {
     public void onNext(ByteBuffer t) {
       produced++;
 
-      System.err.println(Thread.currentThread() + "| sessionId=" + sessionId + " >>> " + produced);
-
       publication
           .enqueue(MessageType.NEXT, t, sessionId)
           .doOnSuccess(avoid -> request(1L))

@@ -101,55 +101,6 @@ class AeronClientTest extends BaseAeronTest {
   }
 
   @Test
-  public void superTest() throws InterruptedException {
-    createServer(
-        connection -> {
-          connection
-              .outbound()
-              .send(
-                  Flux.range(1, 1000)
-                      .delayElements(Duration.ofMillis(100))
-                      //                      .publishOn(Schedulers.newSingle("serverConn"))
-                      //                      .delayElements(Duration.ofMillis(1000))
-                      .map(i -> AeronUtils.stringToByteBuffer("hello from server: " + i)))
-              .then()
-              .subscribe(null, Throwable::printStackTrace);
-
-          return connection
-              .inbound()
-              .receive()
-              .asString()
-              .log("server receive ")
-              .then(connection.onDispose());
-        });
-
-    createConnection(); // just to increase sessionId for readability
-
-    createConnection(
-        connection -> {
-          connection
-              .outbound()
-              .send(
-                  Flux.range(1, 1000)
-                      .delayElements(Duration.ofMillis(100))
-                      //                  .publishOn(Schedulers.newSingle("clientConn"))
-                      //                  .delayElements(Duration.ofMillis(1000))
-                      .map(i -> AeronUtils.stringToByteBuffer("hello from client: " + i)))
-              .then()
-              .subscribe(null, Throwable::printStackTrace);
-
-          return connection
-              .inbound()
-              .receive()
-              .asString()
-              .log("client receive ")
-              .then(connection.onDispose());
-        });
-
-    Thread.currentThread().join();
-  }
-
-  @Test
   public void testTwoClientsReceiveDataFromServer() {
     createServer(
         connection ->
