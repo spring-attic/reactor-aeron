@@ -29,7 +29,6 @@ public final class AeronEventLoop implements OnDisposable {
 
   // Worker
   private final Mono<Worker> workerMono;
-  private volatile Thread thread;
 
   // Commands
   private final Queue<CommandTask> commandTasks = new ConcurrentLinkedQueue<>();
@@ -37,9 +36,21 @@ public final class AeronEventLoop implements OnDisposable {
   private final List<MessagePublication> publications = new ArrayList<>();
   private final List<MessageSubscription> subscriptions = new ArrayList<>();
 
+  private volatile Thread thread;
+
   AeronEventLoop(IdleStrategy idleStrategy) {
     this.idleStrategy = idleStrategy;
     this.workerMono = Mono.fromCallable(this::createWorker).cache();
+  }
+
+  private static ThreadFactory defaultThreadFactory() {
+    return r -> {
+      Thread thread = new Thread(r);
+      thread.setName("aeron-event-loop");
+      thread.setUncaughtExceptionHandler(
+          (t, e) -> logger.error("Uncaught exception occurred: {}", e, e));
+      return thread;
+    };
   }
 
   private Worker createWorker() {
@@ -113,16 +124,6 @@ public final class AeronEventLoop implements OnDisposable {
     return onDispose.isDisposed();
   }
 
-  private static ThreadFactory defaultThreadFactory() {
-    return r -> {
-      Thread thread = new Thread(r);
-      thread.setName("aeron-event-loop");
-      thread.setUncaughtExceptionHandler(
-          (t, e) -> logger.error("Uncaught exception occurred: {}", e, e));
-      return thread;
-    };
-  }
-
   private Mono<Worker> worker() {
     return workerMono.takeUntilOther(listenDispose());
   }
@@ -136,6 +137,34 @@ public final class AeronEventLoop implements OnDisposable {
     return dispose //
         .map(avoid -> (T) avoid)
         .switchIfEmpty(Mono.error(Exceptions::failWithRejected));
+  }
+
+  /**
+   * Runnable task for submitting to {@link #commandTasks} queue. For usage see methods {@link
+   * #register(MessagePublication)} and {@link #dispose(MessagePublication)}.
+   */
+  private static class CommandTask implements Runnable {
+    private final MonoSink<Void> sink;
+    private final Consumer<MonoSink<Void>> consumer;
+
+    private CommandTask(MonoSink<Void> sink, Consumer<MonoSink<Void>> consumer) {
+      this.sink = sink;
+      this.consumer = consumer;
+    }
+
+    @Override
+    public void run() {
+      try {
+        consumer.accept(sink);
+      } catch (Exception ex) {
+        logger.warn("Exception occurred on command task: {}", ex);
+        sink.error(ex);
+      }
+    }
+
+    private void cancel() {
+      sink.error(Exceptions.failWithCancel());
+    }
   }
 
   /**
@@ -202,7 +231,10 @@ public final class AeronEventLoop implements OnDisposable {
         try {
           publication.close();
         } catch (Exception ex) {
-          logger.warn("Exception occurred on closing publication: {}, cause: {}", publication, ex);
+          logger.warn(
+              "Exception occurred on closing publication: {}, cause: {}",
+              publication,
+              ex.toString());
         }
         it.remove();
       }
@@ -214,39 +246,13 @@ public final class AeronEventLoop implements OnDisposable {
         try {
           subscription.close();
         } catch (Exception ex) {
-          logger.warn("Exception occurred on closing subscription: {}, cause: {}",
-              subscription, ex);
+          logger.warn(
+              "Exception occurred on closing subscription: {}, cause: {}",
+              subscription,
+              ex.toString());
         }
         it.remove();
       }
-    }
-  }
-
-  /**
-   * Runnable task for submitting to {@link #commandTasks} queue. For usage see methods {@link
-   * #register(MessagePublication)} and {@link #dispose(MessagePublication)}.
-   */
-  private static class CommandTask implements Runnable {
-    private final MonoSink<Void> sink;
-    private final Consumer<MonoSink<Void>> consumer;
-
-    private CommandTask(MonoSink<Void> sink, Consumer<MonoSink<Void>> consumer) {
-      this.sink = sink;
-      this.consumer = consumer;
-    }
-
-    @Override
-    public void run() {
-      try {
-        consumer.accept(sink);
-      } catch (Exception ex) {
-        logger.warn("Exception occurred on command task: {}", ex);
-        sink.error(ex);
-      }
-    }
-
-    private void cancel() {
-      sink.error(Exceptions.failWithCancel());
     }
   }
 }

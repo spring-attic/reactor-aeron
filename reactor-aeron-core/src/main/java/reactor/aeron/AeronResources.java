@@ -30,7 +30,7 @@ public class AeronResources implements OnDisposable {
 
   private Aeron aeron;
   private MediaDriver mediaDriver;
-  private AeronEventLoop eventLoop;
+  private AeronEventLoopGroup eventLoopGroup;
 
   private AeronResources(AeronResourcesConfig config) {
     this.config = config;
@@ -94,7 +94,7 @@ public class AeronResources implements OnDisposable {
 
     aeron = Aeron.connect(aeronContext);
 
-    eventLoop = new AeronEventLoop(config.idleStrategySupplier().get());
+    eventLoopGroup = new AeronEventLoopGroup(config.idleStrategySupplier().get());
 
     Runtime.getRuntime().addShutdownHook(new Thread(() -> deleteAeronDirectory(aeronContext)));
 
@@ -103,7 +103,7 @@ public class AeronResources implements OnDisposable {
   }
 
   public AeronEventLoop nextEventLoop() {
-    return eventLoop;
+    return eventLoopGroup.next();
   }
 
   /**
@@ -137,7 +137,7 @@ public class AeronResources implements OnDisposable {
                   category,
                   AeronUtils.format(publication),
                   eventLoop,
-                  ex);
+                  ex.toString());
               if (!publication.isClosed()) {
                 publication.close();
               }
@@ -233,9 +233,9 @@ public class AeronResources implements OnDisposable {
         () -> {
           logger.info("{} shutdown initiated", this);
 
-          eventLoop.dispose();
+          eventLoopGroup.dispose();
 
-          return eventLoop
+          return eventLoopGroup
               .onDispose()
               .doFinally(
                   s -> {
@@ -302,7 +302,7 @@ public class AeronResources implements OnDisposable {
                   category,
                   AeronUtils.format(subscription),
                   eventLoop,
-                  ex);
+                  ex.toString());
               if (!subscription.isClosed()) {
                 subscription.close();
               }

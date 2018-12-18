@@ -205,7 +205,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
                   logger.warn(
                       "Failed to connect to server at {}, cause: {}",
                       AeronUtils.minifyChannel(serverChannel),
-                      ex));
+                      ex.toString()));
     }
 
     private Mono<Void> sendConnectRequest() {
@@ -254,7 +254,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
                       category,
                       messageType,
                       AeronUtils.minifyChannel(serverChannel),
-                      ex));
+                      ex.toString()));
     }
 
     @Override
