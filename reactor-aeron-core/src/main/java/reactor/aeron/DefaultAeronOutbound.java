@@ -2,7 +2,6 @@ package reactor.aeron;
 
 import java.nio.ByteBuffer;
 import java.time.Duration;
-import java.util.Objects;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 import reactor.util.Logger;
@@ -87,7 +86,6 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
 
   @Override
   public AeronOutbound send(Publisher<? extends ByteBuffer> dataStream) {
-    Objects.requireNonNull(sequencer, "sequencer must be initialized");
     return then(sequencer.write(dataStream));
   }
 
@@ -98,6 +96,7 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
 
   @Override
   public void dispose() {
+    // TODO think of effectively and safelly closing correct reference of sequencer
     if (sequencer != null) {
       sequencer.dispose();
     }

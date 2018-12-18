@@ -28,13 +28,23 @@ final class AeronWriteSequencer implements Disposable {
 
   private static final Logger logger = Loggers.getLogger(AeronWriteSequencer.class);
 
+  private final Publisher<?> dataPublisher;
+  private final long sessionId;
+  private final MessagePublication publication;
+
   private final AeronEventLoop eventLoop;
 
   private final PublisherSender inner;
   private final int prefetch = 32;
 
-  private final Consumer<Throwable> errorHandler;
-  private final Consumer<Object> discardedHandler;
+  private final Consumer<Throwable> errorHandler = th -> logger.error("Unexpected exception: ", th);
+
+  private final Consumer<Object> discardedHandler =
+      item -> {
+        if (logger.isDebugEnabled()) {
+          logger.debug("Discarded data stream item: " + item);
+        }
+      };
 
   // Cast the supplied queue (SpscLinkedArrayQueue) to use its atomic dual-insert backed by {@link
   // BiPredicate#test)
@@ -45,17 +55,42 @@ final class AeronWriteSequencer implements Disposable {
   private volatile boolean removed;
   private volatile int wip;
 
+  /**
+   * Constructor for templating {@link AeronWriteSequencer} objects.
+   *
+   * @param sessionId session id
+   * @param publication message publication
+   * @param eventLoop event loop
+   */
   AeronWriteSequencer(long sessionId, MessagePublication publication, AeronEventLoop eventLoop) {
+    this(sessionId, publication, eventLoop, null /*data publisher*/);
+  }
+
+  /**
+   * Constructor.
+   *
+   * @param sessionId sessino id
+   * @param publication message publication
+   * @param eventLoop event loop
+   * @param dataPublisher data publisher
+   */
+  private AeronWriteSequencer(
+      long sessionId,
+      MessagePublication publication,
+      AeronEventLoop eventLoop,
+      Publisher<?> dataPublisher) {
+    this.sessionId = sessionId;
+    this.publication = publication;
+
     this.eventLoop = eventLoop;
-    this.discardedHandler =
-        o -> {
-          // no-op
-        };
     this.pendingWrites = Queues.unbounded().get();
+
     //noinspection unchecked
     this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
-    this.errorHandler = throwable -> logger.error("Unexpected exception", throwable);
     this.inner = new PublisherSender(this, publication, sessionId);
+    // TODO listen to message publication onDispose and drive by that own Disposable  or via
+    // dataStream
+    this.dataPublisher = dataPublisher;
   }
 
   /**
@@ -65,13 +100,18 @@ final class AeronWriteSequencer implements Disposable {
    * @return mono handle
    */
   public Mono<Void> write(Publisher<?> publisher) {
+    Objects.requireNonNull(publisher, "dataPublisher must be not null");
+    return new AeronWriteSequencer(sessionId, publication, eventLoop, publisher).write0();
+  }
+
+  private Mono<Void> write0() {
     return Mono.defer(
         () ->
             eventLoop.execute(
                 sink -> {
-                  boolean result = pendingWriteOffer.test(sink, publisher);
+                  boolean result = pendingWriteOffer.test(sink, dataPublisher);
                   if (!result) {
-                    sink.error(new Exception("Failed to enqueue publisher"));
+                    sink.error(new Exception("Failed to enqueue dataPublisher"));
                     return;
                   }
                   drain();
