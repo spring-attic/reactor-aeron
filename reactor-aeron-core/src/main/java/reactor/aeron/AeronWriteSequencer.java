@@ -8,7 +8,6 @@ import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.function.BiPredicate;
-import java.util.function.Consumer;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
 import reactor.core.CoreSubscriber;
@@ -28,6 +27,8 @@ final class AeronWriteSequencer implements Disposable {
 
   private static final Logger logger = Loggers.getLogger(AeronWriteSequencer.class);
 
+  private static final int PREFETCH = 1;
+
   private final Publisher<?> dataPublisher;
   private final long sessionId;
   private final MessagePublication publication;
@@ -35,16 +36,6 @@ final class AeronWriteSequencer implements Disposable {
   private final AeronEventLoop eventLoop;
 
   private final PublisherSender inner;
-  private final int prefetch = 1;
-
-  private final Consumer<Throwable> errorHandler = th -> logger.error("Unexpected exception: ", th);
-
-  private final Consumer<Object> discardedHandler =
-      item -> {
-        if (logger.isDebugEnabled()) {
-          logger.debug("Discarded data stream item: " + item);
-        }
-      };
 
   // Cast the supplied queue (SpscLinkedArrayQueue) to use its atomic dual-insert backed by {@link
   // BiPredicate#test)
@@ -99,7 +90,7 @@ final class AeronWriteSequencer implements Disposable {
 
     publication
         .onDispose()
-        .doFinally(s -> this.dispose())
+        .doFinally(s -> dispose())
         .subscribe(null, ex -> logger.error("Unexpected exception occurred: " + ex));
   }
 
@@ -165,7 +156,7 @@ final class AeronWriteSequencer implements Disposable {
         try {
           promise = (MonoSink<?>) v;
         } catch (Throwable e) {
-          errorHandler.accept(e);
+          handleError(e);
           return;
         }
 
@@ -220,7 +211,7 @@ final class AeronWriteSequencer implements Disposable {
       try {
         promise = (MonoSink<?>) v;
       } catch (Throwable e) {
-        errorHandler.accept(e);
+        handleError(e);
         return;
       }
       v = pendingWrites.poll();
@@ -228,9 +219,19 @@ final class AeronWriteSequencer implements Disposable {
         logger.debug("Terminated. Dropping: {}", v);
       }
 
-      discardedHandler.accept(v);
+      handleDiscarded(v);
 
       promise.error(new AbortedException("Something has been discarded"));
+    }
+  }
+
+  private static void handleError(Throwable th) {
+    logger.error("Unexpected exception: ", th);
+  }
+
+  private static void handleDiscarded(Object item) {
+    if (logger.isDebugEnabled()) {
+      logger.debug("Discarded data stream item: " + item);
     }
   }
 
@@ -338,7 +339,8 @@ final class AeronWriteSequencer implements Disposable {
 
       if (wip == 0 && WIP.compareAndSet(this, 0, 1)) {
         actual = s;
-        request(parent.prefetch);
+        //noinspection AccessStaticViaInstance
+        request(parent.PREFETCH);
 
         long r = requested;
 
