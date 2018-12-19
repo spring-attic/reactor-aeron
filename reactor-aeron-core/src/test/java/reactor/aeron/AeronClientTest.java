@@ -2,13 +2,17 @@ package reactor.aeron;
 
 import static java.lang.Boolean.TRUE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.aeron.ChannelUriStringBuilder;
 import io.aeron.driver.Configuration;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -285,8 +289,11 @@ class AeronClientTest extends BaseAeronTest {
   }
 
   @Test
-  public void testConcurrentSendingTwoStreams() {
-    int count = 100;
+  public void testConcurrentSendingStreams() {
+    int overallCount = 200;
+    int streams = 2;
+    int requestPerStream = overallCount / streams;
+
     ReplayProcessor<String> clientRequests = ReplayProcessor.create();
 
     createServer(
@@ -301,31 +308,30 @@ class AeronClientTest extends BaseAeronTest {
 
     createConnection(
         connection -> {
-          connection
-              .outbound()
-              .send(Flux.range(0, count).map(i -> AeronUtils.stringToByteBuffer("stream1: " + i)))
-              .then()
-              .subscribe(null, Throwable::printStackTrace);
-
-          connection
-              .outbound()
-              .send(Flux.range(0, count).map(i -> AeronUtils.stringToByteBuffer("stream2: " + i)))
-              .then()
-              .subscribe(null, Throwable::printStackTrace);
-
+          for (int i = 0; i < streams; i++) {
+            int start = i * requestPerStream;
+            int count = start + requestPerStream;
+            connection
+                .outbound()
+                .send(
+                    Flux.range(start, count)
+                        .map(n -> AeronUtils.stringToByteBuffer(String.valueOf(n))))
+                .then()
+                .subscribe(null, Throwable::printStackTrace);
+          }
           return connection.onDispose();
         });
 
-    String[] expectedRequests = new String[count * 2];
+    List<Integer> requests =
+        clientRequests
+            .take(requestPerStream * streams)
+            .map(Integer::parseInt)
+            .collectList()
+            .block(Duration.ofSeconds(10));
 
-    for (int i = 0; i < count; i++) {
-      expectedRequests[i * 2] = "stream1: " + i;
-      expectedRequests[i * 2 + 1] = "stream2: " + i;
-    }
-
-    StepVerifier.create(clientRequests.take(count * 2))
-        .expectNext(expectedRequests)
-        .verifyComplete();
+    ArrayList<Integer> sortedRequests = new ArrayList<>(requests);
+    Collections.sort(sortedRequests);
+    assertNotEquals(requests, sortedRequests);
   }
 
   private Connection createConnection() {
