@@ -282,6 +282,7 @@ class AeronClientTest extends BaseAeronTest {
     latch.await(imageLivenessTimeout.toMillis(), TimeUnit.MILLISECONDS);
 
     assertEquals(0, latch.getCount());
+  
   }
 
   private Connection createConnection() {
