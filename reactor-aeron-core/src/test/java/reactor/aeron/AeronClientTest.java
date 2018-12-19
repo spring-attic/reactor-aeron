@@ -284,6 +284,50 @@ class AeronClientTest extends BaseAeronTest {
     assertEquals(0, latch.getCount());
   }
 
+  @Test
+  public void testConcurrentSendingTwoStreams() {
+    int count = 100;
+    ReplayProcessor<String> clientRequests = ReplayProcessor.create();
+
+    createServer(
+        connection ->
+            connection
+                .inbound()
+                .receive()
+                .asString()
+                .doOnNext(clientRequests::onNext)
+                // .log("server receive ")
+                .then(connection.onDispose()));
+
+    createConnection(
+        connection -> {
+          connection
+              .outbound()
+              .send(Flux.range(0, count).map(i -> AeronUtils.stringToByteBuffer("stream1: " + i)))
+              .then()
+              .subscribe(null, Throwable::printStackTrace);
+
+          connection
+              .outbound()
+              .send(Flux.range(0, count).map(i -> AeronUtils.stringToByteBuffer("stream2: " + i)))
+              .then()
+              .subscribe(null, Throwable::printStackTrace);
+
+          return connection.onDispose();
+        });
+
+    String[] expectedRequests = new String[count * 2];
+
+    for (int i = 0; i < count; i++) {
+      expectedRequests[i * 2] = "stream1: " + i;
+      expectedRequests[i * 2 + 1] = "stream2: " + i;
+    }
+
+    StepVerifier.create(clientRequests.take(count * 2))
+        .expectNext(expectedRequests)
+        .verifyComplete();
+  }
+
   private Connection createConnection() {
     return createConnection(
         options -> {
