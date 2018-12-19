@@ -56,7 +56,7 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
               .doOnSuccess(
                   result -> {
                     publication = result;
-                    sequencer = new AeronWriteSequencer(sessionId, publication, eventLoop);
+                    sequencer = new AeronWriteSequencer(sessionId, publication);
                   })
               .flatMap(
                   result -> {

@@ -151,8 +151,33 @@ class AeronClientTest extends BaseAeronTest {
   }
 
   @Test
-  @Disabled
   public void testRequestResponse200000() {
+    int count = 200_000;
+    createServer(
+        connection ->
+            connection
+                .outbound()
+                .send(connection.inbound().receive())
+                .then(connection.onDispose()));
+
+    Connection connection1 = createConnection();
+
+    connection1
+        .outbound()
+        .send(Flux.range(0, count).map(String::valueOf).map(AeronUtils::stringToByteBuffer))
+        .then()
+        .subscribe();
+
+    StepVerifier.create(connection1.inbound().receive().asString())
+        .expectNextCount(count)
+        .expectNoEvent(Duration.ofMillis(100))
+        .thenCancel()
+        .verify();
+  }
+
+  @Test
+  @Disabled
+  public void testRequestResponse200000DoesntWork() {
     int count = 200_000;
     createServer(
         connection ->
