@@ -63,7 +63,14 @@ final class AeronWriteSequencer implements Disposable {
    * @param eventLoop event loop
    */
   AeronWriteSequencer(long sessionId, MessagePublication publication, AeronEventLoop eventLoop) {
-    this(sessionId, publication, eventLoop, null /*data publisher*/);
+    this.sessionId = sessionId;
+    this.publication = Objects.requireNonNull(publication, "message publication must be present");
+    this.eventLoop = Objects.requireNonNull(eventLoop, "event loop must be present");
+    // Rest of the fields are nulls
+    this.dataPublisher = null;
+    this.inner = null;
+    this.pendingWriteOffer = null;
+    this.pendingWrites = null;
   }
 
   /**
@@ -81,16 +88,19 @@ final class AeronWriteSequencer implements Disposable {
       Publisher<?> dataPublisher) {
     this.sessionId = sessionId;
     this.publication = publication;
-
     this.eventLoop = eventLoop;
-    this.pendingWrites = Queues.unbounded().get();
+    this.dataPublisher = dataPublisher;
 
+    this.pendingWrites = Queues.unbounded().get();
     //noinspection unchecked
     this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
+
     this.inner = new PublisherSender(this, publication, sessionId);
-    // TODO listen to message publication onDispose and drive by that own Disposable  or via
-    // dataStream
-    this.dataPublisher = dataPublisher;
+
+    publication
+        .onDispose()
+        .doFinally(s -> this.dispose())
+        .subscribe(null, ex -> logger.error("Unexpected exception occurred: " + ex));
   }
 
   /**

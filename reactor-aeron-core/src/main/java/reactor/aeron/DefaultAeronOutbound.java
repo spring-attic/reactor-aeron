@@ -96,10 +96,6 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
 
   @Override
   public void dispose() {
-    // TODO think of effectively and safelly closing correct reference of sequencer
-    if (sequencer != null) {
-      sequencer.dispose();
-    }
     if (publication != null) {
       publication.dispose();
     }
