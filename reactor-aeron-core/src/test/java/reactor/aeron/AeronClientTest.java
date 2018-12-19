@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -57,7 +56,10 @@ class AeronClientTest extends BaseAeronTest {
 
   @AfterEach
   void afterEach() {
-    Optional.ofNullable(aeronResources).ifPresent(AeronResources::dispose);
+    if (aeronResources != null) {
+      aeronResources.dispose();
+      aeronResources.onDispose().block(TIMEOUT);
+    }
   }
 
   @Test
@@ -149,6 +151,7 @@ class AeronClientTest extends BaseAeronTest {
   }
 
   @Test
+  @Disabled
   public void testRequestResponse200000() {
     int count = 200_000;
     createServer(
@@ -343,33 +346,28 @@ class AeronClientTest extends BaseAeronTest {
   }
 
   private Connection createConnection(Consumer<AeronOptions.Builder> options) {
-    Connection connection =
-        AeronClient.create(aeronResources).options(options).connect().block(TIMEOUT);
-    return addDisposable(connection);
+    return AeronClient.create(aeronResources).options(options).connect().block(TIMEOUT);
   }
 
   private Connection createConnection(
       Function<? super Connection, ? extends Publisher<Void>> handler) {
-    Connection connection =
-        AeronClient.create(aeronResources)
-            .options(
-                options -> {
-                  options.clientChannel(clientChannel);
-                  options.serverChannel(serverChannel);
-                })
-            .handle(handler)
-            .connect()
-            .block(TIMEOUT);
-    return addDisposable(connection);
+    return AeronClient.create(aeronResources)
+        .options(
+            options -> {
+              options.clientChannel(clientChannel);
+              options.serverChannel(serverChannel);
+            })
+        .handle(handler)
+        .connect()
+        .block(TIMEOUT);
   }
 
   private OnDisposable createServer(
       Function<? super Connection, ? extends Publisher<Void>> handler) {
-    return addDisposable(
-        AeronServer.create(aeronResources)
-            .options(options -> options.serverChannel(serverChannel))
-            .handle(handler)
-            .bind()
-            .block(TIMEOUT));
+    return AeronServer.create(aeronResources)
+        .options(options -> options.serverChannel(serverChannel))
+        .handle(handler)
+        .bind()
+        .block(TIMEOUT);
   }
 }

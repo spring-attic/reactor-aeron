@@ -143,18 +143,15 @@ class AeronServerTest extends BaseAeronTest {
   }
 
   private Connection createConnection(Consumer<AeronOptions.Builder> options) {
-    Connection connection =
-        AeronClient.create(aeronResources).options(options).connect().block(TIMEOUT);
-    return addDisposable(connection);
+    return AeronClient.create(aeronResources).options(options).connect().block(TIMEOUT);
   }
 
   private OnDisposable createServer(
       Function<? super Connection, ? extends Publisher<Void>> handler) {
-    return addDisposable(
-        AeronServer.create(aeronResources)
-            .options(options -> options.serverChannel(serverChannel))
-            .handle(handler)
-            .bind()
-            .block(TIMEOUT));
+    return AeronServer.create(aeronResources)
+        .options(options -> options.serverChannel(serverChannel))
+        .handle(handler)
+        .bind()
+        .block(TIMEOUT);
   }
 }
