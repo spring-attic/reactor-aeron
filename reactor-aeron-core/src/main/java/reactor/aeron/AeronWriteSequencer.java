@@ -62,11 +62,12 @@ final class AeronWriteSequencer implements Disposable {
 
     this.inner = new PublisherSender(this, publication, sessionId);
 
+    // todo it crushes tests
     // Setup shutdown
-    publication //
-        .onDispose()
-        .doFinally(s -> dispose())
-        .subscribe(null, this::handleError);
+    // publication //
+    //     .onDispose()
+    //     .doFinally(s -> dispose())
+    //     .subscribe(null, this::handleError);
   }
 
   /**
@@ -92,7 +93,9 @@ final class AeronWriteSequencer implements Disposable {
   public void dispose() {
     if (!removed) {
       removed = true;
-      inner.cancel();
+      if (inner != null) {
+        inner.cancel();
+      }
     }
   }
 
