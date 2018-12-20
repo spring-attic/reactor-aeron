@@ -23,16 +23,6 @@ public class AeronEventLoopGroup implements OnDisposable {
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
   /**
-   * Constructs an instance of {@link AeronEventLoopGroup} with number of workers equal to number of
-   * processors available to the JVM.
-   *
-   * @param idleStrategy - idle strategy to follow between work cycles
-   */
-  public AeronEventLoopGroup(Supplier<IdleStrategy> idleStrategy) {
-    this(idleStrategy, Runtime.getRuntime().availableProcessors());
-  }
-
-  /**
    * Constructs an instance of {@link AeronEventLoopGroup}.
    *
    * @param idleStrategy idle strategy to follow between work cycles
