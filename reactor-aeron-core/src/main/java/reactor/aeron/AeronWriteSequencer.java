@@ -31,8 +31,6 @@ final class AeronWriteSequencer implements Disposable {
 
   private final MonoProcessor<Void> newPromise;
 
-  private final Disposable publicationClosedDisposable;
-
   /**
    * Constructor for templating {@link AeronWriteSequencer} objects.
    *
@@ -46,7 +44,6 @@ final class AeronWriteSequencer implements Disposable {
     this.dataPublisher = null;
     this.inner = null;
     this.newPromise = null;
-    this.publicationClosedDisposable = null;
   }
 
   /**
@@ -64,13 +61,6 @@ final class AeronWriteSequencer implements Disposable {
     this.newPromise = MonoProcessor.create();
 
     this.inner = new PublisherSender(this, publication, sessionId);
-
-    // Setup shutdown
-    publicationClosedDisposable =
-        publication //
-            .onDispose()
-            .doFinally(s -> dispose())
-            .subscribe(null, this::handleError);
   }
 
   /**
@@ -85,11 +75,9 @@ final class AeronWriteSequencer implements Disposable {
   }
 
   private Mono<Void> write0() {
-    return Mono.defer(
-        () -> {
-          dataPublisher.subscribe(inner);
-          return newPromise.doFinally(s -> publicationClosedDisposable.dispose());
-        });
+    return Mono.fromRunnable(() -> dataPublisher.subscribe(inner))
+        .then(newPromise)
+        .takeUntilOther(publication.onDispose().doFinally(s -> dispose()));
   }
 
   @Override
