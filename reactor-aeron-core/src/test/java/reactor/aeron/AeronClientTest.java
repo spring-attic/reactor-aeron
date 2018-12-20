@@ -25,6 +25,7 @@ import reactor.aeron.client.AeronClient;
 import reactor.aeron.server.AeronServer;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.test.StepVerifier;
 
@@ -33,8 +34,6 @@ class AeronClientTest extends BaseAeronTest {
   private ChannelUriStringBuilder serverChannel;
   private ChannelUriStringBuilder clientChannel;
   private AeronResources aeronResources;
-
-  private final Duration imageLivenessTimeout = Duration.ofSeconds(1);
 
   @BeforeEach
   void beforeEach() {
@@ -48,9 +47,7 @@ class AeronClientTest extends BaseAeronTest {
             .reliable(TRUE)
             .media("udp")
             .endpoint("localhost:" + SocketUtils.findAvailableUdpPort(14000, 15000));
-    aeronResources =
-        AeronResources.start(
-            AeronResourcesConfig.builder().imageLivenessTimeout(imageLivenessTimeout).build());
+    aeronResources = AeronResources.start(AeronResourcesConfig.builder().build());
   }
 
   @AfterEach
@@ -279,6 +276,16 @@ class AeronClientTest extends BaseAeronTest {
 
   @Test
   public void testClientClosesSessionAndServerHandleUnavailableImage() throws Exception {
+    // close current redundant aeron resources
+    this.aeronResources.nextEventLoop().execute(MonoSink::success).subscribe(); // workaround
+    this.aeronResources.dispose();
+    this.aeronResources.onDispose().block(Duration.ofSeconds(5));
+
+    Duration imageLivenessTimeout = Duration.ofSeconds(1);
+    this.aeronResources =
+        AeronResources.start(
+            AeronResourcesConfig.builder().imageLivenessTimeout(imageLivenessTimeout).build());
+
     OnDisposable server =
         createServer(
             connection ->
