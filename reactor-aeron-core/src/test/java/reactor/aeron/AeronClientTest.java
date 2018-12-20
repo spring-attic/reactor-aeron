@@ -166,7 +166,7 @@ class AeronClientTest extends BaseAeronTest {
         .expectNextCount(count)
         .expectNoEvent(Duration.ofMillis(100))
         .thenCancel()
-        .verify();
+        .verify(Duration.ofSeconds(20));
   }
 
   @Test
