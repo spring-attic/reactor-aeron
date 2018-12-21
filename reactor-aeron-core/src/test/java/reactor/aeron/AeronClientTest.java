@@ -1,7 +1,6 @@
 package reactor.aeron;
 
 import static java.lang.Boolean.TRUE;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -13,8 +12,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.junit.jupiter.api.AfterEach;
@@ -25,7 +22,6 @@ import reactor.aeron.client.AeronClient;
 import reactor.aeron.server.AeronServer;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.test.StepVerifier;
 
@@ -272,53 +268,6 @@ class AeronClientTest extends BaseAeronTest {
         .expectNoEvent(Duration.ofMillis(100))
         .thenCancel()
         .verify();
-  }
-
-  @Test
-  public void testClientClosesSessionAndServerHandleUnavailableImage() throws Exception {
-    // close current redundant aeron resources
-    this.aeronResources.nextEventLoop().execute(MonoSink::success).subscribe(); // workaround
-    this.aeronResources.dispose();
-    this.aeronResources.onDispose().block(Duration.ofSeconds(5));
-
-    Duration imageLivenessTimeout = Duration.ofSeconds(1);
-    this.aeronResources =
-        AeronResources.start(
-            AeronResourcesConfig.builder().imageLivenessTimeout(imageLivenessTimeout).build());
-
-    OnDisposable server =
-        createServer(
-            connection ->
-                connection
-                    .outbound()
-                    .send(
-                        ByteBufferFlux.from("hello1", "2", "3")
-                            .delayElements(Duration.ofSeconds(1))
-                            .log("server1"))
-                    .then(connection.onDispose()));
-
-    ReplayProcessor<String> processor = ReplayProcessor.create();
-
-    Connection connection =
-        createConnection(
-            options -> {
-              options.clientChannel(clientChannel);
-              options.serverChannel(serverChannel);
-            });
-
-    CountDownLatch latch = new CountDownLatch(1);
-    connection.onDispose().doOnSuccess(aVoid -> latch.countDown()).subscribe();
-
-    connection.inbound().receive().asString().log("client").subscribe(processor);
-
-    processor.take(1).blockLast(Duration.ofSeconds(4));
-
-    server.dispose();
-
-    latch.await(imageLivenessTimeout.toMillis(), TimeUnit.MILLISECONDS);
-
-    assertEquals(0, latch.getCount());
-  
   }
 
   @Test
