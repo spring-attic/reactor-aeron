@@ -193,7 +193,7 @@ class AeronClientTest extends BaseAeronTest {
         .expectNextCount(count)
         .expectNoEvent(Duration.ofMillis(100))
         .thenCancel()
-        .verify();
+        .verify(Duration.ofSeconds(20));
   }
 
   @Test
@@ -318,6 +318,7 @@ class AeronClientTest extends BaseAeronTest {
     latch.await(imageLivenessTimeout.toMillis(), TimeUnit.MILLISECONDS);
 
     assertEquals(0, latch.getCount());
+  
   }
 
   @Test

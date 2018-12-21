@@ -94,7 +94,7 @@ public class AeronResources implements OnDisposable {
 
     aeron = Aeron.connect(aeronContext);
 
-    eventLoopGroup = new AeronEventLoopGroup(config.idleStrategySupplier().get());
+    eventLoopGroup = new AeronEventLoopGroup(config.idleStrategySupplier(), config.numOfWorkers());
 
     Runtime.getRuntime().addShutdownHook(new Thread(() -> deleteAeronDirectory(aeronContext)));
 

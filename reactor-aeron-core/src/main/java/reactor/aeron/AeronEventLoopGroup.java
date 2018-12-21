@@ -2,6 +2,7 @@ package reactor.aeron;
 
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import org.agrona.concurrent.IdleStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,25 +23,15 @@ public class AeronEventLoopGroup implements OnDisposable {
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
   /**
-   * Constructs an instance of {@link AeronEventLoopGroup} with number of workers equal to number of
-   * processors available to the JVM.
-   *
-   * @param idleStrategy - idle strategy to follow between work cycles
-   */
-  public AeronEventLoopGroup(IdleStrategy idleStrategy) {
-    this(idleStrategy, 1);
-  }
-
-  /**
    * Constructs an instance of {@link AeronEventLoopGroup}.
    *
    * @param idleStrategy idle strategy to follow between work cycles
    * @param workers number of instances in group
    */
-  public AeronEventLoopGroup(IdleStrategy idleStrategy, int workers) {
+  public AeronEventLoopGroup(Supplier<IdleStrategy> idleStrategy, int workers) {
     this.eventLoops = new AeronEventLoop[workers];
     for (int i = 0; i < workers; i++) {
-      eventLoops[i] = new AeronEventLoop(idleStrategy);
+      eventLoops[i] = new AeronEventLoop(idleStrategy.get());
     }
     // Setup shutdown
     Mono.whenDelayError(
