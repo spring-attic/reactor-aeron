@@ -1,15 +1,12 @@
 package reactor.aeron;
 
 import static java.lang.Boolean.TRUE;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.aeron.ChannelUriStringBuilder;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Optional;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.junit.jupiter.api.AfterEach;
@@ -28,8 +25,6 @@ class AeronServerTest extends BaseAeronTest {
   private ChannelUriStringBuilder clientChannel;
   private AeronResources aeronResources;
 
-  private final Duration imageLivenessTimeout = Duration.ofSeconds(1);
-
   @BeforeEach
   void beforeEach() {
     serverChannel =
@@ -42,9 +37,7 @@ class AeronServerTest extends BaseAeronTest {
             .reliable(TRUE)
             .media("udp")
             .endpoint("localhost:" + SocketUtils.findAvailableUdpPort(14000, 15000));
-    aeronResources =
-        AeronResources.start(
-            AeronResourcesConfig.builder().imageLivenessTimeout(imageLivenessTimeout).build());
+    aeronResources = AeronResources.start(AeronResourcesConfig.builder().build());
   }
 
   @AfterEach
@@ -101,39 +94,6 @@ class AeronServerTest extends BaseAeronTest {
     assertTrue(threadWatcher.awaitTerminated(5000, "single-", "parallel-"));
   }
 
-  @Test
-  public void testServerDisconnectsSessionAndClientHandleUnavailableImage()
-      throws InterruptedException {
-    ReplayProcessor<ByteBuffer> processor = ReplayProcessor.create();
-    CountDownLatch latch = new CountDownLatch(1);
-
-    createServer(
-        connection -> {
-          connection.onDispose().doOnSuccess(aVoid -> latch.countDown()).subscribe();
-          connection.inbound().receive().subscribe(processor);
-          return connection.onDispose();
-        });
-
-    Connection connection = createConnection();
-    connection
-        .outbound()
-        .send(
-            Flux.range(1, 100)
-                .delayElements(Duration.ofSeconds(1))
-                .map(i -> AeronUtils.stringToByteBuffer("" + i))
-                .log("send"))
-        .then()
-        .subscribe();
-
-    processor.blockFirst();
-
-    connection.dispose();
-
-    latch.await(imageLivenessTimeout.toMillis(), TimeUnit.MILLISECONDS);
-
-    assertEquals(0, latch.getCount());
-  }
-
   private Connection createConnection() {
     return createConnection(
         options -> {
@@ -143,18 +103,15 @@ class AeronServerTest extends BaseAeronTest {
   }
 
   private Connection createConnection(Consumer<AeronOptions.Builder> options) {
-    Connection connection =
-        AeronClient.create(aeronResources).options(options).connect().block(TIMEOUT);
-    return addDisposable(connection);
+    return AeronClient.create(aeronResources).options(options).connect().block(TIMEOUT);
   }
 
   private OnDisposable createServer(
       Function<? super Connection, ? extends Publisher<Void>> handler) {
-    return addDisposable(
-        AeronServer.create(aeronResources)
-            .options(options -> options.serverChannel(serverChannel))
-            .handle(handler)
-            .bind()
-            .block(TIMEOUT));
+    return AeronServer.create(aeronResources)
+        .options(options -> options.serverChannel(serverChannel))
+        .handle(handler)
+        .bind()
+        .block(TIMEOUT);
   }
 }

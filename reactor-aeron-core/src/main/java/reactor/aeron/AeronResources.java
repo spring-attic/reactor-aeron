@@ -291,7 +291,8 @@ public class AeronResources implements OnDisposable {
             });
 
     MessageSubscription messageSubscription =
-        new MessageSubscription(eventLoop, subscription, new FragmentAssembler(fragmentHandler));
+        new MessageSubscription(
+            category, eventLoop, subscription, new FragmentAssembler(fragmentHandler));
 
     return eventLoop
         .register(messageSubscription)

@@ -2,59 +2,64 @@ package reactor.aeron;
 
 import java.nio.ByteBuffer;
 import java.util.Objects;
-import java.util.Queue;
-import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
-import java.util.function.BiPredicate;
-import java.util.function.Consumer;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
 import reactor.core.CoreSubscriber;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.MonoSink;
+import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.Operators;
 import reactor.util.Logger;
 import reactor.util.Loggers;
-import reactor.util.concurrent.Queues;
 
 final class AeronWriteSequencer implements Disposable {
 
-  @SuppressWarnings("rawtypes")
-  static final AtomicIntegerFieldUpdater<AeronWriteSequencer> WIP =
-      AtomicIntegerFieldUpdater.newUpdater(AeronWriteSequencer.class, "wip");
-
   private static final Logger logger = Loggers.getLogger(AeronWriteSequencer.class);
 
-  private final AeronEventLoop eventLoop;
+  private static final int PREFETCH = 1;
+
+  private final Publisher<?> dataPublisher;
+  private final long sessionId;
+  private final MessagePublication publication;
 
   private final PublisherSender inner;
-  private final int prefetch = 32;
 
-  private final Consumer<Throwable> errorHandler;
-  private final Consumer<Object> discardedHandler;
-
-  // Cast the supplied queue (SpscLinkedArrayQueue) to use its atomic dual-insert backed by {@link
-  // BiPredicate#test)
-  private final BiPredicate<MonoSink<?>, Object> pendingWriteOffer;
-  private final Queue<?> pendingWrites;
-
-  private volatile boolean innerActive;
   private volatile boolean removed;
-  private volatile int wip;
 
-  AeronWriteSequencer(long sessionId, MessagePublication publication, AeronEventLoop eventLoop) {
-    this.eventLoop = eventLoop;
-    this.discardedHandler =
-        o -> {
-          // no-op
-        };
-    this.pendingWrites = Queues.unbounded().get();
-    //noinspection unchecked
-    this.pendingWriteOffer = (BiPredicate<MonoSink<?>, Object>) pendingWrites;
-    this.errorHandler = throwable -> logger.error("Unexpected exception", throwable);
+  private final MonoProcessor<Void> newPromise;
+
+  /**
+   * Constructor for templating {@link AeronWriteSequencer} objects.
+   *
+   * @param sessionId session id
+   * @param publication message publication
+   */
+  AeronWriteSequencer(long sessionId, MessagePublication publication) {
+    this.sessionId = sessionId;
+    this.publication = Objects.requireNonNull(publication, "message publication must be present");
+    // Rest of the fields are nulls
+    this.dataPublisher = null;
+    this.inner = null;
+    this.newPromise = null;
+  }
+
+  /**
+   * Constructor.
+   *
+   * @param sessionId sessino id
+   * @param publication message publication
+   * @param dataPublisher data publisher
+   */
+  private AeronWriteSequencer(
+      long sessionId, MessagePublication publication, Publisher<?> dataPublisher) {
+    this.sessionId = sessionId;
+    this.publication = publication;
+    this.dataPublisher = dataPublisher;
+    this.newPromise = MonoProcessor.create();
+
     this.inner = new PublisherSender(this, publication, sessionId);
   }
 
@@ -65,25 +70,23 @@ final class AeronWriteSequencer implements Disposable {
    * @return mono handle
    */
   public Mono<Void> write(Publisher<?> publisher) {
-    return Mono.defer(
-        () ->
-            eventLoop.execute(
-                sink -> {
-                  boolean result = pendingWriteOffer.test(sink, publisher);
-                  if (!result) {
-                    sink.error(new Exception("Failed to enqueue publisher"));
-                    return;
-                  }
-                  drain();
-                }));
+    Objects.requireNonNull(publisher, "dataPublisher must be not null");
+    return new AeronWriteSequencer(sessionId, publication, publisher).write0();
+  }
+
+  private Mono<Void> write0() {
+    return Mono.fromRunnable(() -> dataPublisher.subscribe(inner))
+        .then(newPromise)
+        .takeUntilOther(publication.onDispose().doFinally(s -> dispose()));
   }
 
   @Override
   public void dispose() {
     if (!removed) {
       removed = true;
-      inner.cancel();
-      drain();
+      if (inner != null) {
+        inner.cancel();
+      }
     }
   }
 
@@ -92,99 +95,11 @@ final class AeronWriteSequencer implements Disposable {
     return removed;
   }
 
-  void drain() {
-    if (WIP.getAndIncrement(this) == 0) {
-
-      for (; ; ) {
-
-        if (removed) {
-          discard();
-          return;
-        }
-
-        if (innerActive) {
-          if (WIP.decrementAndGet(this) == 0) {
-            break;
-          }
-          continue;
-        }
-
-        MonoSink<?> promise;
-        Object v = pendingWrites.poll();
-
-        try {
-          promise = (MonoSink<?>) v;
-        } catch (Throwable e) {
-          errorHandler.accept(e);
-          return;
-        }
-
-        boolean empty = promise == null;
-
-        if (empty) {
-          if (WIP.decrementAndGet(this) == 0) {
-            break;
-          }
-          continue;
-        }
-
-        v = pendingWrites.poll();
-        //noinspection unchecked
-        Publisher<ByteBuffer> p = (Publisher<ByteBuffer>) v;
-
-        if (p instanceof Callable) {
-          @SuppressWarnings("unchecked")
-          Callable<?> supplier = (Callable<?>) p;
-
-          Object vr;
-
-          try {
-            vr = supplier.call();
-          } catch (Throwable e) {
-            promise.error(e);
-            continue;
-          }
-
-          if (vr == null) {
-            promise.success();
-            continue;
-          }
-
-          innerActive = true;
-          inner.promise = promise;
-          inner.onSubscribe(Operators.scalarSubscription(inner, (ByteBuffer) vr));
-        } else {
-          innerActive = true;
-          inner.promise = promise;
-          //noinspection ConstantConditions
-          p.subscribe(inner);
-        }
-      }
-    }
+  private void handleError(Throwable th) {
+    logger.error("Unexpected exception: ", th);
   }
 
-  void discard() {
-    while (!pendingWrites.isEmpty()) {
-      Object v = pendingWrites.poll();
-      MonoSink<?> promise;
-      try {
-        promise = (MonoSink<?>) v;
-      } catch (Throwable e) {
-        errorHandler.accept(e);
-        return;
-      }
-      v = pendingWrites.poll();
-      if (logger.isDebugEnabled()) {
-        logger.debug("Terminated. Dropping: {}", v);
-      }
-
-      discardedHandler.accept(v);
-
-      promise.error(new AbortedException("Something has been discarded"));
-    }
-  }
-
-  static class PublisherSender implements CoreSubscriber<ByteBuffer>, Subscription {
+  static class PublisherSender implements CoreSubscriber<Object>, Subscription {
 
     static final AtomicReferenceFieldUpdater<PublisherSender, Subscription> MISSED_SUBSCRIPTION =
         AtomicReferenceFieldUpdater.newUpdater(
@@ -219,7 +134,6 @@ final class AeronWriteSequencer implements Disposable {
     private Subscription actual;
 
     private long produced;
-    private MonoSink<?> promise;
 
     PublisherSender(AeronWriteSequencer parent, MessagePublication publication, long sessionId) {
       this.parent = parent;
@@ -240,41 +154,40 @@ final class AeronWriteSequencer implements Disposable {
     @Override
     public void onComplete() {
       long p = produced;
-      parent.innerActive = false;
 
       produced = 0L;
       produced(p);
 
-      promise.success();
-      parent.drain();
+      //noinspection ConstantConditions
+      parent.newPromise.onComplete();
     }
 
     @Override
     public void onError(Throwable t) {
       long p = produced;
-      parent.innerActive = false;
 
       produced = 0L;
       produced(p);
 
-      promise.error(t);
-      parent.drain();
+      //noinspection ConstantConditions
+      parent.newPromise.onError(t);
     }
 
     @Override
-    public void onNext(ByteBuffer t) {
+    public void onNext(Object t) {
       produced++;
 
       publication
-          .enqueue(MessageType.NEXT, t, sessionId)
+          .enqueue(MessageType.NEXT, (ByteBuffer) t, sessionId)
           .doOnSuccess(avoid -> request(1L))
           .subscribe(null, this::disposeCurrentDataStream);
     }
 
     private void disposeCurrentDataStream(Throwable th) {
       cancel();
-      promise.error(new Exception("Failed to publish signal into session: " + sessionId, th));
-      parent.drain();
+      //noinspection ConstantConditions
+      parent.newPromise.onError(
+          new Exception("Failed to publish signal into session: " + sessionId, th));
     }
 
     @Override
@@ -288,7 +201,8 @@ final class AeronWriteSequencer implements Disposable {
 
       if (wip == 0 && WIP.compareAndSet(this, 0, 1)) {
         actual = s;
-        request(parent.prefetch);
+        //noinspection AccessStaticViaInstance
+        request(parent.PREFETCH);
 
         long r = requested;
 
@@ -363,7 +277,6 @@ final class AeronWriteSequencer implements Disposable {
           ms = MISSED_SUBSCRIPTION.getAndSet(this, null);
 
           if (ms == Operators.cancelledSubscription()) {
-            parent.innerActive = false;
             Subscription a = actual;
             if (a != null) {
               a.cancel();

@@ -155,6 +155,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     try {
       publication.close();
     } finally {
+      logger.debug("[{}] aeron.Publication closed: {}", category, toString());
       disposePublishTasks();
       onDispose.onComplete();
     }

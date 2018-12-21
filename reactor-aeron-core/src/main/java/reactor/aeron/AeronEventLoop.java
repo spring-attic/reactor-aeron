@@ -112,6 +112,11 @@ public final class AeronEventLoop implements OnDisposable {
   @Override
   public void dispose() {
     dispose.onComplete();
+
+    // finish shutdown right away if no worker was created
+    if (thread == null) {
+      onDispose.onComplete();
+    }
   }
 
   @Override
