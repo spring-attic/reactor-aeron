@@ -14,6 +14,7 @@ public class AeronResourcesConfig {
   private final boolean dirDeleteOnStart;
   private final int mtuLength;
   private final Duration imageLivenessTimeout;
+  private final int numOfWorkers;
   private final Supplier<IdleStrategy> idleStrategySupplier;
 
   private AeronResourcesConfig(Builder builder) {
@@ -21,6 +22,7 @@ public class AeronResourcesConfig {
     this.dirDeleteOnStart = builder.dirDeleteOnStart;
     this.mtuLength = builder.mtuLength;
     this.imageLivenessTimeout = builder.imageLivenessTimeout;
+    this.numOfWorkers = builder.numOfWorkers;
     this.idleStrategySupplier = builder.idleStrategySupplier;
   }
 
@@ -53,6 +55,10 @@ public class AeronResourcesConfig {
     return imageLivenessTimeout;
   }
 
+  public int numOfWorkers() {
+    return numOfWorkers;
+  }
+
   public Supplier<IdleStrategy> idleStrategySupplier() {
     return idleStrategySupplier;
   }
@@ -64,6 +70,7 @@ public class AeronResourcesConfig {
     sb.append(", dirDeleteOnStart=").append(dirDeleteOnStart);
     sb.append(", mtuLength=").append(mtuLength);
     sb.append(", imageLivenessTimeout=").append(imageLivenessTimeout);
+    sb.append(", numOfWorkers=").append(numOfWorkers);
     sb.append(", idleStrategySupplier=").append(idleStrategySupplier);
     sb.append('}');
     return sb.toString();
@@ -76,6 +83,7 @@ public class AeronResourcesConfig {
     private int mtuLength = Configuration.MTU_LENGTH;
     private Duration imageLivenessTimeout =
         Duration.ofNanos(Configuration.IMAGE_LIVENESS_TIMEOUT_NS);
+    private int numOfWorkers = Runtime.getRuntime().availableProcessors();
     private Supplier<IdleStrategy> idleStrategySupplier =
         AeronResourcesConfig::defaultBackoffIdleStrategy;
 
@@ -113,6 +121,11 @@ public class AeronResourcesConfig {
 
     public Builder imageLivenessTimeout(Duration imageLivenessTimeout) {
       this.imageLivenessTimeout = imageLivenessTimeout;
+      return this;
+    }
+
+    public Builder numOfWorkers(int numOfWorkers) {
+      this.numOfWorkers = numOfWorkers;
       return this;
     }
 

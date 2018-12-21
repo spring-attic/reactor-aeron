@@ -57,7 +57,7 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
               .doOnSuccess(
                   result -> {
                     publication = result;
-                    sequencer = new AeronWriteSequencer(sessionId, publication, eventLoop);
+                    sequencer = new AeronWriteSequencer(sessionId, publication);
                   })
               .flatMap(
                   result -> {
@@ -98,9 +98,6 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
 
   @Override
   public void dispose() {
-    if (sequencer != null) {
-      sequencer.dispose();
-    }
     if (publication != null) {
       publication.dispose();
     }

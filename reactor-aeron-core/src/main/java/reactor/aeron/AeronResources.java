@@ -94,7 +94,7 @@ public class AeronResources implements OnDisposable {
 
     aeron = Aeron.connect(aeronContext);
 
-    eventLoopGroup = new AeronEventLoopGroup(config.idleStrategySupplier().get());
+    eventLoopGroup = new AeronEventLoopGroup(config.idleStrategySupplier(), config.numOfWorkers());
 
     Runtime.getRuntime().addShutdownHook(new Thread(() -> deleteAeronDirectory(aeronContext)));
 
@@ -291,7 +291,8 @@ public class AeronResources implements OnDisposable {
             });
 
     MessageSubscription messageSubscription =
-        new MessageSubscription(eventLoop, subscription, new FragmentAssembler(fragmentHandler));
+        new MessageSubscription(
+            category, eventLoop, subscription, new FragmentAssembler(fragmentHandler));
 
     return eventLoop
         .register(messageSubscription)
