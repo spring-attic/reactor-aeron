@@ -2,7 +2,6 @@ package reactor.aeron;
 
 import io.aeron.logbuffer.FragmentHandler;
 import io.aeron.logbuffer.Header;
-import java.util.UUID;
 import org.agrona.BitUtil;
 import org.agrona.DirectBuffer;
 import reactor.util.Logger;
@@ -27,11 +26,8 @@ public class ControlFragmentHandler implements FragmentHandler {
     index += BitUtil.SIZE_OF_LONG;
 
     if (type == MessageType.CONNECT.ordinal()) {
-      long mostSigBits = buffer.getLong(index);
+      final long connectRequestId = buffer.getLong(index);
       index += BitUtil.SIZE_OF_LONG;
-      long leastSigBits = buffer.getLong(index);
-      index += BitUtil.SIZE_OF_LONG;
-      UUID connectRequestId = new UUID(mostSigBits, leastSigBits);
 
       int channelLength = buffer.getInt(index);
       String channel = buffer.getStringUtf8(index, channelLength);
@@ -47,10 +43,9 @@ public class ControlFragmentHandler implements FragmentHandler {
       int serverSessionStreamId = buffer.getInt(index);
       index += BitUtil.SIZE_OF_INT;
 
-      long mostSigBits = buffer.getLong(index);
+      long connectRequestId = buffer.getLong(index);
+      //noinspection UnusedAssignment
       index += BitUtil.SIZE_OF_LONG;
-      long leastSigBits = buffer.getLong(index);
-      UUID connectRequestId = new UUID(mostSigBits, leastSigBits);
 
       subscriber.onConnectAck(connectRequestId, sessionId, serverSessionStreamId);
     } else if (type == MessageType.COMPLETE.ordinal()) {
