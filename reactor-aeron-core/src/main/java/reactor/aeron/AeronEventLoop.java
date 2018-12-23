@@ -48,7 +48,7 @@ public final class AeronEventLoop implements OnDisposable {
       Thread thread = new Thread(r);
       thread.setName("aeron-event-loop");
       thread.setUncaughtExceptionHandler(
-          (t, e) -> logger.error("Uncaught exception occurred: {}", e, e));
+          (t, e) -> logger.error("Uncaught exception occurred: " + e));
       return thread;
     };
   }
@@ -162,7 +162,7 @@ public final class AeronEventLoop implements OnDisposable {
       try {
         consumer.accept(sink);
       } catch (Exception ex) {
-        logger.warn("Exception occurred on command task: {}", ex);
+        logger.warn("Exception occurred on command task: " + ex);
         sink.error(ex);
       }
     }

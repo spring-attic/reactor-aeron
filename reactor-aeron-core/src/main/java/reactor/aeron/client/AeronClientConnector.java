@@ -65,7 +65,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
     dispose
         .then(doDispose())
         .doFinally(s -> onDispose.onComplete())
-        .subscribe(null, th -> logger.warn("AeronClientConnector disposed with error: {}", th));
+        .subscribe(null, th -> logger.warn("AeronClientConnector disposed with error: " + th));
   }
 
   /**
@@ -140,7 +140,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
       dispose
           .then(doDispose())
           .doFinally(s -> onDispose.onComplete())
-          .subscribe(null, th -> logger.warn("ClientHandler disposed with error: {}", th));
+          .subscribe(null, th -> logger.warn("ClientHandler disposed with error: " + th));
     }
 
     private Mono<MessagePublication> newControlPublication() {

@@ -58,7 +58,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
     dispose
         .then(doDispose())
         .doFinally(s -> onDispose.onComplete())
-        .subscribe(null, th -> logger.warn("AeronServerHandler disposed with error: {}", th));
+        .subscribe(null, th -> logger.warn("AeronServerHandler disposed with error: " + th));
   }
 
   @Override
@@ -204,7 +204,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
       this.dispose
           .then(doDispose())
           .doFinally(s -> onDispose.onComplete())
-          .subscribe(null, th -> logger.warn("SessionHandler disposed with error: {}", th));
+          .subscribe(null, th -> logger.warn("SessionHandler disposed with error: " + th));
     }
 
     private Mono<MessagePublication> newControlPublication(
