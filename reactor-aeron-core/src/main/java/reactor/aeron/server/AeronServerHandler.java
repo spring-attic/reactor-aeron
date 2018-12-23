@@ -27,7 +27,6 @@ import reactor.aeron.OnDisposable;
 import reactor.aeron.Protocol;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.core.scheduler.Schedulers;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -100,7 +99,6 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
 
     sessionHandler
         .start()
-        .subscribeOn(Schedulers.single())
         .subscribe(
             connection ->
                 handler
