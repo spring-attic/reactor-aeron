@@ -1,6 +1,5 @@
 package reactor.aeron;
 
-import java.util.UUID;
 import org.reactivestreams.Subscription;
 
 public interface ControlMessageSubscriber {
@@ -8,12 +7,12 @@ public interface ControlMessageSubscriber {
   void onSubscription(Subscription subscription);
 
   void onConnect(
-      UUID connectRequestId,
+      long connectRequestId,
       String clientChannel,
       int clientControlStreamId,
       int clientSessionStreamId);
 
-  void onConnectAck(UUID connectRequestId, long sessionId, int serverSessionStreamId);
+  void onConnectAck(long connectRequestId, long sessionId, int serverSessionStreamId);
 
   void onComplete(long sessionId);
 }

@@ -2,15 +2,12 @@ package reactor.aeron;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.UUID;
 import org.agrona.BitUtil;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 
 /** Protocol. */
 public class Protocol {
-
-  private static final int SIZE_OF_UUID = BitUtil.SIZE_OF_LONG * 2;
 
   public static final int HEADER_SIZE = BitUtil.SIZE_OF_BYTE + BitUtil.SIZE_OF_LONG;
 
@@ -20,14 +17,6 @@ public class Protocol {
     index += BitUtil.SIZE_OF_BYTE;
 
     buffer.putLong(index, sessionId);
-    index += BitUtil.SIZE_OF_LONG;
-    return index;
-  }
-
-  private static int putUuid(MutableDirectBuffer buffer, int index, UUID sessionId) {
-    buffer.putLong(index, sessionId.getMostSignificantBits());
-    index += BitUtil.SIZE_OF_LONG;
-    buffer.putLong(index, sessionId.getLeastSignificantBits());
     index += BitUtil.SIZE_OF_LONG;
     return index;
   }
@@ -42,16 +31,17 @@ public class Protocol {
    * @return byte buffer
    */
   public static ByteBuffer createConnectBody(
-      UUID connectRequestId,
+      long connectRequestId,
       String clientChannel,
       int clientControlStreamId,
       int clientSessionStreamId) {
     byte[] clientChannelBytes = clientChannel.getBytes(StandardCharsets.UTF_8);
     byte[] bytes =
-        new byte[clientChannelBytes.length + BitUtil.SIZE_OF_INT * 3 + BitUtil.SIZE_OF_LONG * 2];
+        new byte[clientChannelBytes.length + BitUtil.SIZE_OF_INT * 3 + BitUtil.SIZE_OF_LONG];
     UnsafeBuffer buffer = new UnsafeBuffer(bytes);
     int index = 0;
-    index += putUuid(buffer, index, connectRequestId);
+    buffer.putLong(index, connectRequestId);
+    index += BitUtil.SIZE_OF_LONG;
 
     buffer.putInt(index, clientChannelBytes.length);
     index += BitUtil.SIZE_OF_INT;
@@ -74,13 +64,15 @@ public class Protocol {
    * @param serverSessionStreamId server session stream id
    * @return bytebuffer of connect ack body
    */
-  public static ByteBuffer createConnectAckBody(UUID connectRequestId, int serverSessionStreamId) {
-    byte[] array = new byte[BitUtil.SIZE_OF_INT + SIZE_OF_UUID];
+  public static ByteBuffer createConnectAckBody(long connectRequestId, int serverSessionStreamId) {
+    byte[] array = new byte[BitUtil.SIZE_OF_INT + BitUtil.SIZE_OF_LONG];
     UnsafeBuffer buffer = new UnsafeBuffer(array);
     int index = 0;
     buffer.putInt(index, serverSessionStreamId);
     index += BitUtil.SIZE_OF_INT;
-    putUuid(buffer, index, connectRequestId);
+    buffer.putLong(index, connectRequestId);
+    //noinspection UnusedAssignment
+    index += BitUtil.SIZE_OF_LONG;
     return ByteBuffer.wrap(array);
   }
 
