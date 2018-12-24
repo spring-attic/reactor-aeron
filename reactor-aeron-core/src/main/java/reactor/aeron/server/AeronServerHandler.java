@@ -4,7 +4,6 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -27,7 +26,6 @@ import reactor.aeron.OnDisposable;
 import reactor.aeron.Protocol;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.core.scheduler.Schedulers;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -60,7 +58,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
     dispose
         .then(doDispose())
         .doFinally(s -> onDispose.onComplete())
-        .subscribe(null, th -> logger.warn("AeronServerHandler disposed with error: {}", th));
+        .subscribe(null, th -> logger.warn("AeronServerHandler disposed with error: " + th));
   }
 
   @Override
@@ -70,7 +68,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
 
   @Override
   public void onConnect(
-      UUID connectRequestId,
+      long connectRequestId,
       String clientChannel,
       int clientControlStreamId,
       int clientSessionStreamId) {
@@ -100,7 +98,6 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
 
     sessionHandler
         .start()
-        .subscribeOn(Schedulers.single())
         .subscribe(
             connection ->
                 handler
@@ -122,7 +119,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
   }
 
   @Override
-  public void onConnectAck(UUID connectRequestId, long sessionId, int serverSessionStreamId) {
+  public void onConnectAck(long connectRequestId, long sessionId, int serverSessionStreamId) {
     logger.error(
         "[{}] Received unsupported server request {}, connectRequestId: {}",
         category,
@@ -178,7 +175,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
     private final String clientChannel;
     private final int clientSessionStreamId;
     private final int serverSessionStreamId;
-    private final UUID connectRequestId;
+    private final long connectRequestId;
     private final long sessionId;
 
     private final Mono<MessagePublication> controlPublication;
@@ -190,7 +187,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
         String clientChannel,
         int clientSessionStreamId,
         int clientControlStreamId,
-        UUID connectRequestId,
+        long connectRequestId,
         long sessionId,
         int serverSessionStreamId) {
       this.clientSessionStreamId = clientSessionStreamId;
@@ -207,7 +204,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
       this.dispose
           .then(doDispose())
           .doFinally(s -> onDispose.onComplete())
-          .subscribe(null, th -> logger.warn("SessionHandler disposed with error: {}", th));
+          .subscribe(null, th -> logger.warn("SessionHandler disposed with error: " + th));
     }
 
     private Mono<MessagePublication> newControlPublication(

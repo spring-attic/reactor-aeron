@@ -168,7 +168,7 @@ class AeronClientTest extends BaseAeronTest {
   }
 
   @Test
-  public void testRequestResponse200000DoesntWork() {
+  public void testRequestResponse200000MonoJust() {
     int count = 200_000;
     createServer(
         connection ->

@@ -80,8 +80,7 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
                               dispose();
                               return Mono.error(th);
                             });
-                  })
-              .log("defaultOutbound");
+                  });
         });
   }
 

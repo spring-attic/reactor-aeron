@@ -1,14 +1,12 @@
 package reactor.aeron.client;
 
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedGenerator;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import reactor.aeron.AeronInbound;
@@ -36,7 +34,8 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
 
   private static final int CONTROL_STREAM_ID = 1;
 
-  private static final TimeBasedGenerator uuidGenerator = Generators.timeBasedGenerator();
+  private static final AtomicLong connectRequestIdCounter =
+      new AtomicLong(System.currentTimeMillis());
 
   private final String category;
   private final AeronOptions options;
@@ -45,7 +44,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
   private final String clientChannel;
   private final Supplier<Integer> clientSessionStreamIdCounter;
 
-  private final Map<UUID, ConnectAckPromise> connectAckPromises = new ConcurrentHashMap<>();
+  private final Map<Long, ConnectAckPromise> connectAckPromises = new ConcurrentHashMap<>();
 
   private final List<ClientHandler> handlers = new CopyOnWriteArrayList<>();
 
@@ -66,7 +65,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
     dispose
         .then(doDispose())
         .doFinally(s -> onDispose.onComplete())
-        .subscribe(null, th -> logger.warn("AeronClientConnector disposed with error: {}", th));
+        .subscribe(null, th -> logger.warn("AeronClientConnector disposed with error: " + th));
   }
 
   /**
@@ -120,7 +119,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
 
     private final DefaultAeronOutbound outbound;
     private final int clientSessionStreamId;
-    private final UUID connectRequestId = uuidGenerator.generate();
+    private final long connectRequestId = connectRequestIdCounter.incrementAndGet();
     private final String serverChannel;
     private final Mono<MessagePublication> controlPublication;
 
@@ -141,7 +140,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
       dispose
           .then(doDispose())
           .doFinally(s -> onDispose.onComplete())
-          .subscribe(null, th -> logger.warn("ClientHandler disposed with error: {}", th));
+          .subscribe(null, th -> logger.warn("ClientHandler disposed with error: " + th));
     }
 
     private Mono<MessagePublication> newControlPublication() {
@@ -335,7 +334,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
   }
 
   @Override
-  public void onConnectAck(UUID connectRequestId, long sessionId, int serverSessionStreamId) {
+  public void onConnectAck(long connectRequestId, long sessionId, int serverSessionStreamId) {
     logger.debug(
         "[{}] Received {} for connectRequestId: {}, serverSessionStreamId: {}",
         category,
@@ -365,7 +364,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
 
   @Override
   public void onConnect(
-      UUID connectRequestId,
+      long connectRequestId,
       String clientChannel,
       int clientControlStreamId,
       int clientSessionStreamId) {
@@ -386,10 +385,10 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
    */
   private class ConnectAckPromise implements Disposable {
 
-    private final UUID connectRequestId;
+    private final long connectRequestId;
     private final MonoProcessor<ConnectAckResponse> promise;
 
-    private ConnectAckPromise(UUID connectRequestId) {
+    private ConnectAckPromise(long connectRequestId) {
       this.connectRequestId = connectRequestId;
       this.promise = MonoProcessor.create();
     }
