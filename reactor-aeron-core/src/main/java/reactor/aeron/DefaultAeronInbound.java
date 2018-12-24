@@ -56,8 +56,7 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
                     subscription = result;
                     messageProcessor.onSubscription(subscription);
                   })
-              .then()
-              .log("inbound");
+              .then();
         });
   }
 
