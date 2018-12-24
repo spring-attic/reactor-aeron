@@ -49,7 +49,7 @@ public class AeronResources implements OnDisposable {
         .doFinally(s -> onDispose.onComplete())
         .subscribe(
             avoid -> logger.info("{} closed", this),
-            th -> logger.warn("{} closed with error: {}", this, th));
+            th -> logger.warn("{} closed with error: {}", this, th.toString()));
   }
 
   /**
