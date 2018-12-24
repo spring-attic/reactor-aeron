@@ -82,6 +82,7 @@ public class AeronResources implements OnDisposable {
   private void doStart() {
     MediaDriver.Context mediaContext =
         new MediaDriver.Context()
+            .aeronDirectoryName(config.aeronDirectoryName())
             .mtuLength(config.mtuLength())
             .imageLivenessTimeoutNs(config.imageLivenessTimeout().toNanos())
             .dirDeleteOnStart(config.isDirDeleteOnStart());
@@ -319,6 +320,7 @@ public class AeronResources implements OnDisposable {
     File file = context.aeronDirectory();
     if (file.exists()) {
       IoUtil.delete(file, true);
+      logger.debug("Deleted aeron directory {}", file);
     }
   }
 

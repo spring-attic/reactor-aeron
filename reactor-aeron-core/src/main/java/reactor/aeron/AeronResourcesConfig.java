@@ -1,10 +1,13 @@
 package reactor.aeron;
 
+import io.aeron.CommonContext;
 import io.aeron.driver.Configuration;
 import io.aeron.driver.ThreadingMode;
 import java.time.Duration;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import org.agrona.IoUtil;
 import org.agrona.concurrent.BackoffIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
 
@@ -16,6 +19,7 @@ public class AeronResourcesConfig {
   private final Duration imageLivenessTimeout;
   private final int numOfWorkers;
   private final Supplier<IdleStrategy> idleStrategySupplier;
+  private final String aeronDirectoryName;
 
   private AeronResourcesConfig(Builder builder) {
     this.threadingMode = builder.threadingMode;
@@ -24,6 +28,7 @@ public class AeronResourcesConfig {
     this.imageLivenessTimeout = builder.imageLivenessTimeout;
     this.numOfWorkers = builder.numOfWorkers;
     this.idleStrategySupplier = builder.idleStrategySupplier;
+    this.aeronDirectoryName = builder.aeronDirectoryName;
   }
 
   private static BackoffIdleStrategy defaultBackoffIdleStrategy() {
@@ -63,6 +68,10 @@ public class AeronResourcesConfig {
     return idleStrategySupplier;
   }
 
+  public String aeronDirectoryName() {
+    return aeronDirectoryName;
+  }
+
   @Override
   public String toString() {
     final StringBuilder sb = new StringBuilder("AeronResourcesConfig{");
@@ -72,6 +81,7 @@ public class AeronResourcesConfig {
     sb.append(", imageLivenessTimeout=").append(imageLivenessTimeout);
     sb.append(", numOfWorkers=").append(numOfWorkers);
     sb.append(", idleStrategySupplier=").append(idleStrategySupplier);
+    sb.append(", aeronDirectoryName=").append(aeronDirectoryName);
     sb.append('}');
     return sb.toString();
   }
@@ -86,6 +96,7 @@ public class AeronResourcesConfig {
     private int numOfWorkers = Runtime.getRuntime().availableProcessors();
     private Supplier<IdleStrategy> idleStrategySupplier =
         AeronResourcesConfig::defaultBackoffIdleStrategy;
+    private String aeronDirectoryName = generateRandomTmpDirName();
 
     private Builder() {}
 
@@ -134,8 +145,30 @@ public class AeronResourcesConfig {
       return this;
     }
 
+    public Builder useTmpDir() {
+      return aeronDirectoryName(generateRandomTmpDirName());
+    }
+
+    public Builder useAeronDefaultDir() {
+      return aeronDirectoryName(CommonContext.generateRandomDirName());
+    }
+
+    public Builder aeronDirectoryName(String dirName) {
+      this.aeronDirectoryName = dirName;
+      return this;
+    }
+
     public AeronResourcesConfig build() {
       return new AeronResourcesConfig(this);
+    }
+
+    private static String generateRandomTmpDirName() {
+      return IoUtil.tmpDirName()
+          + "aeron"
+          + '-'
+          + System.getProperty("user.name", "default")
+          + '-'
+          + UUID.randomUUID().toString();
     }
   }
 }
