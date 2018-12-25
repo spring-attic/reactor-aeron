@@ -20,7 +20,7 @@ final class AeronWriteSequencer implements Disposable {
 
   private static final Logger logger = Loggers.getLogger(AeronWriteSequencer.class);
 
-  private static final int PREFETCH = 1;
+  private static final int PREFETCH = 32;
 
   private final Publisher<?> dataPublisher;
   private final long sessionId;
