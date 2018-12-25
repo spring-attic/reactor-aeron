@@ -1,8 +1,10 @@
 package reactor.aeron;
 
 import io.aeron.Publication;
+import io.aeron.logbuffer.BufferClaim;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
 import org.agrona.concurrent.UnsafeBuffer;
 import reactor.core.Exceptions;
@@ -16,8 +18,10 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
   private static final Logger logger = Loggers.getLogger(MessagePublication.class);
 
-  private final String category;
+  private final ThreadLocal<BufferClaim> bufferClaims = ThreadLocal.withInitial(BufferClaim::new);
 
+  private final String category;
+  private final int mtuLength;
   private final Publication publication;
   private final AeronOptions options;
   private final AeronEventLoop eventLoop;
@@ -34,8 +38,13 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
    * @param publication publication
    */
   MessagePublication(
-      String category, Publication publication, AeronOptions options, AeronEventLoop eventLoop) {
+      String category,
+      int mtuLength,
+      Publication publication,
+      AeronOptions options,
+      AeronEventLoop eventLoop) {
     this.category = category;
+    this.mtuLength = mtuLength;
     this.publication = publication;
     this.options = options;
     this.eventLoop = eventLoop;
@@ -201,6 +210,22 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
       if (start == 0) {
         start = System.currentTimeMillis();
       }
+//      if (msgBody.capacity() < mtuLength) {
+//        BufferClaim bufferClaim = bufferClaims.get();
+//        long result = publication.tryClaim(msgBody.capacity(), bufferClaim);
+//        if (result > 0) {
+//          try {
+//            MutableDirectBuffer dstBuffer = bufferClaim.buffer();
+//            dstBuffer.wrap(msgBody);
+//            bufferClaim.commit();
+//          } catch (Exception ex) {
+//            bufferClaim.abort();
+//            throw new RuntimeException("Unexpected exception", ex);
+//          }
+//        }
+//        return result;
+//      } else {
+//      }
       return publication.offer(new UnsafeBuffer(msgBody));
     }
 
