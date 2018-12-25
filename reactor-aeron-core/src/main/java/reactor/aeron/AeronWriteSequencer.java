@@ -178,7 +178,7 @@ final class AeronWriteSequencer implements Disposable {
       produced++;
 
       publication
-          .enqueue(MessageType.NEXT, (ByteBuffer) t, sessionId)
+          .enqueue((ByteBuffer) t)
           .doOnSuccess(avoid -> request(1L))
           .subscribe(null, this::disposeCurrentDataStream);
     }

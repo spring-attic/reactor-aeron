@@ -35,8 +35,7 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
       String channel, int streamId, long sessionId, Runnable onCompleteHandler) {
     return Mono.defer(
         () -> {
-          DataMessageProcessor messageProcessor =
-              new DataMessageProcessor(name, sessionId, onCompleteHandler);
+          DataMessageProcessor messageProcessor = new DataMessageProcessor(name, sessionId);
 
           flux = new ByteBufferFlux(messageProcessor);
 
@@ -89,15 +88,13 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
 
     private final String category;
     private final long sessionId;
-    private final Runnable onCompleteHandler;
 
     private volatile Subscription subscription;
     private volatile Subscriber<? super ByteBuffer> subscriber;
 
-    private DataMessageProcessor(String category, long sessionId, Runnable onCompleteHandler) {
+    private DataMessageProcessor(String category, long sessionId) {
       this.category = category;
       this.sessionId = sessionId;
-      this.onCompleteHandler = onCompleteHandler;
     }
 
     @Override
@@ -106,7 +103,7 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
     }
 
     @Override
-    public void onNext(long sessionId, ByteBuffer buffer) {
+    public void onNext(ByteBuffer buffer) {
       if (logger.isTraceEnabled()) {
         logger.trace(
             "[{}] Received {} for sessionId: {}, buffer: {}",
@@ -121,24 +118,6 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
       } else {
         logger.error(
             "[{}] Received {} for unexpected sessionId: {}", category, MessageType.NEXT, sessionId);
-      }
-    }
-
-    @Override
-    public void onComplete(long sessionId) {
-      if (logger.isTraceEnabled()) {
-        logger.trace(
-            "[{}] Received {} for sessionId: {}", category, MessageType.COMPLETE, sessionId);
-      }
-
-      if (this.sessionId == sessionId) {
-        onCompleteHandler.run();
-      } else {
-        logger.error(
-            "[{}] Received {} for unexpected sessionId: {}",
-            category,
-            MessageType.COMPLETE,
-            sessionId);
       }
     }
 

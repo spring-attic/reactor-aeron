@@ -1,6 +1,5 @@
 package reactor.aeron.server;
 
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -335,8 +334,8 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
     }
 
     private Mono<Void> sendConnectAck(MessagePublication publication) {
-      ByteBuffer buffer = Protocol.createConnectAckBody(connectRequestId, serverSessionStreamId);
-      return publication.enqueue(MessageType.CONNECT_ACK, buffer, sessionId);
+      return publication.enqueue(
+          Protocol.createConnectAckBody(sessionId, connectRequestId, serverSessionStreamId));
     }
   }
 }

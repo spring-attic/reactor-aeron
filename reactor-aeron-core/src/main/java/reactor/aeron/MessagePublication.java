@@ -1,10 +1,8 @@
 package reactor.aeron;
 
 import io.aeron.Publication;
-import io.aeron.logbuffer.BufferClaim;
 import java.nio.ByteBuffer;
 import java.time.Duration;
-import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
 import org.agrona.concurrent.UnsafeBuffer;
 import reactor.core.Exceptions;
@@ -18,10 +16,8 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
   private static final Logger logger = Loggers.getLogger(MessagePublication.class);
 
-  private final ThreadLocal<BufferClaim> bufferClaims = ThreadLocal.withInitial(BufferClaim::new);
-
   private final String category;
-  private final int mtuLength;
+
   private final Publication publication;
   private final AeronOptions options;
   private final AeronEventLoop eventLoop;
@@ -38,13 +34,8 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
    * @param publication publication
    */
   MessagePublication(
-      String category,
-      int mtuLength,
-      Publication publication,
-      AeronOptions options,
-      AeronEventLoop eventLoop) {
+      String category, Publication publication, AeronOptions options, AeronEventLoop eventLoop) {
     this.category = category;
-    this.mtuLength = mtuLength;
     this.publication = publication;
     this.options = options;
     this.eventLoop = eventLoop;
@@ -53,17 +44,15 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
   /**
    * Enqueues buffer for future sending.
    *
-   * @param messageType message type
    * @param buffer buffer
-   * @param sessionId session id
    * @return mono handle
    */
-  public Mono<Void> enqueue(MessageType messageType, ByteBuffer buffer, long sessionId) {
+  public Mono<Void> enqueue(ByteBuffer buffer) {
     return Mono.create(
         sink -> {
           boolean result = false;
           if (!isDisposed()) {
-            result = publishTasks.offer(new PublishTask(messageType, buffer, sessionId, sink));
+            result = publishTasks.offer(new PublishTask(buffer, sink));
           }
           if (!result) {
             sink.error(Exceptions.failWithRejected());
@@ -198,18 +187,13 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
   private class PublishTask {
 
-    private final MessageType msgType;
     private final ByteBuffer msgBody;
-    private final long sessionId;
     private final MonoSink<Void> sink;
 
     private long start;
 
-    private PublishTask(
-        MessageType msgType, ByteBuffer msgBody, long sessionId, MonoSink<Void> sink) {
-      this.msgType = msgType;
+    private PublishTask(ByteBuffer msgBody, MonoSink<Void> sink) {
       this.msgBody = msgBody;
-      this.sessionId = sessionId;
       this.sink = sink;
     }
 
@@ -217,30 +201,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
       if (start == 0) {
         start = System.currentTimeMillis();
       }
-      int capacity = msgBody.remaining() + Protocol.HEADER_SIZE;
-      if (capacity < mtuLength) {
-        BufferClaim bufferClaim = bufferClaims.get();
-        long result = publication.tryClaim(capacity, bufferClaim);
-        if (result > 0) {
-          try {
-            MutableDirectBuffer buffer = bufferClaim.buffer();
-            int index = bufferClaim.offset();
-            index = Protocol.putHeader(buffer, index, msgType, sessionId);
-            buffer.putBytes(index, msgBody, msgBody.position(), msgBody.limit());
-            bufferClaim.commit();
-          } catch (Exception ex) {
-            bufferClaim.abort();
-            throw new RuntimeException("Unexpected exception", ex);
-          }
-        }
-        return result;
-      } else {
-        UnsafeBuffer buffer =
-            new UnsafeBuffer(new byte[msgBody.remaining() + Protocol.HEADER_SIZE]);
-        int index = Protocol.putHeader(buffer, 0, msgType, sessionId);
-        buffer.putBytes(index, msgBody, msgBody.remaining());
-        return publication.offer(buffer);
-      }
+      return publication.offer(new UnsafeBuffer(msgBody));
     }
 
     private boolean isTimeoutElapsed(Duration timeout) {

@@ -135,6 +135,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
       serverChannel = options.serverChannel();
       inbound = new DefaultAeronInbound(category, resources);
       outbound = new DefaultAeronOutbound(category, serverChannel, resources, options);
+
       controlPublication = Mono.defer(this::newControlPublication).cache();
 
       dispose
@@ -215,11 +216,11 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
                 category,
                 AeronUtils.minifyChannel(serverChannel));
 
-            ByteBuffer buffer =
+            return send(
+                publication,
                 Protocol.createConnectBody(
-                    connectRequestId, clientChannel, clientControlStreamId, clientSessionStreamId);
-
-            return send(publication, buffer, MessageType.CONNECT);
+                    connectRequestId, clientChannel, clientControlStreamId, clientSessionStreamId),
+                MessageType.CONNECT);
           });
     }
 
@@ -231,14 +232,13 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
                 category,
                 AeronUtils.minifyChannel(serverChannel));
 
-            ByteBuffer buffer = Protocol.createDisconnectBody(sessionId);
-
-            return send(publication, buffer, MessageType.COMPLETE);
+            return send(
+                publication, Protocol.createDisconnectBody(sessionId), MessageType.COMPLETE);
           });
     }
 
     private Mono<Void> send(MessagePublication mp, ByteBuffer buffer, MessageType messageType) {
-      return mp.enqueue(messageType, buffer, sessionId)
+      return mp.enqueue(buffer)
           .doOnSuccess(
               avoid ->
                   logger.debug(

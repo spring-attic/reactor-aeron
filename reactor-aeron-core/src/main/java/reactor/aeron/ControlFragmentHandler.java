@@ -20,39 +20,58 @@ public class ControlFragmentHandler implements FragmentHandler {
   @Override
   public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
     int index = offset;
-    int type = buffer.getByte(index);
-    index += BitUtil.SIZE_OF_BYTE;
-    long sessionId = buffer.getLong(index);
-    index += BitUtil.SIZE_OF_LONG;
 
-    if (type == MessageType.CONNECT.ordinal()) {
+    // get MessageType length and MessageType string
+    int messageTypeLength = buffer.getInt(index);
+    String messageTypeString = buffer.getStringWithoutLengthAscii(index, messageTypeLength);
+    index += BitUtil.SIZE_OF_INT + messageTypeLength;
+
+    MessageType messageType;
+    try {
+      messageType = MessageType.valueOf(messageTypeString);
+    } catch (IllegalArgumentException ex) {
+      logger.error("Unknown message type: {}", messageTypeString);
+      return;
+    }
+
+    if (messageType == MessageType.CONNECT_ACK) {
+      long sessionId = buffer.getLong(index);
+      index += BitUtil.SIZE_OF_LONG;
+
+      int serverSessionStreamId = buffer.getInt(index);
+      index += BitUtil.SIZE_OF_INT;
+
+      long connectRequestId = buffer.getLong(index);
+
+      subscriber.onConnectAck(connectRequestId, sessionId, serverSessionStreamId);
+      return;
+    }
+
+    if (messageType == MessageType.CONNECT) {
       final long connectRequestId = buffer.getLong(index);
       index += BitUtil.SIZE_OF_LONG;
 
-      int channelLength = buffer.getInt(index);
-      String channel = buffer.getStringUtf8(index, channelLength);
-      index += BitUtil.SIZE_OF_INT + channelLength;
+      int clientChannelLength = buffer.getInt(index);
+      String clientChannel = buffer.getStringWithoutLengthAscii(index, clientChannelLength);
+      index += BitUtil.SIZE_OF_INT + clientChannelLength;
 
       int clientControlStreamId = buffer.getInt(index);
       index += BitUtil.SIZE_OF_INT;
 
       int clientSessionStreamId = buffer.getInt(index);
 
-      subscriber.onConnect(connectRequestId, channel, clientControlStreamId, clientSessionStreamId);
-    } else if (type == MessageType.CONNECT_ACK.ordinal()) {
-      int serverSessionStreamId = buffer.getInt(index);
-      index += BitUtil.SIZE_OF_INT;
-
-      long connectRequestId = buffer.getLong(index);
-      //noinspection UnusedAssignment
-      index += BitUtil.SIZE_OF_LONG;
-
-      subscriber.onConnectAck(connectRequestId, sessionId, serverSessionStreamId);
-    } else if (type == MessageType.COMPLETE.ordinal()) {
-      subscriber.onComplete(sessionId);
-    } else {
-      logger.error("Unknown message type id: {}", type);
-      subscriber.onComplete(sessionId);
+      subscriber.onConnect(
+          connectRequestId, clientChannel, clientControlStreamId, clientSessionStreamId);
+      return;
     }
+
+    if (messageType == MessageType.COMPLETE) {
+      long sessionId = buffer.getLong(index);
+      subscriber.onComplete(sessionId);
+      return;
+    }
+
+    // Must be unreachable
+    logger.error("Unsupported message type: {}", messageType);
   }
 }
