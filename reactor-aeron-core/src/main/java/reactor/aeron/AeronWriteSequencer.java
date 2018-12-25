@@ -2,6 +2,7 @@ package reactor.aeron;
 
 import java.nio.ByteBuffer;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
@@ -30,6 +31,8 @@ final class AeronWriteSequencer implements Disposable {
   private volatile boolean removed;
 
   private final MonoProcessor<Void> newPromise;
+
+  private final AtomicBoolean completed = new AtomicBoolean(false);
 
   /**
    * Constructor for templating {@link AeronWriteSequencer} objects.
@@ -149,6 +152,9 @@ final class AeronWriteSequencer implements Disposable {
 
         drain();
       }
+
+      // todo think about it here
+      parent.completed.set(true);
     }
 
     @Override
@@ -158,8 +164,7 @@ final class AeronWriteSequencer implements Disposable {
       produced = 0L;
       produced(p);
 
-      //noinspection ConstantConditions
-      parent.newPromise.onComplete();
+      parent.completed.set(true);
     }
 
     @Override
@@ -223,6 +228,11 @@ final class AeronWriteSequencer implements Disposable {
 
     @Override
     public final void request(long n) {
+      if (parent.completed.get()) {
+        //noinspection ConstantConditions
+        parent.newPromise.onComplete();
+        return;
+      }
       if (Operators.validate(n)) {
         if (unbounded) {
           return;
