@@ -23,8 +23,9 @@ public class ControlFragmentHandler implements FragmentHandler {
 
     // get MessageType length and MessageType string
     int messageTypeLength = buffer.getInt(index);
+    index += BitUtil.SIZE_OF_INT;
     String messageTypeString = buffer.getStringWithoutLengthAscii(index, messageTypeLength);
-    index += BitUtil.SIZE_OF_INT + messageTypeLength;
+    index += messageTypeLength;
 
     MessageType messageType;
     try {
@@ -52,8 +53,9 @@ public class ControlFragmentHandler implements FragmentHandler {
       index += BitUtil.SIZE_OF_LONG;
 
       int clientChannelLength = buffer.getInt(index);
+      index += BitUtil.SIZE_OF_INT;
       String clientChannel = buffer.getStringWithoutLengthAscii(index, clientChannelLength);
-      index += BitUtil.SIZE_OF_INT + clientChannelLength;
+      index += clientChannelLength;
 
       int clientControlStreamId = buffer.getInt(index);
       index += BitUtil.SIZE_OF_INT;
