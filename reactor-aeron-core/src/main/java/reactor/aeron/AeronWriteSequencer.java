@@ -154,7 +154,7 @@ final class AeronWriteSequencer {
       produced++;
 
       publication
-          .enqueue(MessageType.NEXT, (ByteBuffer) t, sessionId)
+          .enqueue((ByteBuffer) t)
           .doOnSuccess(
               avoid -> {
                 if (parent.completed) {

@@ -53,17 +53,15 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
   /**
    * Enqueues buffer for future sending.
    *
-   * @param messageType message type
    * @param buffer buffer
-   * @param sessionId session id
    * @return mono handle
    */
-  public Mono<Void> enqueue(MessageType messageType, ByteBuffer buffer, long sessionId) {
+  public Mono<Void> enqueue(ByteBuffer buffer) {
     return Mono.create(
         sink -> {
           boolean result = false;
           if (!isDisposed()) {
-            result = publishTasks.offer(new PublishTask(messageType, buffer, sessionId, sink));
+            result = publishTasks.offer(new PublishTask(buffer, sink));
           }
           if (!result) {
             sink.error(Exceptions.failWithRejected());
@@ -198,18 +196,13 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
   private class PublishTask {
 
-    private final MessageType msgType;
     private final ByteBuffer msgBody;
-    private final long sessionId;
     private final MonoSink<Void> sink;
 
     private long start;
 
-    private PublishTask(
-        MessageType msgType, ByteBuffer msgBody, long sessionId, MonoSink<Void> sink) {
-      this.msgType = msgType;
+    private PublishTask(ByteBuffer msgBody, MonoSink<Void> sink) {
       this.msgBody = msgBody;
-      this.sessionId = sessionId;
       this.sink = sink;
     }
 
@@ -217,29 +210,19 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
       if (start == 0) {
         start = System.currentTimeMillis();
       }
-      int capacity = msgBody.remaining() + Protocol.HEADER_SIZE;
-      if (capacity < mtuLength) {
+      int msgBodyLength = msgBody.remaining();
+      if (msgBodyLength < mtuLength) {
         BufferClaim bufferClaim = bufferClaims.get();
-        long result = publication.tryClaim(capacity, bufferClaim);
+        long result = publication.tryClaim(msgBodyLength, bufferClaim);
         if (result > 0) {
-          try {
-            MutableDirectBuffer buffer = bufferClaim.buffer();
-            int index = bufferClaim.offset();
-            index = Protocol.putHeader(buffer, index, msgType, sessionId);
-            buffer.putBytes(index, msgBody, msgBody.position(), msgBody.limit());
-            bufferClaim.commit();
-          } catch (Exception ex) {
-            bufferClaim.abort();
-            throw new RuntimeException("Unexpected exception", ex);
-          }
+          MutableDirectBuffer dstBuffer = bufferClaim.buffer();
+          int index = bufferClaim.offset();
+          dstBuffer.putBytes(index, msgBody, msgBody.position(), msgBody.limit());
+          bufferClaim.commit();
         }
         return result;
       } else {
-        UnsafeBuffer buffer =
-            new UnsafeBuffer(new byte[msgBody.remaining() + Protocol.HEADER_SIZE]);
-        int index = Protocol.putHeader(buffer, 0, msgType, sessionId);
-        buffer.putBytes(index, msgBody, msgBody.remaining());
-        return publication.offer(buffer);
+        return publication.offer(new UnsafeBuffer(msgBody, msgBody.position(), msgBody.limit()));
       }
     }
 
