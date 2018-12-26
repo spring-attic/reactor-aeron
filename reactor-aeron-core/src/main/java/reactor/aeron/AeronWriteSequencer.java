@@ -2,23 +2,17 @@ package reactor.aeron;
 
 import java.nio.ByteBuffer;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
 import reactor.core.CoreSubscriber;
-import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.Operators;
-import reactor.util.Logger;
-import reactor.util.Loggers;
 
-final class AeronWriteSequencer implements Disposable {
-
-  private static final Logger logger = Loggers.getLogger(AeronWriteSequencer.class);
+final class AeronWriteSequencer {
 
   private static final int PREFETCH = 32;
 
@@ -28,11 +22,9 @@ final class AeronWriteSequencer implements Disposable {
 
   private final PublisherSender inner;
 
-  private volatile boolean removed;
+  private volatile boolean completed;
 
   private final MonoProcessor<Void> newPromise;
-
-  private final AtomicBoolean completed = new AtomicBoolean(false);
 
   /**
    * Constructor for templating {@link AeronWriteSequencer} objects.
@@ -43,7 +35,7 @@ final class AeronWriteSequencer implements Disposable {
   AeronWriteSequencer(long sessionId, MessagePublication publication) {
     this.sessionId = sessionId;
     this.publication = Objects.requireNonNull(publication, "message publication must be present");
-    // Rest of the fields are nulls
+    // Nulls
     this.dataPublisher = null;
     this.inner = null;
     this.newPromise = null;
@@ -60,9 +52,9 @@ final class AeronWriteSequencer implements Disposable {
       long sessionId, MessagePublication publication, Publisher<?> dataPublisher) {
     this.sessionId = sessionId;
     this.publication = publication;
+    // Prepare
     this.dataPublisher = dataPublisher;
     this.newPromise = MonoProcessor.create();
-
     this.inner = new PublisherSender(this, publication, sessionId);
   }
 
@@ -80,26 +72,8 @@ final class AeronWriteSequencer implements Disposable {
   private Mono<Void> write0() {
     return Mono.fromRunnable(() -> dataPublisher.subscribe(inner))
         .then(newPromise)
-        .takeUntilOther(publication.onDispose().doFinally(s -> dispose()));
-  }
-
-  @Override
-  public void dispose() {
-    if (!removed) {
-      removed = true;
-      if (inner != null) {
-        inner.cancel();
-      }
-    }
-  }
-
-  @Override
-  public boolean isDisposed() {
-    return removed;
-  }
-
-  private void handleError(Throwable th) {
-    logger.error("Unexpected exception: ", th);
+        .takeUntilOther(publication.onDispose())
+        .doFinally(s -> inner.cancel());
   }
 
   static class PublisherSender implements CoreSubscriber<Object>, Subscription {
@@ -152,9 +126,6 @@ final class AeronWriteSequencer implements Disposable {
 
         drain();
       }
-
-      // todo think about it here
-      parent.completed.set(true);
     }
 
     @Override
@@ -164,7 +135,7 @@ final class AeronWriteSequencer implements Disposable {
       produced = 0L;
       produced(p);
 
-      parent.completed.set(true);
+      parent.completed = true;
     }
 
     @Override
@@ -184,15 +155,23 @@ final class AeronWriteSequencer implements Disposable {
 
       publication
           .enqueue(MessageType.NEXT, (ByteBuffer) t, sessionId)
-          .doOnSuccess(avoid -> request(1L))
-          .subscribe(null, this::disposeCurrentDataStream);
-    }
-
-    private void disposeCurrentDataStream(Throwable th) {
-      cancel();
-      //noinspection ConstantConditions
-      parent.newPromise.onError(
-          new Exception("Failed to publish signal into session: " + sessionId, th));
+          .doOnSuccess(
+              avoid -> {
+                if (parent.completed) {
+                  //noinspection ConstantConditions
+                  parent.newPromise.onComplete();
+                  return;
+                }
+                request(1L);
+              })
+          .subscribe(
+              null,
+              th -> {
+                cancel();
+                //noinspection ConstantConditions
+                parent.newPromise.onError(
+                    new Exception("Failed to publish signal into session: " + sessionId, th));
+              });
     }
 
     @Override
@@ -228,11 +207,6 @@ final class AeronWriteSequencer implements Disposable {
 
     @Override
     public final void request(long n) {
-      if (parent.completed.get()) {
-        //noinspection ConstantConditions
-        parent.newPromise.onComplete();
-        return;
-      }
       if (Operators.validate(n)) {
         if (unbounded) {
           return;
