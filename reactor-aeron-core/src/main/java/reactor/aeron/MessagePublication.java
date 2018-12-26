@@ -21,7 +21,6 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
   private final ThreadLocal<BufferClaim> bufferClaims = ThreadLocal.withInitial(BufferClaim::new);
 
   private final String category;
-  private final int mtuLength;
   private final Publication publication;
   private final AeronOptions options;
   private final AeronEventLoop eventLoop;
@@ -38,13 +37,8 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
    * @param publication publication
    */
   MessagePublication(
-      String category,
-      int mtuLength,
-      Publication publication,
-      AeronOptions options,
-      AeronEventLoop eventLoop) {
+      String category, Publication publication, AeronOptions options, AeronEventLoop eventLoop) {
     this.category = category;
-    this.mtuLength = mtuLength;
     this.publication = publication;
     this.options = options;
     this.eventLoop = eventLoop;
@@ -210,19 +204,23 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
       if (start == 0) {
         start = System.currentTimeMillis();
       }
-      int msgBodyLength = msgBody.remaining();
-      if (msgBodyLength < mtuLength) {
+
+      int msgLength = msgBody.remaining();
+      int position = msgBody.position();
+      int limit = msgBody.limit();
+
+      if (msgLength < publication.maxPayloadLength()) {
         BufferClaim bufferClaim = bufferClaims.get();
-        long result = publication.tryClaim(msgBodyLength, bufferClaim);
+        long result = publication.tryClaim(msgLength, bufferClaim);
         if (result > 0) {
           MutableDirectBuffer dstBuffer = bufferClaim.buffer();
           int index = bufferClaim.offset();
-          dstBuffer.putBytes(index, msgBody, msgBody.position(), msgBody.limit());
+          dstBuffer.putBytes(index, msgBody, position, limit);
           bufferClaim.commit();
         }
         return result;
       } else {
-        return publication.offer(new UnsafeBuffer(msgBody, msgBody.position(), msgBody.limit()));
+        return publication.offer(new UnsafeBuffer(msgBody, position, limit));
       }
     }
 
