@@ -233,7 +233,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
                 AeronUtils.minifyChannel(serverChannel));
 
             return send(
-                publication, Protocol.createDisconnectBody(sessionId), MessageType.COMPLETE);
+                publication, Protocol.createDisconnectBody(sessionId), MessageType.DISCONNECT);
           });
     }
 
@@ -352,13 +352,11 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
    * Handler for complete signal from server. At the moment of writing this javadoc the server
    * doesn't emit complete signal. Method is left with logging.
    *
-   * <p>See for details: {@link MessageType#COMPLETE}, {@link Protocol#createDisconnectBody(long)}.
-   *
    * @param sessionId session id
    */
   @Override
-  public void onComplete(long sessionId) {
-    logger.info("[{}] Received {} for sessionId: {}", category, MessageType.COMPLETE, sessionId);
+  public void onDisconnect(long sessionId) {
+    logger.info("[{}] Received {} for sessionId: {}", category, MessageType.DISCONNECT, sessionId);
     dispose(sessionId);
   }
 

@@ -127,8 +127,8 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
   }
 
   @Override
-  public void onComplete(long sessionId) {
-    logger.info("[{}] Received {} for sessionId: {}", category, MessageType.COMPLETE, sessionId);
+  public void onDisconnect(long sessionId) {
+    logger.info("[{}] Received {} for sessionId: {}", category, MessageType.DISCONNECT, sessionId);
     handlers
         .stream()
         .filter(handler -> handler.sessionId == sessionId)

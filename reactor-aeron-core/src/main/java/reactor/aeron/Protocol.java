@@ -22,27 +22,22 @@ public class Protocol {
       String clientChannel,
       int clientControlStreamId,
       int clientSessionStreamId) {
-    int connectLength = MessageType.CONNECT.toString().getBytes(StandardCharsets.US_ASCII).length;
     int clientChannelLength = clientChannel.getBytes(StandardCharsets.US_ASCII).length;
     int bytesLength =
-        BitUtil.SIZE_OF_INT
-            + connectLength /*MessageType.CONNECT*/
+        BitUtil.SIZE_OF_INT /*MessageType.CONNECT*/
+            + BitUtil.SIZE_OF_LONG /*connectRequestId*/
             + BitUtil.SIZE_OF_INT
             + clientChannelLength /*clientChannel*/
             + BitUtil.SIZE_OF_INT /*clientControlStreamId*/
-            + BitUtil.SIZE_OF_INT /*clientSessionStreamId*/
-            + BitUtil.SIZE_OF_LONG /*connectRequestId*/;
+            + BitUtil.SIZE_OF_INT /*clientSessionStreamId*/;
 
     byte[] bytes = new byte[bytesLength];
     UnsafeBuffer buffer = new UnsafeBuffer(bytes);
     int index = 0;
 
-    // put MessageType.CONNECT length
-    buffer.putInt(index, connectLength);
-    index += BitUtil.SIZE_OF_INT;
     // put MessageType.CONNECT
-    buffer.putStringWithoutLengthAscii(index, MessageType.CONNECT.toString());
-    index += connectLength;
+    buffer.putInt(index, MessageType.CONNECT.getCode());
+    index += BitUtil.SIZE_OF_INT;
 
     // put connectRequestId
     buffer.putLong(index, connectRequestId);
@@ -75,11 +70,8 @@ public class Protocol {
    */
   public static ByteBuffer createConnectAckBody(
       long sessionId, long connectRequestId, int serverSessionStreamId) {
-    int connectAckLength =
-        MessageType.CONNECT_ACK.toString().getBytes(StandardCharsets.US_ASCII).length;
     int bytesLength =
-        BitUtil.SIZE_OF_INT
-            + connectAckLength /*MessageType.CONNECT_ACK*/
+        BitUtil.SIZE_OF_INT /*MessageType.CONNECT_ACK*/
             + BitUtil.SIZE_OF_LONG /*sessionId*/
             + BitUtil.SIZE_OF_INT /*serverSessionStreamId*/
             + BitUtil.SIZE_OF_LONG /*connectRequestId*/;
@@ -88,12 +80,9 @@ public class Protocol {
     UnsafeBuffer buffer = new UnsafeBuffer(bytes);
     int index = 0;
 
-    // put MessageType.CONNECT_ACK length
-    buffer.putInt(index, connectAckLength);
-    index += BitUtil.SIZE_OF_INT;
     // put MessageType.CONNECT_ACK
-    buffer.putStringWithoutLengthAscii(index, MessageType.CONNECT_ACK.toString());
-    index += connectAckLength;
+    buffer.putInt(index, MessageType.CONNECT_ACK.getCode());
+    index += BitUtil.SIZE_OF_INT;
 
     // put sessionId
     buffer.putLong(index, sessionId);
@@ -115,22 +104,17 @@ public class Protocol {
    * @return bytebuffer of disconnect body
    */
   public static ByteBuffer createDisconnectBody(long sessionId) {
-    int disconnectLength = MessageType.COMPLETE.toString().getBytes().length;
     int bytesLength =
-        BitUtil.SIZE_OF_INT
-            + disconnectLength /*MessageType.COMPLETE*/
+        BitUtil.SIZE_OF_INT /*MessageType.DISCONNECT*/ //
             + BitUtil.SIZE_OF_LONG /*sessionId*/;
 
     byte[] bytes = new byte[bytesLength];
     UnsafeBuffer buffer = new UnsafeBuffer(bytes);
     int index = 0;
 
-    // put MessageType.COMPLETE length
-    buffer.putInt(index, disconnectLength);
+    // put MessageType.DISCONNECT
+    buffer.putInt(index, MessageType.DISCONNECT.getCode());
     index += BitUtil.SIZE_OF_INT;
-    // put MessageType.COMPLETE
-    buffer.putStringWithoutLengthAscii(index, MessageType.COMPLETE.toString());
-    index += disconnectLength;
 
     // put sessionId
     buffer.putLong(index, sessionId);

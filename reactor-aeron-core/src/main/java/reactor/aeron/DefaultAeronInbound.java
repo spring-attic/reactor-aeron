@@ -106,19 +106,10 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
     public void onNext(ByteBuffer buffer) {
       if (logger.isTraceEnabled()) {
         logger.trace(
-            "[{}] Received {} for sessionId: {}, buffer: {}",
-            category,
-            MessageType.NEXT,
-            sessionId,
-            buffer);
+            "[{}] Received NEXT for sessionId: {}, buffer: {}", category, sessionId, buffer);
       }
 
-      if (this.sessionId == sessionId) {
-        subscriber.onNext(buffer);
-      } else {
-        logger.error(
-            "[{}] Received {} for unexpected sessionId: {}", category, MessageType.NEXT, sessionId);
-      }
+      subscriber.onNext(buffer);
     }
 
     @Override

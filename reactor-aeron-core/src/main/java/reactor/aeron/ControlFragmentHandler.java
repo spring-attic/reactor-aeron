@@ -21,59 +21,58 @@ public class ControlFragmentHandler implements FragmentHandler {
   public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
     int index = offset;
 
-    // get MessageType length and MessageType string
-    int messageTypeLength = buffer.getInt(index);
+    int msgTypeCode = buffer.getInt(index);
     index += BitUtil.SIZE_OF_INT;
-    String messageTypeString = buffer.getStringWithoutLengthAscii(index, messageTypeLength);
-    index += messageTypeLength;
 
-    MessageType messageType;
-    try {
-      messageType = MessageType.valueOf(messageTypeString);
-    } catch (IllegalArgumentException ex) {
-      logger.error("Unknown message type: {}", messageTypeString);
-      return;
+    MessageType messageType = MessageType.getByCode(msgTypeCode);
+
+    switch (messageType) {
+      case CONNECT:
+        onConnect(buffer, index);
+        break;
+      case CONNECT_ACK:
+        onConnectAck(buffer, index);
+        break;
+      case DISCONNECT:
+        onDisconnect(buffer, index);
+        break;
+      default:
+        logger.error("Unsupported message type: {}", messageType);
     }
+  }
 
-    if (messageType == MessageType.CONNECT_ACK) {
-      long sessionId = buffer.getLong(index);
-      index += BitUtil.SIZE_OF_LONG;
+  private void onConnect(DirectBuffer buffer, int index) {
+    final long connectRequestId = buffer.getLong(index);
+    index += BitUtil.SIZE_OF_LONG;
 
-      int serverSessionStreamId = buffer.getInt(index);
-      index += BitUtil.SIZE_OF_INT;
+    int clientChannelLength = buffer.getInt(index);
+    index += BitUtil.SIZE_OF_INT;
+    String clientChannel = buffer.getStringWithoutLengthAscii(index, clientChannelLength);
+    index += clientChannelLength;
 
-      long connectRequestId = buffer.getLong(index);
+    int clientControlStreamId = buffer.getInt(index);
+    index += BitUtil.SIZE_OF_INT;
 
-      subscriber.onConnectAck(connectRequestId, sessionId, serverSessionStreamId);
-      return;
-    }
+    int clientSessionStreamId = buffer.getInt(index);
 
-    if (messageType == MessageType.CONNECT) {
-      final long connectRequestId = buffer.getLong(index);
-      index += BitUtil.SIZE_OF_LONG;
+    subscriber.onConnect(
+        connectRequestId, clientChannel, clientControlStreamId, clientSessionStreamId);
+  }
 
-      int clientChannelLength = buffer.getInt(index);
-      index += BitUtil.SIZE_OF_INT;
-      String clientChannel = buffer.getStringWithoutLengthAscii(index, clientChannelLength);
-      index += clientChannelLength;
+  private void onConnectAck(DirectBuffer buffer, int index) {
+    long sessionId = buffer.getLong(index);
+    index += BitUtil.SIZE_OF_LONG;
 
-      int clientControlStreamId = buffer.getInt(index);
-      index += BitUtil.SIZE_OF_INT;
+    int serverSessionStreamId = buffer.getInt(index);
+    index += BitUtil.SIZE_OF_INT;
 
-      int clientSessionStreamId = buffer.getInt(index);
+    long connectRequestId = buffer.getLong(index);
 
-      subscriber.onConnect(
-          connectRequestId, clientChannel, clientControlStreamId, clientSessionStreamId);
-      return;
-    }
+    subscriber.onConnectAck(connectRequestId, sessionId, serverSessionStreamId);
+  }
 
-    if (messageType == MessageType.COMPLETE) {
-      long sessionId = buffer.getLong(index);
-      subscriber.onComplete(sessionId);
-      return;
-    }
-
-    // Must be unreachable
-    logger.error("Unsupported message type: {}", messageType);
+  private void onDisconnect(DirectBuffer buffer, int index) {
+    long sessionId = buffer.getLong(index);
+    subscriber.onDisconnect(sessionId);
   }
 }

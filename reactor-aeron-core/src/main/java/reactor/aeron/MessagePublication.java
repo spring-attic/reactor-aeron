@@ -210,23 +210,25 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
       if (start == 0) {
         start = System.currentTimeMillis();
       }
-//      if (msgBody.capacity() < mtuLength) {
-//        BufferClaim bufferClaim = bufferClaims.get();
-//        long result = publication.tryClaim(msgBody.capacity(), bufferClaim);
-//        if (result > 0) {
-//          try {
-//            MutableDirectBuffer dstBuffer = bufferClaim.buffer();
-//            dstBuffer.wrap(msgBody);
-//            bufferClaim.commit();
-//          } catch (Exception ex) {
-//            bufferClaim.abort();
-//            throw new RuntimeException("Unexpected exception", ex);
-//          }
-//        }
-//        return result;
-//      } else {
-//      }
-      return publication.offer(new UnsafeBuffer(msgBody));
+      int msgBodyLength = msgBody.remaining();
+      if (msgBodyLength < mtuLength) {
+        BufferClaim bufferClaim = bufferClaims.get();
+        long result = publication.tryClaim(msgBodyLength, bufferClaim);
+        if (result > 0) {
+          try {
+            MutableDirectBuffer dstBuffer = bufferClaim.buffer();
+            int index = bufferClaim.offset();
+            dstBuffer.putBytes(index, msgBody, msgBody.position(), msgBody.limit());
+            bufferClaim.commit();
+          } catch (Exception ex) {
+            bufferClaim.abort();
+            throw Exceptions.propagate(ex);
+          }
+        }
+        return result;
+      } else {
+        return publication.offer(new UnsafeBuffer(msgBody));
+      }
     }
 
     private boolean isTimeoutElapsed(Duration timeout) {
