@@ -215,15 +215,10 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
         BufferClaim bufferClaim = bufferClaims.get();
         long result = publication.tryClaim(msgBodyLength, bufferClaim);
         if (result > 0) {
-          try {
-            MutableDirectBuffer dstBuffer = bufferClaim.buffer();
-            int index = bufferClaim.offset();
-            dstBuffer.putBytes(index, msgBody, msgBody.position(), msgBody.limit());
-            bufferClaim.commit();
-          } catch (Exception ex) {
-            bufferClaim.abort();
-            throw Exceptions.propagate(ex);
-          }
+          MutableDirectBuffer dstBuffer = bufferClaim.buffer();
+          int index = bufferClaim.offset();
+          dstBuffer.putBytes(index, msgBody, msgBody.position(), msgBody.limit());
+          bufferClaim.commit();
         }
         return result;
       } else {
