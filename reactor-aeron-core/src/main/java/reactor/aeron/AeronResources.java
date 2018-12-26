@@ -124,7 +124,7 @@ public class AeronResources implements OnDisposable {
       AeronOptions options,
       AeronEventLoop eventLoop) {
 
-    Publication publication = aeron.addPublication(channel, streamId);
+    Publication publication = aeron.addExclusivePublication(channel, streamId);
 
     MessagePublication messagePublication =
         new MessagePublication(category, publication, options, eventLoop);
