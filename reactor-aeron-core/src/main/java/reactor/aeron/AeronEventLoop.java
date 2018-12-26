@@ -3,8 +3,6 @@ package reactor.aeron;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadFactory;
@@ -65,48 +63,50 @@ public final class AeronEventLoop implements OnDisposable {
     return thread == Thread.currentThread();
   }
 
-  public Mono<Void> execute(Consumer<MonoSink<Void>> consumer) {
-    return worker().flatMap(w -> command(consumer));
+  public Mono<Void> register(MessagePublication p) {
+    return worker().flatMap(w -> command(sink -> registerPublication(p, sink)));
   }
 
-  public Mono<Void> register(MessagePublication publication) {
-    return worker().flatMap(w -> command(sink -> register(publication, sink)));
+  public Mono<Void> register(MessageSubscription s) {
+    return worker().flatMap(w -> command(sink -> registerSubscription(s, sink)));
   }
 
-  private void register(MessagePublication publication, MonoSink<Void> sink) {
-    Objects.requireNonNull(publication, "messagePublication must be not null");
-    publications.add(publication);
+  public Mono<Void> dispose(MessagePublication p) {
+    return worker().flatMap(w -> command(sink -> disposePublication(p, sink)));
+  }
+
+  public Mono<Void> dispose(MessageSubscription s) {
+    return worker().flatMap(w -> command(sink -> disposeSubscription(s, sink)));
+  }
+
+  private void registerPublication(MessagePublication p, MonoSink<Void> sink) {
+    publications.add(p);
     sink.success();
   }
 
-  public Mono<Void> register(MessageSubscription subscription) {
-    return worker().flatMap(w -> command(sink -> register(subscription, sink)));
-  }
-
-  private void register(MessageSubscription subscription, MonoSink<Void> sink) {
-    Objects.requireNonNull(subscription, "messageSubscription must be not null");
-    subscriptions.add(subscription);
+  private void registerSubscription(MessageSubscription s, MonoSink<Void> sink) {
+    subscriptions.add(s);
     sink.success();
   }
 
-  public Mono<Void> dispose(MessagePublication publication) {
-    return worker().flatMap(w -> command(sink -> dispose(publication, sink)));
+  private void disposePublication(MessagePublication p, MonoSink<Void> sink) {
+    publications.remove(p);
+    try {
+      p.close();
+      sink.success();
+    } catch (Exception ex) {
+      sink.error(ex);
+    }
   }
 
-  private void dispose(MessagePublication publication, MonoSink<Void> sink) {
-    publications.removeIf(p -> p == publication);
-    Optional.ofNullable(publication).ifPresent(MessagePublication::close);
-    sink.success();
-  }
-
-  public Mono<Void> dispose(MessageSubscription subscription) {
-    return worker().flatMap(w -> command(sink -> dispose(subscription, sink)));
-  }
-
-  private void dispose(MessageSubscription subscription, MonoSink<Void> sink) {
-    subscriptions.removeIf(s -> s == subscription);
-    Optional.ofNullable(subscription).ifPresent(MessageSubscription::close);
-    sink.success();
+  private void disposeSubscription(MessageSubscription s, MonoSink<Void> sink) {
+    subscriptions.remove(s);
+    try {
+      s.close();
+      sink.success();
+    } catch (Exception ex) {
+      sink.error(ex);
+    }
   }
 
   @Override
