@@ -227,7 +227,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
         }
         return result;
       } else {
-        return publication.offer(new UnsafeBuffer(msgBody));
+        return publication.offer(new UnsafeBuffer(msgBody, msgBody.position(), msgBody.limit()));
       }
     }
 
