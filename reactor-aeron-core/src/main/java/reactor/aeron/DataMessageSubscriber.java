@@ -7,7 +7,5 @@ public interface DataMessageSubscriber {
 
   void onSubscription(Subscription subscription);
 
-  void onNext(long sessionId, ByteBuffer buffer);
-
-  void onComplete(long sessionId);
+  void onNext(ByteBuffer buffer);
 }

@@ -1,8 +1,36 @@
 package reactor.aeron;
 
 public enum MessageType {
-  CONNECT,
-  CONNECT_ACK,
-  NEXT,
-  COMPLETE
+  CONNECT(1),
+  CONNECT_ACK(2),
+  DISCONNECT(3);
+
+  private final int code;
+
+  MessageType(int code) {
+    this.code = code;
+  }
+
+  public int getCode() {
+    return code;
+  }
+
+  /**
+   * Returns MessageType by code.
+   *
+   * @param code code
+   * @return MessageType
+   */
+  public static MessageType getByCode(int code) {
+    switch (code) {
+      case 1:
+        return CONNECT;
+      case 2:
+        return CONNECT_ACK;
+      case 3:
+        return DISCONNECT;
+      default:
+        throw new IllegalArgumentException("Illegal message type code: " + code);
+    }
+  }
 }
