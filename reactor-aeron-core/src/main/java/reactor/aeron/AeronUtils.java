@@ -17,7 +17,7 @@ public final class AeronUtils {
    * @return formatted publication
    */
   public static String format(Publication publication) {
-    return format(publication.channel(), publication.streamId());
+    return format("p", publication.channel(), publication.streamId());
   }
 
   /**
@@ -27,18 +27,19 @@ public final class AeronUtils {
    * @return formatted subscription
    */
   public static String format(Subscription subscription) {
-    return format(subscription.channel(), subscription.streamId());
+    return format("s", subscription.channel(), subscription.streamId());
   }
 
   /**
    * Returns formatted channel.
    *
+   * @param type subscription or publciationo string type
    * @param channel channel
    * @param streamId stream id
    * @return formatter channel
    */
-  public static String format(String channel, int streamId) {
-    return '(' + minifyChannel(channel) + ", streamId: " + streamId + ')';
+  public static String format(String type, String channel, int streamId) {
+    return type + "|" + minifyChannel(channel) + "|streamId=" + streamId;
   }
 
   /**

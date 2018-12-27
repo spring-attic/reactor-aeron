@@ -7,16 +7,16 @@ import java.time.Duration;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
 import org.agrona.concurrent.UnsafeBuffer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.MonoSink;
-import reactor.util.Logger;
-import reactor.util.Loggers;
 
 public final class MessagePublication implements OnDisposable, AutoCloseable {
 
-  private static final Logger logger = Loggers.getLogger(MessagePublication.class);
+  private static final Logger logger = LoggerFactory.getLogger(MessagePublication.class);
 
   private final ThreadLocal<BufferClaim> bufferClaims = ThreadLocal.withInitial(BufferClaim::new);
 
@@ -83,7 +83,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
     // Handle closed publoication
     if (result == Publication.CLOSED) {
-      logger.warn("[{}] Publication CLOSED: {}", category, toString());
+      logger.warn("[{}] Publication CLOSED: {}", category, this);
       dispose();
       return 0;
     }
@@ -96,7 +96,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
         logger.warn(
             "[{}] Publication NOT_CONNECTED: {} during {} millis",
             category,
-            toString(),
+            this,
             options.connectTimeout());
         ex = new RuntimeException("Failed to connect within timeout");
       }
@@ -108,7 +108,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
         logger.warn(
             "[{}] Publication BACK_PRESSURED during {}: {}",
             category,
-            toString(),
+            this,
             options.backpressureTimeout());
         ex = new RuntimeException("Failed to resolve backpressure within timeout");
       }
@@ -120,7 +120,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
         logger.warn(
             "[{}] Publication ADMIN_ACTION: {} during {} millis",
             category,
-            toString(),
+            this,
             options.connectTimeout());
         ex = new RuntimeException("Failed to resolve admin_action within timeout");
       }
@@ -135,19 +135,14 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
   }
 
   @Override
-  public String toString() {
-    return AeronUtils.format(publication);
-  }
-
-  @Override
   public void close() {
     if (!eventLoop.inEventLoop()) {
       throw new IllegalStateException("Can only close aeron publication from within event loop");
     }
     try {
       publication.close();
+      logger.debug("[{}] aeron.Publication closed: {}", category, this);
     } finally {
-      logger.debug("[{}] aeron.Publication closed: {}", category, toString());
       disposePublishTasks();
       onDispose.onComplete();
     }
@@ -184,10 +179,16 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
       if (task == null) {
         break;
       }
-      task.error(new RuntimeException("Publication closed"));
+      task.error(Exceptions.failWithCancel());
     }
   }
 
+  @Override
+  public String toString() {
+    return AeronUtils.format(publication);
+  }
+
+  /** Publish task. Resident of {@link #publishTasks} queue. */
   private class PublishTask {
 
     private final ByteBuffer msgBody;

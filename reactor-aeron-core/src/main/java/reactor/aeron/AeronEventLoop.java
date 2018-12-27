@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import org.agrona.concurrent.IdleStrategy;
 import org.slf4j.Logger;
@@ -18,6 +19,10 @@ import reactor.core.publisher.MonoSink;
 public final class AeronEventLoop implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronEventLoop.class);
+
+  private final AtomicInteger workerCounter = new AtomicInteger();
+
+  private static final String workerNameFormat = "reactor-aeron-%s-%d";
 
   private final IdleStrategy idleStrategy;
 
@@ -41,10 +46,10 @@ public final class AeronEventLoop implements OnDisposable {
     this.workerMono = Mono.fromCallable(this::createWorker).cache();
   }
 
-  private static ThreadFactory defaultThreadFactory() {
+  private static ThreadFactory defaultThreadFactory(String threadName) {
     return r -> {
       Thread thread = new Thread(r);
-      thread.setName("aeron-event-loop");
+      thread.setName(threadName);
       thread.setUncaughtExceptionHandler(
           (t, e) -> logger.error("Uncaught exception occurred: " + e));
       return thread;
@@ -52,7 +57,12 @@ public final class AeronEventLoop implements OnDisposable {
   }
 
   private Worker createWorker() {
-    ThreadFactory threadFactory = defaultThreadFactory();
+    String threadName =
+        String.format(
+            workerNameFormat,
+            Integer.toHexString(System.identityHashCode(this)),
+            workerCounter.incrementAndGet());
+    ThreadFactory threadFactory = defaultThreadFactory(threadName);
     Worker w = new Worker();
     thread = threadFactory.newThread(w);
     thread.start();
@@ -63,20 +73,54 @@ public final class AeronEventLoop implements OnDisposable {
     return thread == Thread.currentThread();
   }
 
+  /**
+   * Registers message publication in event loop.
+   *
+   * @param p message publication
+   * @return mono result of registration
+   */
   public Mono<Void> register(MessagePublication p) {
     return worker().flatMap(w -> command(sink -> registerPublication(p, sink)));
   }
 
+  /**
+   * Registers message subscription in event loop.
+   *
+   * @param s message subscription
+   * @return mono result of registration
+   */
   public Mono<Void> register(MessageSubscription s) {
     return worker().flatMap(w -> command(sink -> registerSubscription(s, sink)));
   }
 
+  /**
+   * Dispose message publication and remove it from event loop.
+   *
+   * @param p message publication
+   * @return mono result of dispose of message publication
+   */
   public Mono<Void> dispose(MessagePublication p) {
     return worker().flatMap(w -> command(sink -> disposePublication(p, sink)));
   }
 
+  /**
+   * Dipose message subscription and remove it event loop.
+   *
+   * @param s message subscription
+   * @return mono result of dispose of message subscription
+   */
   public Mono<Void> dispose(MessageSubscription s) {
     return worker().flatMap(w -> command(sink -> disposeSubscription(s, sink)));
+  }
+
+  @Override
+  public void dispose() {
+    dispose.onComplete();
+
+    // finish shutdown right away if no worker was created
+    if (thread == null) {
+      onDispose.onComplete();
+    }
   }
 
   private void registerPublication(MessagePublication p, MonoSink<Void> sink) {
@@ -95,6 +139,7 @@ public final class AeronEventLoop implements OnDisposable {
       p.close();
       sink.success();
     } catch (Exception ex) {
+      logger.warn("Exception occurred on publication.close(): {}, cause: {}", p, ex.toString());
       sink.error(ex);
     }
   }
@@ -105,17 +150,8 @@ public final class AeronEventLoop implements OnDisposable {
       s.close();
       sink.success();
     } catch (Exception ex) {
+      logger.warn("Exception occurred on subscription.close(): {}, cause: {}", s, ex.toString());
       sink.error(ex);
-    }
-  }
-
-  @Override
-  public void dispose() {
-    dispose.onComplete();
-
-    // finish shutdown right away if no worker was created
-    if (thread == null) {
-      onDispose.onComplete();
     }
   }
 
@@ -199,12 +235,20 @@ public final class AeronEventLoop implements OnDisposable {
         int result = 0;
         //noinspection ForLoopReplaceableByForEach
         for (int i = 0, n = publications.size(); i < n; i++) {
-          result += publications.get(i).proceed();
+          try {
+            result += publications.get(i).proceed();
+          } catch (Exception ex) {
+            logger.error("Unexpected exception occurred on publication.proceed(): " + ex);
+          }
         }
 
         //noinspection ForLoopReplaceableByForEach
         for (int i = 0, n = subscriptions.size(); i < n; i++) {
-          result += subscriptions.get(i).poll();
+          try {
+            result += subscriptions.get(i).poll();
+          } catch (Exception ex) {
+            logger.error("Unexpected exception occurred on subscription.poll(): " + ex);
+          }
         }
 
         idleStrategy.idle(result);
@@ -232,31 +276,26 @@ public final class AeronEventLoop implements OnDisposable {
 
     private void disposePublications() {
       for (Iterator<MessagePublication> it = publications.iterator(); it.hasNext(); ) {
-        MessagePublication publication = it.next();
-        try {
-          publication.close();
-        } catch (Exception ex) {
-          logger.warn(
-              "Exception occurred on closing publication: {}, cause: {}",
-              publication,
-              ex.toString());
-        }
+        MessagePublication p = it.next();
         it.remove();
+        try {
+          p.close();
+        } catch (Exception ex) {
+          logger.warn("Exception occurred on publication.close(): {}, cause: {}", p, ex.toString());
+        }
       }
     }
 
     private void disposeSubscriptions() {
       for (Iterator<MessageSubscription> it = subscriptions.iterator(); it.hasNext(); ) {
-        MessageSubscription subscription = it.next();
+        MessageSubscription s = it.next();
+        it.remove();
         try {
-          subscription.close();
+          s.close();
         } catch (Exception ex) {
           logger.warn(
-              "Exception occurred on closing subscription: {}, cause: {}",
-              subscription,
-              ex.toString());
+              "Exception occurred on subscription.close(): {}, cause: {}", s, ex.toString());
         }
-        it.remove();
       }
     }
   }

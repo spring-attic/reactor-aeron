@@ -9,6 +9,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.aeron.AeronInbound;
 import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronOutbound;
@@ -25,12 +27,10 @@ import reactor.aeron.Protocol;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.util.Logger;
-import reactor.util.Loggers;
 
 public final class AeronClientConnector implements ControlMessageSubscriber, OnDisposable {
 
-  private static final Logger logger = Loggers.getLogger(AeronClientConnector.class);
+  private static final Logger logger = LoggerFactory.getLogger(AeronClientConnector.class);
 
   private static final int CONTROL_STREAM_ID = 1;
 

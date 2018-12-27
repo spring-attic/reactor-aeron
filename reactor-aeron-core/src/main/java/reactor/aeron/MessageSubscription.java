@@ -78,8 +78,8 @@ public final class MessageSubscription
     }
     try {
       subscription.close();
+      logger.debug("[{}] aeron.Subscription closed: {}", category, this);
     } finally {
-      logger.debug("[{}] aeron.Subscription closed: {}", category, AeronUtils.format(subscription));
       onDispose.onComplete();
     }
   }
@@ -103,5 +103,10 @@ public final class MessageSubscription
   @Override
   public Mono<Void> onDispose() {
     return onDispose;
+  }
+
+  @Override
+  public String toString() {
+    return AeronUtils.format(subscription);
   }
 }

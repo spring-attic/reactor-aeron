@@ -13,14 +13,14 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import org.agrona.CloseHelper;
 import org.agrona.IoUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.util.Logger;
-import reactor.util.Loggers;
 
 public class AeronResources implements OnDisposable {
 
-  private static final Logger logger = Loggers.getLogger(AeronResources.class);
+  private static final Logger logger = LoggerFactory.getLogger(AeronResources.class);
 
   private final AeronResourcesConfig config;
 
@@ -269,7 +269,7 @@ public class AeronResources implements OnDisposable {
                 logger.debug(
                     "[{}] {} available image, imageSessionId={}, imageSource={}",
                     category,
-                    AeronUtils.format(channel, streamId),
+                    AeronUtils.format("s", channel, streamId),
                     image.sessionId(),
                     image.sourceIdentity());
               }
@@ -282,7 +282,7 @@ public class AeronResources implements OnDisposable {
                 logger.debug(
                     "[{}] {} unavailable image, imageSessionId={}, imageSource={}",
                     category,
-                    AeronUtils.format(channel, streamId),
+                    AeronUtils.format("s", channel, streamId),
                     image.sessionId(),
                     image.sourceIdentity());
               }

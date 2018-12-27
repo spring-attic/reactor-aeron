@@ -10,6 +10,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.aeron.AeronInbound;
 import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronOutbound;
@@ -25,12 +27,10 @@ import reactor.aeron.OnDisposable;
 import reactor.aeron.Protocol;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.util.Logger;
-import reactor.util.Loggers;
 
 final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable {
 
-  private static final Logger logger = Loggers.getLogger(AeronServerHandler.class);
+  private static final org.slf4j.Logger logger = LoggerFactory.getLogger(AeronServerHandler.class);
 
   private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
@@ -167,7 +167,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
 
   private class SessionHandler implements Connection {
 
-    private final Logger logger = Loggers.getLogger(SessionHandler.class);
+    private final Logger logger = LoggerFactory.getLogger(SessionHandler.class);
 
     private final DefaultAeronOutbound outbound;
     private final DefaultAeronInbound inbound;
