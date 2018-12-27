@@ -134,9 +134,8 @@ public class AeronResources implements OnDisposable {
         .doOnError(
             ex -> {
               logger.error(
-                  "Failed to register publication {} on eventLoop {}, cause: {}",
+                  "Failed to register publication: {}, cause: {}",
                   messagePublication,
-                  eventLoop,
                   ex.toString());
               if (!publication.isClosed()) {
                 publication.close();
@@ -296,9 +295,8 @@ public class AeronResources implements OnDisposable {
         .doOnError(
             ex -> {
               logger.error(
-                  "Failed to register subscription {} on eventLoop {}, cause: {}",
+                  "Failed to register subscription {}, cause: {}",
                   messageSubscription,
-                  eventLoop,
                   ex.toString());
               if (!subscription.isClosed()) {
                 subscription.close();
