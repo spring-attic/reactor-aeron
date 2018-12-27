@@ -17,7 +17,6 @@ final class AeronWriteSequencer {
   private static final int PREFETCH = 32;
 
   private final Publisher<?> dataPublisher;
-  private final long sessionId;
   private final MessagePublication publication;
 
   private final PublisherSender inner;
@@ -29,11 +28,9 @@ final class AeronWriteSequencer {
   /**
    * Constructor for templating {@link AeronWriteSequencer} objects.
    *
-   * @param sessionId session id
    * @param publication message publication
    */
-  AeronWriteSequencer(long sessionId, MessagePublication publication) {
-    this.sessionId = sessionId;
+  AeronWriteSequencer(MessagePublication publication) {
     this.publication = Objects.requireNonNull(publication, "message publication must be present");
     // Nulls
     this.dataPublisher = null;
@@ -44,18 +41,15 @@ final class AeronWriteSequencer {
   /**
    * Constructor.
    *
-   * @param sessionId sessino id
    * @param publication message publication
    * @param dataPublisher data publisher
    */
-  private AeronWriteSequencer(
-      long sessionId, MessagePublication publication, Publisher<?> dataPublisher) {
-    this.sessionId = sessionId;
+  private AeronWriteSequencer(MessagePublication publication, Publisher<?> dataPublisher) {
     this.publication = publication;
     // Prepare
     this.dataPublisher = dataPublisher;
     this.newPromise = MonoProcessor.create();
-    this.inner = new PublisherSender(this, publication, sessionId);
+    this.inner = new PublisherSender(this, publication);
   }
 
   /**
@@ -66,7 +60,7 @@ final class AeronWriteSequencer {
    */
   public Mono<Void> write(Publisher<?> publisher) {
     Objects.requireNonNull(publisher, "dataPublisher must be not null");
-    return new AeronWriteSequencer(sessionId, publication, publisher).write0();
+    return new AeronWriteSequencer(publication, publisher).write0();
   }
 
   private Mono<Void> write0() {
@@ -93,8 +87,6 @@ final class AeronWriteSequencer {
 
     private final AeronWriteSequencer parent;
 
-    private final long sessionId;
-
     private final MessagePublication publication;
     private volatile Subscription missedSubscription;
     private volatile long missedRequested;
@@ -112,9 +104,8 @@ final class AeronWriteSequencer {
 
     private long produced;
 
-    PublisherSender(AeronWriteSequencer parent, MessagePublication publication, long sessionId) {
+    PublisherSender(AeronWriteSequencer parent, MessagePublication publication) {
       this.parent = parent;
-      this.sessionId = sessionId;
       this.publication = publication;
     }
 
@@ -169,8 +160,7 @@ final class AeronWriteSequencer {
               th -> {
                 cancel();
                 //noinspection ConstantConditions
-                parent.newPromise.onError(
-                    new Exception("Failed to publish signal into session: " + sessionId, th));
+                parent.newPromise.onError(new Exception("Failed to publish signal", th));
               });
     }
 

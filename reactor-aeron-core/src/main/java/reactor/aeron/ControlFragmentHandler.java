@@ -4,12 +4,12 @@ import io.aeron.logbuffer.FragmentHandler;
 import io.aeron.logbuffer.Header;
 import org.agrona.BitUtil;
 import org.agrona.DirectBuffer;
-import reactor.util.Logger;
-import reactor.util.Loggers;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ControlFragmentHandler implements FragmentHandler {
 
-  private final Logger logger = Loggers.getLogger(ControlFragmentHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(ControlFragmentHandler.class);
 
   private final ControlMessageSubscriber subscriber;
 

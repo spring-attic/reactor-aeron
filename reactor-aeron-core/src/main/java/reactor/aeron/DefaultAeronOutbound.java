@@ -4,13 +4,13 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Objects;
 import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
-import reactor.util.Logger;
-import reactor.util.Loggers;
 
 public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
 
-  private static final Logger logger = Loggers.getLogger(DefaultAeronOutbound.class);
+  private static final Logger logger = LoggerFactory.getLogger(DefaultAeronOutbound.class);
 
   private static final RuntimeException NOT_CONNECTED_EXCEPTION =
       new RuntimeException("publication is not connected");
@@ -43,22 +43,17 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
    * Init method. Creates data publication and assigns it to event loop. Makes this object eligible
    * for calling {@link #send(Publisher)} function.
    *
-   * @param sessionId session id
    * @param streamId stream id
    * @return initialization handle
    */
-  public Mono<Void> start(long sessionId, int streamId) {
+  public Mono<Void> start(int streamId) {
     return Mono.defer(
         () -> {
           final AeronEventLoop eventLoop = resources.nextEventLoop();
 
           return resources
               .messagePublication(category, channel, streamId, options, eventLoop)
-              .doOnSuccess(
-                  result -> {
-                    publication = result;
-                    sequencer = new AeronWriteSequencer(sessionId, publication);
-                  })
+              .doOnSuccess(result -> sequencer = new AeronWriteSequencer(publication = result))
               .flatMap(
                   result -> {
                     Duration retryInterval = Duration.ofMillis(100);
@@ -74,7 +69,7 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
                         .onErrorResume(
                             th -> {
                               logger.warn(
-                                  "Failed to connect publication {} for sending data during {}",
+                                  "Failed to connect publication: {} for sending data during {}",
                                   publication,
                                   connectTimeout);
                               dispose();
