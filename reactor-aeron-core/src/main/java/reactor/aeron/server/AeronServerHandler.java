@@ -30,7 +30,7 @@ import reactor.core.publisher.MonoProcessor;
 
 final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable {
 
-  private static final org.slf4j.Logger logger = LoggerFactory.getLogger(AeronServerHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(AeronServerHandler.class);
 
   private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
