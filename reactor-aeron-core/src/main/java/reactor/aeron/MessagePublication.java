@@ -83,7 +83,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
     // Handle closed publoication
     if (result == Publication.CLOSED) {
-      logger.warn("Publication CLOSED: {}", this);
+      logger.warn("Publication: {} is CLOSED", this);
       dispose();
       return 0;
     }
@@ -93,8 +93,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     // Handle failed connection
     if (result == Publication.NOT_CONNECTED) {
       if (task.isTimeoutElapsed(options.connectTimeout())) {
-        logger.warn(
-            "Publication NOT_CONNECTED: {} during {} millis", this, options.connectTimeout());
+        logger.warn("Publication: {} is NOT_CONNECTED during {}", this, options.connectTimeout());
         ex = new RuntimeException("Failed to connect within timeout");
       }
     }
@@ -103,7 +102,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     if (result == Publication.BACK_PRESSURED) {
       if (task.isTimeoutElapsed(options.backpressureTimeout())) {
         logger.warn(
-            "Publication BACK_PRESSURED during {}: {}", this, options.backpressureTimeout());
+            "Publication: {} is BACK_PRESSURED during {}", this, options.backpressureTimeout());
         ex = new RuntimeException("Failed to resolve backpressure within timeout");
       }
     }
@@ -111,8 +110,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     // Handle admin action
     if (result == Publication.ADMIN_ACTION) {
       if (task.isTimeoutElapsed(options.connectTimeout())) {
-        logger.warn(
-            "Publication ADMIN_ACTION: {} during {} millis", this, options.connectTimeout());
+        logger.warn("Publication: {} is ADMIN_ACTION during {}", this, options.connectTimeout());
         ex = new RuntimeException("Failed to resolve admin_action within timeout");
       }
     }

@@ -295,7 +295,7 @@ public class AeronResources implements OnDisposable {
         .doOnError(
             ex -> {
               logger.error(
-                  "Failed to register subscription {}, cause: {}",
+                  "Failed to register subscription: {}, cause: {}",
                   messageSubscription,
                   ex.toString());
               if (!subscription.isClosed()) {

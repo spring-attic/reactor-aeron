@@ -326,7 +326,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
                             throwable -> {
                               String errMessage =
                                   String.format(
-                                      "Failed to send %s, publication %s is not connected",
+                                      "Failed to send %s, publication: %s is not connected",
                                       MessageType.CONNECT_ACK, publication);
                               return Mono.error(new RuntimeException(errMessage, throwable));
                             }));

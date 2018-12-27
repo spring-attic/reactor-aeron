@@ -69,7 +69,7 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
                         .onErrorResume(
                             th -> {
                               logger.warn(
-                                  "Failed to connect publication {} for sending data during {}",
+                                  "Failed to connect publication: {} for sending data during {}",
                                   publication,
                                   connectTimeout);
                               dispose();
