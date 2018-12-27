@@ -275,7 +275,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
     private Mono<Void> doDispose() {
       return Mono.defer(
           () -> {
-            logger.debug("{} is about to close", this);
+            logger.debug("About to close {}", this);
 
             handlers.remove(this);
 
@@ -291,7 +291,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
                     Optional.ofNullable(inbound)
                         .map(DefaultAeronInbound::onDispose)
                         .orElse(Mono.empty()))
-                .doFinally(s -> logger.debug("{} was closed", this));
+                .doFinally(s -> logger.debug("Closed {}", this));
           });
     }
 
