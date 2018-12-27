@@ -10,6 +10,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.aeron.AeronInbound;
 import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronOutbound;
@@ -25,12 +27,10 @@ import reactor.aeron.OnDisposable;
 import reactor.aeron.Protocol;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.util.Logger;
-import reactor.util.Loggers;
 
 final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable {
 
-  private static final Logger logger = Loggers.getLogger(AeronServerHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(AeronServerHandler.class);
 
   private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
@@ -120,15 +120,15 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
   @Override
   public void onConnectAck(long connectRequestId, long sessionId, int serverSessionStreamId) {
     logger.error(
-        "[{}] Received unsupported server request {}, connectRequestId: {}",
-        category,
-        MessageType.CONNECT_ACK,
-        connectRequestId);
+        "CONNECT_ACK is not supported, connectRequestId: {}",
+        connectRequestId,
+        sessionId,
+        serverSessionStreamId);
   }
 
   @Override
   public void onDisconnect(long sessionId) {
-    logger.info("[{}] Received {} for sessionId: {}", category, MessageType.DISCONNECT, sessionId);
+    logger.debug("Received DISCONNECT for sessionId: {}", sessionId);
     handlers
         .stream()
         .filter(handler -> handler.sessionId == sessionId)
@@ -167,7 +167,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
 
   private class SessionHandler implements Connection {
 
-    private final Logger logger = Loggers.getLogger(SessionHandler.class);
+    private final Logger logger = LoggerFactory.getLogger(SessionHandler.class);
 
     private final DefaultAeronOutbound outbound;
     private final DefaultAeronInbound inbound;
@@ -176,6 +176,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
     private final int serverSessionStreamId;
     private final long connectRequestId;
     private final long sessionId;
+    private final int clientControlStreamId;
 
     private final Mono<MessagePublication> controlPublication;
 
@@ -195,6 +196,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
       this.connectRequestId = connectRequestId;
       this.sessionId = sessionId;
       this.serverSessionStreamId = serverSessionStreamId;
+      this.clientControlStreamId = clientControlStreamId;
       this.inbound = new DefaultAeronInbound(category, resources);
 
       this.controlPublication =
@@ -214,27 +216,13 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
 
     private Mono<? extends Connection> start() {
       return connect()
-          .then(outbound.start(sessionId, clientSessionStreamId))
-          .then(inbound.start(serverChannel, serverSessionStreamId, sessionId, this::dispose))
+          .then(outbound.start(clientSessionStreamId))
+          .then(inbound.start(serverChannel, serverSessionStreamId, this::dispose))
           .thenReturn(this)
-          .doOnSuccess(
-              connection -> {
-                handlers.add(this);
-
-                logger.debug(
-                    "[{}] Client with connectRequestId: {} successfully connected, sessionId: {}",
-                    category,
-                    connectRequestId,
-                    sessionId);
-              })
+          .doOnSuccess(connection -> handlers.add(this))
           .doOnError(
-              th -> {
-                logger.debug(
-                    "[{}] Failed to connect to the client for sessionId: {}",
-                    category,
-                    sessionId,
-                    th);
-
+              ex -> {
+                logger.error("Exception occurred on: {}, cause: {}", this, ex.toString());
                 dispose();
               });
     }
@@ -251,14 +239,22 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
 
     @Override
     public String toString() {
-      final StringBuilder sb = new StringBuilder("ServerSession{");
-      sb.append("sessionId=").append(sessionId);
-      sb.append(", clientChannel=").append(clientChannel);
-      sb.append(", clientSessionStreamId=").append(clientSessionStreamId);
-      sb.append(", serverSessionStreamId=").append(serverSessionStreamId);
-      sb.append(", connectRequestId=").append(connectRequestId);
-      sb.append('}');
-      return sb.toString();
+      return "ServerSession{"
+          + "category="
+          + category
+          + ", sessionId="
+          + sessionId
+          + ", clientChannel="
+          + AeronUtils.minifyChannel(clientChannel)
+          + ", serverChannel="
+          + AeronUtils.minifyChannel(serverChannel)
+          + ", clientControlStreamId="
+          + clientControlStreamId
+          + ", clientSessionStreamId="
+          + clientSessionStreamId
+          + ", serverSessionStreamId="
+          + serverSessionStreamId
+          + '}';
     }
 
     @Override
@@ -279,7 +275,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
     private Mono<Void> doDispose() {
       return Mono.defer(
           () -> {
-            logger.debug("[{}] About to close session with sessionId: {}", category, sessionId);
+            logger.debug("{} is about to close", this);
 
             handlers.remove(this);
 
@@ -295,10 +291,7 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
                     Optional.ofNullable(inbound)
                         .map(DefaultAeronInbound::onDispose)
                         .orElse(Mono.empty()))
-                .doFinally(
-                    s ->
-                        logger.debug(
-                            "[{}] Closed session with sessionId: {}", category, sessionId));
+                .doFinally(s -> logger.debug("{} was closed", this));
           });
     }
 
@@ -317,18 +310,15 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
                         .then()
                         .doOnSuccess(
                             avoid ->
-                                logger.debug(
-                                    "[{}] Sent {} to {}",
-                                    category,
-                                    MessageType.CONNECT_ACK,
-                                    publication))
+                                logger.debug("ServerSession sent CONNECT_ACK to: {}", publication))
                         .onErrorResume(
-                            throwable -> {
-                              String errMessage =
-                                  String.format(
-                                      "Failed to send %s, publication %s is not connected",
-                                      MessageType.CONNECT_ACK, publication);
-                              return Mono.error(new RuntimeException(errMessage, throwable));
+                            th -> {
+                              logger.warn(
+                                  "Failed to send CONNECT_ACK to: {}, cause: {}",
+                                  publication,
+                                  th.toString());
+                              return Mono.error(
+                                  new RuntimeException("Failed to send CONNECT_ACK", th));
                             }));
           });
     }

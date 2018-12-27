@@ -13,14 +13,14 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import org.agrona.CloseHelper;
 import org.agrona.IoUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.util.Logger;
-import reactor.util.Loggers;
 
 public class AeronResources implements OnDisposable {
 
-  private static final Logger logger = Loggers.getLogger(AeronResources.class);
+  private static final Logger logger = LoggerFactory.getLogger(AeronResources.class);
 
   private final AeronResourcesConfig config;
 
@@ -134,17 +134,13 @@ public class AeronResources implements OnDisposable {
         .doOnError(
             ex -> {
               logger.error(
-                  "[{}] Failed to register publication {} on eventLoop {}, cause: {}",
-                  category,
-                  AeronUtils.format(publication),
-                  eventLoop,
+                  "Failed to register publication: {}, cause: {}",
+                  messagePublication,
                   ex.toString());
               if (!publication.isClosed()) {
                 publication.close();
               }
             })
-        .doOnSuccess(
-            avoid -> logger.debug("[{}] Added publication: {}", category, messagePublication))
         .thenReturn(messagePublication);
   }
 
@@ -267,9 +263,8 @@ public class AeronResources implements OnDisposable {
             image -> {
               if (logger.isDebugEnabled()) {
                 logger.debug(
-                    "[{}] {} available image, imageSessionId={}, imageSource={}",
-                    category,
-                    AeronUtils.format(channel, streamId),
+                    "Available image on: {}, imageSessionId={}, imageSource={}",
+                    AeronUtils.format(category, "sub", channel, streamId),
                     image.sessionId(),
                     image.sourceIdentity());
               }
@@ -280,9 +275,9 @@ public class AeronResources implements OnDisposable {
             image -> {
               if (logger.isDebugEnabled()) {
                 logger.debug(
-                    "[{}] {} unavailable image, imageSessionId={}, imageSource={}",
+                    "Unavailable image on: {}, imageSessionId={}, imageSource={}",
                     category,
-                    AeronUtils.format(channel, streamId),
+                    AeronUtils.format(category, "sub", channel, streamId),
                     image.sessionId(),
                     image.sourceIdentity());
               }
@@ -300,19 +295,13 @@ public class AeronResources implements OnDisposable {
         .doOnError(
             ex -> {
               logger.error(
-                  "[{}] Failed to register subscription {} on eventLoop {}, cause: {}",
-                  category,
-                  AeronUtils.format(subscription),
-                  eventLoop,
+                  "Failed to register subscription: {}, cause: {}",
+                  messageSubscription,
                   ex.toString());
               if (!subscription.isClosed()) {
                 subscription.close();
               }
             })
-        .doOnSuccess(
-            avoid ->
-                logger.debug(
-                    "[{}] Added subscription: {}", category, AeronUtils.format(subscription)))
         .thenReturn(messageSubscription);
   }
 

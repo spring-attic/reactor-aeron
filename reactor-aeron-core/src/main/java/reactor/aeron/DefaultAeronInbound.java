@@ -5,8 +5,6 @@ import java.util.Optional;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
@@ -27,15 +25,13 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
    *
    * @param channel server or client channel uri
    * @param streamId stream id
-   * @param sessionId session id
    * @param onCompleteHandler callback which will be invoked when this finishes
    * @return success result
    */
-  public Mono<Void> start(
-      String channel, int streamId, long sessionId, Runnable onCompleteHandler) {
+  public Mono<Void> start(String channel, int streamId, Runnable onCompleteHandler) {
     return Mono.defer(
         () -> {
-          DataMessageProcessor messageProcessor = new DataMessageProcessor(name, sessionId);
+          DataMessageProcessor messageProcessor = new DataMessageProcessor();
 
           flux = new ByteBufferFlux(messageProcessor);
 
@@ -84,18 +80,10 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
   private static class DataMessageProcessor
       implements DataMessageSubscriber, Publisher<ByteBuffer> {
 
-    private static final Logger logger = LoggerFactory.getLogger(DataMessageProcessor.class);
-
-    private final String category;
-    private final long sessionId;
-
     private volatile Subscription subscription;
     private volatile Subscriber<? super ByteBuffer> subscriber;
 
-    private DataMessageProcessor(String category, long sessionId) {
-      this.category = category;
-      this.sessionId = sessionId;
-    }
+    private DataMessageProcessor() {}
 
     @Override
     public void onSubscription(Subscription subscription) {
@@ -104,11 +92,6 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
 
     @Override
     public void onNext(ByteBuffer buffer) {
-      if (logger.isTraceEnabled()) {
-        logger.trace(
-            "[{}] Received NEXT for sessionId: {}, buffer: {}", category, sessionId, buffer);
-      }
-
       subscriber.onNext(buffer);
     }
 

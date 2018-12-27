@@ -7,16 +7,16 @@ import java.time.Duration;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
 import org.agrona.concurrent.UnsafeBuffer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.MonoSink;
-import reactor.util.Logger;
-import reactor.util.Loggers;
 
 public final class MessagePublication implements OnDisposable, AutoCloseable {
 
-  private static final Logger logger = Loggers.getLogger(MessagePublication.class);
+  private static final Logger logger = LoggerFactory.getLogger(MessagePublication.class);
 
   private final ThreadLocal<BufferClaim> bufferClaims = ThreadLocal.withInitial(BufferClaim::new);
 
@@ -83,7 +83,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
     // Handle closed publoication
     if (result == Publication.CLOSED) {
-      logger.warn("[{}] Publication CLOSED: {}", category, toString());
+      logger.warn("Publication: {} is CLOSED", this);
       dispose();
       return 0;
     }
@@ -93,11 +93,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     // Handle failed connection
     if (result == Publication.NOT_CONNECTED) {
       if (task.isTimeoutElapsed(options.connectTimeout())) {
-        logger.warn(
-            "[{}] Publication NOT_CONNECTED: {} during {} millis",
-            category,
-            toString(),
-            options.connectTimeout());
+        logger.warn("Publication: {} is NOT_CONNECTED during {}", this, options.connectTimeout());
         ex = new RuntimeException("Failed to connect within timeout");
       }
     }
@@ -106,10 +102,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     if (result == Publication.BACK_PRESSURED) {
       if (task.isTimeoutElapsed(options.backpressureTimeout())) {
         logger.warn(
-            "[{}] Publication BACK_PRESSURED during {}: {}",
-            category,
-            toString(),
-            options.backpressureTimeout());
+            "Publication: {} is BACK_PRESSURED during {}", this, options.backpressureTimeout());
         ex = new RuntimeException("Failed to resolve backpressure within timeout");
       }
     }
@@ -117,11 +110,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     // Handle admin action
     if (result == Publication.ADMIN_ACTION) {
       if (task.isTimeoutElapsed(options.connectTimeout())) {
-        logger.warn(
-            "[{}] Publication ADMIN_ACTION: {} during {} millis",
-            category,
-            toString(),
-            options.connectTimeout());
+        logger.warn("Publication: {} is ADMIN_ACTION during {}", this, options.connectTimeout());
         ex = new RuntimeException("Failed to resolve admin_action within timeout");
       }
     }
@@ -135,19 +124,14 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
   }
 
   @Override
-  public String toString() {
-    return AeronUtils.format(publication);
-  }
-
-  @Override
   public void close() {
     if (!eventLoop.inEventLoop()) {
       throw new IllegalStateException("Can only close aeron publication from within event loop");
     }
     try {
       publication.close();
+      logger.debug("aeron.Publication closed: {}", this);
     } finally {
-      logger.debug("[{}] aeron.Publication closed: {}", category, toString());
       disposePublishTasks();
       onDispose.onComplete();
     }
@@ -184,10 +168,20 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
       if (task == null) {
         break;
       }
-      task.error(new RuntimeException("Publication closed"));
+      task.error(Exceptions.failWithCancel());
     }
   }
 
+  @Override
+  public String toString() {
+    return AeronUtils.format(category, "pub", publication.channel(), publication.streamId());
+  }
+
+  /**
+   * Publish task.
+   *
+   * <p>Resident of {@link #publishTasks} queue.
+   */
   private class PublishTask {
 
     private final ByteBuffer msgBody;
