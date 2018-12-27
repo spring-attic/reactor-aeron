@@ -43,22 +43,17 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
    * Init method. Creates data publication and assigns it to event loop. Makes this object eligible
    * for calling {@link #send(Publisher)} function.
    *
-   * @param sessionId session id
    * @param streamId stream id
    * @return initialization handle
    */
-  public Mono<Void> start(long sessionId, int streamId) {
+  public Mono<Void> start(int streamId) {
     return Mono.defer(
         () -> {
           final AeronEventLoop eventLoop = resources.nextEventLoop();
 
           return resources
               .messagePublication(category, channel, streamId, options, eventLoop)
-              .doOnSuccess(
-                  result -> {
-                    publication = result;
-                    sequencer = new AeronWriteSequencer(sessionId, publication);
-                  })
+              .doOnSuccess(result -> sequencer = new AeronWriteSequencer(publication = result))
               .flatMap(
                   result -> {
                     Duration retryInterval = Duration.ofMillis(100);

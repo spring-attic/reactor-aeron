@@ -214,8 +214,8 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
 
     private Mono<? extends Connection> start() {
       return connect()
-          .then(outbound.start(sessionId, clientSessionStreamId))
-          .then(inbound.start(serverChannel, serverSessionStreamId, sessionId, this::dispose))
+          .then(outbound.start(clientSessionStreamId))
+          .then(inbound.start(serverChannel, serverSessionStreamId, this::dispose))
           .thenReturn(this)
           .doOnSuccess(
               connection -> {

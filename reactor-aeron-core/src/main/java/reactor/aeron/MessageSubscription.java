@@ -78,7 +78,7 @@ public final class MessageSubscription
     }
     try {
       subscription.close();
-      logger.debug("[{}] aeron.Subscription closed: {}", category, this);
+      logger.debug("aeron.Subscription closed: {}", this);
     } finally {
       onDispose.onComplete();
     }
@@ -107,6 +107,6 @@ public final class MessageSubscription
 
   @Override
   public String toString() {
-    return AeronUtils.format(subscription);
+    return AeronUtils.format(category, "sub", subscription.channel(), subscription.streamId());
   }
 }

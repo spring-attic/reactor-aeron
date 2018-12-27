@@ -125,16 +125,21 @@ public final class AeronEventLoop implements OnDisposable {
 
   private void registerPublication(MessagePublication p, MonoSink<Void> sink) {
     publications.add(p);
+    logger.debug("Registered publication: {}", p);
     sink.success();
   }
 
   private void registerSubscription(MessageSubscription s, MonoSink<Void> sink) {
     subscriptions.add(s);
+    logger.debug("Registered subscription: {}", s);
     sink.success();
   }
 
   private void disposePublication(MessagePublication p, MonoSink<Void> sink) {
-    publications.remove(p);
+    boolean removed = publications.remove(p);
+    if (removed) {
+      logger.debug("Removed publication: {}", p);
+    }
     try {
       p.close();
       sink.success();
@@ -145,7 +150,10 @@ public final class AeronEventLoop implements OnDisposable {
   }
 
   private void disposeSubscription(MessageSubscription s, MonoSink<Void> sink) {
-    subscriptions.remove(s);
+    boolean removed = subscriptions.remove(s);
+    if (removed) {
+      logger.debug("Removed subscription: {}", s);
+    }
     try {
       s.close();
       sink.success();

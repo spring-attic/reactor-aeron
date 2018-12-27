@@ -1,45 +1,24 @@
 package reactor.aeron;
 
-import io.aeron.Publication;
-import io.aeron.Subscription;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 /** Aeron utils. */
 public final class AeronUtils {
 
-  public static final String CHANNEL_PREFIX = "aeron:udp?endpoint=";
-
-  /**
-   * Returns formatted publication.
-   *
-   * @param publication publication
-   * @return formatted publication
-   */
-  public static String format(Publication publication) {
-    return format("p", publication.channel(), publication.streamId());
-  }
-
-  /**
-   * Returns formatted subscription.
-   *
-   * @param subscription subscription
-   * @return formatted subscription
-   */
-  public static String format(Subscription subscription) {
-    return format("s", subscription.channel(), subscription.streamId());
-  }
+  private static final String CHANNEL_PREFIX = "aeron:udp?endpoint=";
 
   /**
    * Returns formatted channel.
    *
-   * @param type subscription or publciationo string type
-   * @param channel channel
+   * @param category category of subscription or publication
+   * @param type subscription or publication string type
+   * @param channel channel string
    * @param streamId stream id
-   * @return formatter channel
+   * @return formatted channel
    */
-  public static String format(String type, String channel, int streamId) {
-    return type + "|" + minifyChannel(channel) + "|streamId=" + streamId;
+  public static String format(String category, String type, String channel, int streamId) {
+    return category + "|" + type + "|" + minifyChannel(channel) + "|streamId=" + streamId;
   }
 
   /**

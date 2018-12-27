@@ -83,7 +83,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
     // Handle closed publoication
     if (result == Publication.CLOSED) {
-      logger.warn("[{}] Publication CLOSED: {}", category, this);
+      logger.warn("Publication CLOSED: {}", this);
       dispose();
       return 0;
     }
@@ -94,10 +94,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     if (result == Publication.NOT_CONNECTED) {
       if (task.isTimeoutElapsed(options.connectTimeout())) {
         logger.warn(
-            "[{}] Publication NOT_CONNECTED: {} during {} millis",
-            category,
-            this,
-            options.connectTimeout());
+            "Publication NOT_CONNECTED: {} during {} millis", this, options.connectTimeout());
         ex = new RuntimeException("Failed to connect within timeout");
       }
     }
@@ -106,10 +103,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     if (result == Publication.BACK_PRESSURED) {
       if (task.isTimeoutElapsed(options.backpressureTimeout())) {
         logger.warn(
-            "[{}] Publication BACK_PRESSURED during {}: {}",
-            category,
-            this,
-            options.backpressureTimeout());
+            "Publication BACK_PRESSURED during {}: {}", this, options.backpressureTimeout());
         ex = new RuntimeException("Failed to resolve backpressure within timeout");
       }
     }
@@ -118,10 +112,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     if (result == Publication.ADMIN_ACTION) {
       if (task.isTimeoutElapsed(options.connectTimeout())) {
         logger.warn(
-            "[{}] Publication ADMIN_ACTION: {} during {} millis",
-            category,
-            this,
-            options.connectTimeout());
+            "Publication ADMIN_ACTION: {} during {} millis", this, options.connectTimeout());
         ex = new RuntimeException("Failed to resolve admin_action within timeout");
       }
     }
@@ -141,7 +132,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     }
     try {
       publication.close();
-      logger.debug("[{}] aeron.Publication closed: {}", category, this);
+      logger.debug("aeron.Publication closed: {}", this);
     } finally {
       disposePublishTasks();
       onDispose.onComplete();
@@ -185,10 +176,14 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
   @Override
   public String toString() {
-    return AeronUtils.format(publication);
+    return AeronUtils.format(category, "pub", publication.channel(), publication.streamId());
   }
 
-  /** Publish task. Resident of {@link #publishTasks} queue. */
+  /**
+   * Publish task.
+   *
+   * <p>Resident of {@link #publishTasks} queue.
+   */
   private class PublishTask {
 
     private final ByteBuffer msgBody;

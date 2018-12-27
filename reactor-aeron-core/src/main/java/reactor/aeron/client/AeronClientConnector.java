@@ -159,8 +159,8 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
                 serverSessionStreamId = response.serverSessionStreamId;
 
                 return inbound
-                    .start(clientChannel, clientSessionStreamId, sessionId, this::dispose)
-                    .then(outbound.start(sessionId, serverSessionStreamId))
+                    .start(clientChannel, clientSessionStreamId, this::dispose)
+                    .then(outbound.start(serverSessionStreamId))
                     .thenReturn(this);
               })
           .doOnError(
