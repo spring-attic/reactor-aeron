@@ -124,7 +124,7 @@ public final class AeronEventLoop implements OnDisposable {
   }
 
   private void registerPublication(MessagePublication p, MonoSink<Void> sink) {
-    if (!dispose.isDisposed()) {
+    if (dispose.isDisposed()) {
       sink.error(AeronExceptions.failWithCancel("CommandTask has cancelled"));
       return;
     }
@@ -134,7 +134,7 @@ public final class AeronEventLoop implements OnDisposable {
   }
 
   private void registerSubscription(MessageSubscription s, MonoSink<Void> sink) {
-    if (!dispose.isDisposed()) {
+    if (dispose.isDisposed()) {
       sink.error(AeronExceptions.failWithCancel("CommandTask has cancelled"));
       return;
     }
