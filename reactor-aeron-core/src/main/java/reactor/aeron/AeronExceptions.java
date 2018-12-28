@@ -18,6 +18,10 @@ public class AeronExceptions {
     return new MessagePublicationException("MessagePublication unavailable");
   }
 
+  public static RuntimeException failWithPublication(String message) {
+    return new AeronPublicationException(message);
+  }
+
   static class AeronCancelException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
@@ -51,6 +55,20 @@ public class AeronExceptions {
     private static final long serialVersionUID = 1L;
 
     public MessagePublicationException(String message) {
+      super(message);
+    }
+
+    @Override
+    public synchronized Throwable fillInStackTrace() {
+      return this;
+    }
+  }
+
+  static class AeronPublicationException extends RuntimeException {
+
+    private static final long serialVersionUID = 1L;
+
+    public AeronPublicationException(String message) {
       super(message);
     }
 
