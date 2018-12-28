@@ -114,6 +114,7 @@ public final class AeronEventLoop implements OnDisposable {
 
   @Override
   public void dispose() {
+    // start disposing worker (if any)
     dispose.onComplete();
 
     // finish shutdown right away if no worker was created
@@ -123,12 +124,20 @@ public final class AeronEventLoop implements OnDisposable {
   }
 
   private void registerPublication(MessagePublication p, MonoSink<Void> sink) {
+    if (!dispose.isDisposed()) {
+      sink.error(AeronExceptions.failWithCancel("CommandTask has cancelled"));
+      return;
+    }
     publications.add(p);
     logger.debug("Registered publication: {}", p);
     sink.success();
   }
 
   private void registerSubscription(MessageSubscription s, MonoSink<Void> sink) {
+    if (!dispose.isDisposed()) {
+      sink.error(AeronExceptions.failWithCancel("CommandTask has cancelled"));
+      return;
+    }
     subscriptions.add(s);
     logger.debug("Registered subscription: {}", s);
     sink.success();
@@ -226,14 +235,9 @@ public final class AeronEventLoop implements OnDisposable {
     public void run() {
       // Process commands, publications and subscriptions
       while (!dispose.isDisposed()) {
-        for (; ; ) {
-          // Commands
-          CommandTask task = commandTasks.poll();
-          if (task == null) {
-            break;
-          }
-          task.run();
-        }
+
+        // Commands
+        processCommandTasks();
 
         int result = 0;
         //noinspection ForLoopReplaceableByForEach
@@ -259,7 +263,7 @@ public final class AeronEventLoop implements OnDisposable {
 
       // Dispose publications, subscriptions and commands
       try {
-        disposeCommandTasks();
+        processCommandTasks();
         disposeSubscriptions();
         disposePublications();
       } finally {
@@ -267,13 +271,13 @@ public final class AeronEventLoop implements OnDisposable {
       }
     }
 
-    private void disposeCommandTasks() {
+    private void processCommandTasks() {
       for (; ; ) {
         CommandTask task = commandTasks.poll();
         if (task == null) {
           break;
         }
-        task.sink.error(AeronExceptions.failWithCancel("CommandTask has cancelled"));
+        task.run();
       }
     }
 
