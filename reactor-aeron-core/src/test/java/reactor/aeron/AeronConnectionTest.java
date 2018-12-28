@@ -113,7 +113,7 @@ public class AeronConnectionTest extends BaseAeronTest {
     CountDownLatch latch = new CountDownLatch(1);
     connection.onDispose().doOnSuccess(aVoid -> latch.countDown()).subscribe();
 
-    connection.inbound().receive().asString().log("client").subscribe(processor);
+    connection.inbound().receiveAsString().log("client").subscribe(processor);
 
     processor.take(1).blockLast(Duration.ofSeconds(4));
 

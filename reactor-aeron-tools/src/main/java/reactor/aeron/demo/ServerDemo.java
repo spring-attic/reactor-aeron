@@ -22,8 +22,7 @@ public class ServerDemo {
               connection ->
                   connection
                       .inbound()
-                      .receive()
-                      .asString()
+                      .receiveAsString()
                       .log("receive")
                       .then(connection.onDispose()))
           .bind()

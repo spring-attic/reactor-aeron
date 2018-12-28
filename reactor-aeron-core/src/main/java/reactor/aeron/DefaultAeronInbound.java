@@ -5,6 +5,7 @@ import java.util.Optional;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
@@ -56,8 +57,8 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
   }
 
   @Override
-  public ByteBufferFlux receive() {
-    return flux;
+  public Flux<ByteBuffer> receive() {
+    return flux.takeUntilOther(onDispose());
   }
 
   @Override
