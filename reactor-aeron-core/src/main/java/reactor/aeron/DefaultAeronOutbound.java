@@ -12,9 +12,6 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(DefaultAeronOutbound.class);
 
-  private static final RuntimeException NOT_CONNECTED_EXCEPTION =
-      new RuntimeException("publication is not connected");
-
   private final String category;
   private final String channel;
   private final AeronResources resources;
@@ -60,23 +57,30 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
                     Duration connectTimeout = options.connectTimeout();
                     long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
 
-                    return Mono.fromCallable(publication::isConnected)
-                        .filter(isConnected -> isConnected)
-                        .switchIfEmpty(Mono.error(NOT_CONNECTED_EXCEPTION))
+                    return checkConnected()
                         .retryBackoff(retryCount, retryInterval, retryInterval)
                         .timeout(connectTimeout)
                         .then()
                         .onErrorResume(
                             th -> {
                               logger.warn(
-                                  "Failed to connect publication: {} for sending data during {}",
+                                  "Failed to connect publication: {} for sending data within {} ms",
                                   publication,
-                                  connectTimeout);
+                                  connectTimeout.toMillis());
                               dispose();
                               return Mono.error(th);
                             });
                   });
         });
+  }
+
+  private Mono<Void> checkConnected() {
+    return Mono.defer(
+        () ->
+            publication.isConnected()
+                ? Mono.empty()
+                : Mono.error(
+                    AeronExceptions.failWithPublication("aeron.Publication is not connected")));
   }
 
   @Override
