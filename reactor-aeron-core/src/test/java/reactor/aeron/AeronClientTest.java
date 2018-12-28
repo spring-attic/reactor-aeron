@@ -69,7 +69,7 @@ class AeronClientTest extends BaseAeronTest {
                 .then(connection.onDispose()));
 
     Connection connection = createConnection();
-    StepVerifier.create(connection.inbound().receive().asString().log("client"))
+    StepVerifier.create(connection.inbound().receiveAsString().log("client"))
         .expectNext("hello1", "2", "3")
         .expectNoEvent(Duration.ofMillis(10))
         .thenCancel()
@@ -91,7 +91,7 @@ class AeronClientTest extends BaseAeronTest {
 
     Connection connection = createConnection();
 
-    StepVerifier.create(connection.inbound().receive().asString().log("client"))
+    StepVerifier.create(connection.inbound().receiveAsString().log("client"))
         .expectNext(str, str, str)
         .expectNoEvent(Duration.ofMillis(10))
         .thenCancel()
@@ -110,13 +110,13 @@ class AeronClientTest extends BaseAeronTest {
     Connection connection1 = createConnection();
     Connection connection2 = createConnection();
 
-    StepVerifier.create(connection1.inbound().receive().asString().log("client-1"))
+    StepVerifier.create(connection1.inbound().receiveAsString().log("client-1"))
         .expectNext("1", "2", "3")
         .expectNoEvent(Duration.ofMillis(100))
         .thenCancel()
         .verify();
 
-    StepVerifier.create(connection2.inbound().receive().asString().log("client-2"))
+    StepVerifier.create(connection2.inbound().receiveAsString().log("client-2"))
         .expectNext("1", "2", "3")
         .expectNoEvent(Duration.ofMillis(100))
         .thenCancel()
@@ -135,7 +135,7 @@ class AeronClientTest extends BaseAeronTest {
 
     Connection connection1 = createConnection();
 
-    StepVerifier.create(connection1.inbound().receive().asString())
+    StepVerifier.create(connection1.inbound().receiveAsString())
         .expectNextCount(count)
         .expectNoEvent(Duration.ofMillis(100))
         .thenCancel()
@@ -160,7 +160,7 @@ class AeronClientTest extends BaseAeronTest {
         .then()
         .subscribe();
 
-    StepVerifier.create(connection1.inbound().receive().asString())
+    StepVerifier.create(connection1.inbound().receiveAsString())
         .expectNextCount(count)
         .expectNoEvent(Duration.ofMillis(100))
         .thenCancel()
@@ -185,7 +185,7 @@ class AeronClientTest extends BaseAeronTest {
         .then()
         .subscribe();
 
-    StepVerifier.create(connection1.inbound().receive().asString())
+    StepVerifier.create(connection1.inbound().receiveAsString())
         .expectNextCount(count)
         .expectNoEvent(Duration.ofMillis(100))
         .thenCancel()
@@ -219,14 +219,12 @@ class AeronClientTest extends BaseAeronTest {
             Flux.merge(
                 connection1
                     .inbound()
-                    .receive()
-                    .asString()
+                    .receiveAsString()
                     .take(count)
                     .filter(response -> !response.startsWith("client-1 ")),
                 connection2
                     .inbound()
-                    .receive()
-                    .asString()
+                    .receiveAsString()
                     .take(count)
                     .filter(response -> !response.startsWith("client-2 "))))
         .expectComplete()
@@ -247,13 +245,13 @@ class AeronClientTest extends BaseAeronTest {
 
     createConnection(
         connection -> {
-          connection.inbound().receive().asString().log("client-1").subscribe(processor1);
+          connection.inbound().receiveAsString().log("client-1").subscribe(processor1);
           return connection.onDispose();
         });
 
     createConnection(
         connection -> {
-          connection.inbound().receive().asString().log("client-2").subscribe(processor2);
+          connection.inbound().receiveAsString().log("client-2").subscribe(processor2);
           return connection.onDispose();
         });
 
@@ -282,8 +280,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .inbound()
-                .receive()
-                .asString()
+                .receiveAsString()
                 .doOnNext(clientRequests::onNext)
                 // .log("server receive ")
                 .then(connection.onDispose()));
@@ -319,8 +316,7 @@ class AeronClientTest extends BaseAeronTest {
   private Connection createConnection() {
     return createConnection(
         options -> {
-          options.clientChannel(clientChannel);
-          options.serverChannel(serverChannel);
+          options.clientChannel(clientChannel).serverChannel(serverChannel);
         });
   }
 
@@ -331,11 +327,7 @@ class AeronClientTest extends BaseAeronTest {
   private Connection createConnection(
       Function<? super Connection, ? extends Publisher<Void>> handler) {
     return AeronClient.create(aeronResources)
-        .options(
-            options -> {
-              options.clientChannel(clientChannel);
-              options.serverChannel(serverChannel);
-            })
+        .options(options -> options.clientChannel(clientChannel).serverChannel(serverChannel))
         .handle(handler)
         .connect()
         .block(TIMEOUT);

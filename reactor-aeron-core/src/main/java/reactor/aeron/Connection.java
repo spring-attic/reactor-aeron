@@ -56,19 +56,27 @@ public interface Connection extends OnDisposable {
    * @return a {@link CoreSubscriber} that will dispose on complete or error
    */
   default CoreSubscriber<Void> disposeSubscriber() {
-    return new BaseSubscriber<Void>() {
-      @Override
-      protected void hookOnSubscribe(Subscription subscription) {
-        request(Long.MAX_VALUE);
-        onDispose().subscribe(null, e -> this.dispose(), this::dispose);
-      }
+    return new ConnectionDisposer(this);
+  }
 
-      @Override
-      protected void hookFinally(SignalType type) {
-        if (type != SignalType.CANCEL) {
-          dispose();
-        }
+  final class ConnectionDisposer extends BaseSubscriber<Void> {
+    final OnDisposable onDisposable;
+
+    public ConnectionDisposer(OnDisposable onDisposable) {
+      this.onDisposable = onDisposable;
+    }
+
+    @Override
+    protected void hookOnSubscribe(Subscription subscription) {
+      request(Long.MAX_VALUE);
+      onDisposable.onDispose(this);
+    }
+
+    @Override
+    protected void hookFinally(SignalType type) {
+      if (type != SignalType.CANCEL) {
+        onDisposable.dispose();
       }
-    };
+    }
   }
 }

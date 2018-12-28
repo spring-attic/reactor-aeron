@@ -11,7 +11,6 @@ import java.util.function.Consumer;
 import org.agrona.concurrent.IdleStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.MonoSink;
@@ -115,6 +114,7 @@ public final class AeronEventLoop implements OnDisposable {
 
   @Override
   public void dispose() {
+    // start disposing worker (if any)
     dispose.onComplete();
 
     // finish shutdown right away if no worker was created
@@ -124,12 +124,20 @@ public final class AeronEventLoop implements OnDisposable {
   }
 
   private void registerPublication(MessagePublication p, MonoSink<Void> sink) {
+    if (dispose.isDisposed()) {
+      sink.error(AeronExceptions.failWithCancel("CommandTask has cancelled"));
+      return;
+    }
     publications.add(p);
     logger.debug("Registered publication: {}", p);
     sink.success();
   }
 
   private void registerSubscription(MessageSubscription s, MonoSink<Void> sink) {
+    if (dispose.isDisposed()) {
+      sink.error(AeronExceptions.failWithCancel("CommandTask has cancelled"));
+      return;
+    }
     subscriptions.add(s);
     logger.debug("Registered subscription: {}", s);
     sink.success();
@@ -174,18 +182,18 @@ public final class AeronEventLoop implements OnDisposable {
   }
 
   private Mono<Worker> worker() {
-    return workerMono.takeUntilOther(listenDispose());
+    return workerMono.takeUntilOther(listenUnavailable());
   }
 
   private Mono<Void> command(Consumer<MonoSink<Void>> consumer) {
     return Mono.create(sink -> commandTasks.add(new CommandTask(sink, consumer)));
   }
 
-  private <T> Mono<T> listenDispose() {
+  private <T> Mono<T> listenUnavailable() {
     //noinspection unchecked
     return dispose //
         .map(avoid -> (T) avoid)
-        .switchIfEmpty(Mono.error(Exceptions::failWithRejected));
+        .switchIfEmpty(Mono.error(AeronExceptions::failWithEventLoopUnavailable));
   }
 
   /**
@@ -206,13 +214,9 @@ public final class AeronEventLoop implements OnDisposable {
       try {
         consumer.accept(sink);
       } catch (Exception ex) {
-        logger.warn("Exception occurred on command task: " + ex);
+        logger.warn("Exception occurred on CommandTask: " + ex);
         sink.error(ex);
       }
-    }
-
-    private void cancel() {
-      sink.error(Exceptions.failWithCancel());
     }
   }
 
@@ -231,14 +235,9 @@ public final class AeronEventLoop implements OnDisposable {
     public void run() {
       // Process commands, publications and subscriptions
       while (!dispose.isDisposed()) {
-        for (; ; ) {
-          // Commands
-          CommandTask task = commandTasks.poll();
-          if (task == null) {
-            break;
-          }
-          task.run();
-        }
+
+        // Commands
+        processCommandTasks();
 
         int result = 0;
         //noinspection ForLoopReplaceableByForEach
@@ -264,7 +263,7 @@ public final class AeronEventLoop implements OnDisposable {
 
       // Dispose publications, subscriptions and commands
       try {
-        disposeCommandTasks();
+        processCommandTasks();
         disposeSubscriptions();
         disposePublications();
       } finally {
@@ -272,13 +271,13 @@ public final class AeronEventLoop implements OnDisposable {
       }
     }
 
-    private void disposeCommandTasks() {
+    private void processCommandTasks() {
       for (; ; ) {
         CommandTask task = commandTasks.poll();
         if (task == null) {
           break;
         }
-        task.cancel();
+        task.run();
       }
     }
 
@@ -289,7 +288,11 @@ public final class AeronEventLoop implements OnDisposable {
         try {
           p.close();
         } catch (Exception ex) {
-          logger.warn("Exception occurred on publication.close(): {}, cause: {}", p, ex.toString());
+          logger.warn(
+              "Exception occurred at disposePublications()"
+                  + " on publication.close(): {}, cause: {}",
+              p,
+              ex.toString());
         }
       }
     }
@@ -302,7 +305,10 @@ public final class AeronEventLoop implements OnDisposable {
           s.close();
         } catch (Exception ex) {
           logger.warn(
-              "Exception occurred on subscription.close(): {}, cause: {}", s, ex.toString());
+              "Exception occurred at disposeSubscriptions()"
+                  + " on subscription.close(): {}, cause: {}",
+              s,
+              ex.toString());
         }
       }
     }

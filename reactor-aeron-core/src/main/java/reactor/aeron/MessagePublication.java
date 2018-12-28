@@ -9,7 +9,6 @@ import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.MonoSink;
@@ -58,7 +57,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
             result = publishTasks.offer(new PublishTask(buffer, sink));
           }
           if (!result) {
-            sink.error(Exceptions.failWithRejected());
+            sink.error(AeronExceptions.failWithMessagePublicationUnavailable());
           }
         });
   }
@@ -81,9 +80,16 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
       return 1;
     }
 
-    // Handle closed publoication
+    // Handle closed publication
     if (result == Publication.CLOSED) {
-      logger.warn("Publication: {} is CLOSED", this);
+      logger.warn("aeron.Publication is CLOSED: {}", this);
+      dispose();
+      return 0;
+    }
+
+    // Handle max position exceeded
+    if (result == Publication.MAX_POSITION_EXCEEDED) {
+      logger.warn("aeron.Publication received MAX_POSITION_EXCEEDED: {}", this);
       dispose();
       return 0;
     }
@@ -93,8 +99,11 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     // Handle failed connection
     if (result == Publication.NOT_CONNECTED) {
       if (task.isTimeoutElapsed(options.connectTimeout())) {
-        logger.warn("Publication: {} is NOT_CONNECTED during {}", this, options.connectTimeout());
-        ex = new RuntimeException("Failed to connect within timeout");
+        logger.warn(
+            "aeron.Publication failed to resolve NOT_CONNECTED within {} ms, {}",
+            options.connectTimeout().toMillis(),
+            this);
+        ex = AeronExceptions.failWithPublication("Failed to resolve NOT_CONNECTED within timeout");
       }
     }
 
@@ -102,20 +111,26 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     if (result == Publication.BACK_PRESSURED) {
       if (task.isTimeoutElapsed(options.backpressureTimeout())) {
         logger.warn(
-            "Publication: {} is BACK_PRESSURED during {}", this, options.backpressureTimeout());
-        ex = new RuntimeException("Failed to resolve backpressure within timeout");
+            "aeron.Publication failed to resolve BACK_PRESSURED within {} ms, {}",
+            options.backpressureTimeout().toMillis(),
+            this);
+        ex = AeronExceptions.failWithPublication("Failed to resolve BACK_PRESSURED within timeout");
       }
     }
 
     // Handle admin action
     if (result == Publication.ADMIN_ACTION) {
       if (task.isTimeoutElapsed(options.connectTimeout())) {
-        logger.warn("Publication: {} is ADMIN_ACTION during {}", this, options.connectTimeout());
-        ex = new RuntimeException("Failed to resolve admin_action within timeout");
+        logger.warn(
+            "aeron.Publication failed to resolve ADMIN_ACTION within {} ms, {}",
+            options.connectTimeout().toMillis(),
+            this);
+        ex = AeronExceptions.failWithPublication("Failed to resolve ADMIN_ACTION within timeout");
       }
     }
 
     if (ex != null) {
+      // Consume task and notify subscriber(s)
       publishTasks.poll();
       task.error(ex);
     }
@@ -168,7 +183,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
       if (task == null) {
         break;
       }
-      task.error(Exceptions.failWithCancel());
+      task.error(AeronExceptions.failWithCancel("PublishTask has cancelled"));
     }
   }
 
@@ -207,10 +222,14 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
         BufferClaim bufferClaim = bufferClaims.get();
         long result = publication.tryClaim(msgLength, bufferClaim);
         if (result > 0) {
-          MutableDirectBuffer dstBuffer = bufferClaim.buffer();
-          int index = bufferClaim.offset();
-          dstBuffer.putBytes(index, msgBody, position, limit);
-          bufferClaim.commit();
+          try {
+            MutableDirectBuffer dstBuffer = bufferClaim.buffer();
+            int index = bufferClaim.offset();
+            dstBuffer.putBytes(index, msgBody, position, limit);
+            bufferClaim.commit();
+          } catch (Exception ex) {
+            bufferClaim.abort();
+          }
         }
         return result;
       } else {
