@@ -319,8 +319,7 @@ class AeronClientTest extends BaseAeronTest {
   private Connection createConnection() {
     return createConnection(
         options -> {
-          options.clientChannel(clientChannel);
-          options.serverChannel(serverChannel);
+          options.clientChannel(clientChannel).serverChannel(serverChannel);
         });
   }
 
@@ -331,11 +330,7 @@ class AeronClientTest extends BaseAeronTest {
   private Connection createConnection(
       Function<? super Connection, ? extends Publisher<Void>> handler) {
     return AeronClient.create(aeronResources)
-        .options(
-            options -> {
-              options.clientChannel(clientChannel);
-              options.serverChannel(serverChannel);
-            })
+        .options(options -> options.clientChannel(clientChannel).serverChannel(serverChannel))
         .handle(handler)
         .connect()
         .block(TIMEOUT);
