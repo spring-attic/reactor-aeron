@@ -144,10 +144,78 @@ public class AeronConnectionTest extends BaseAeronTest {
   }
 
   @Test
+  public void testServerDisconnectsAndClientCleanups() throws Exception {
+    OnDisposable server = createServer(OnDisposable::onDispose);
+
+    CountDownLatch clientConnectionLatch = new CountDownLatch(2);
+
+    Connection client = createConnection();
+
+    client
+        .inbound() //
+        .receive()
+        .log("CLIENT_INBOUND")
+        .doFinally(s -> clientConnectionLatch.countDown())
+        .then()
+        .subscribe();
+    client
+        .outbound()
+        .send(
+            Mono.<ByteBuffer>never()
+                .log("CLIENT_OUTBOUND_SEND")
+                .doFinally(s -> clientConnectionLatch.countDown()))
+        .then()
+        .log("CLIENT_OUTBOUND")
+        .subscribe();
+
+    Mono //
+        .delay(Duration.ofSeconds(1))
+        .doOnSuccess(avoid -> server.dispose())
+        .subscribe();
+
+    boolean await = clientConnectionLatch.await(3, TimeUnit.SECONDS);
+    assertTrue(await, "clientConnectionLatch: " + clientConnectionLatch.getCount());
+  }
+
+  @Test
   public void testClientDisconnects() throws Exception {
     CountDownLatch serverConnectionLatch = new CountDownLatch(1);
 
     createServer(c -> c.onDispose().doFinally(s -> serverConnectionLatch.countDown()));
+
+    Connection client = createConnection();
+
+    Mono //
+        .delay(Duration.ofSeconds(1))
+        .doOnSuccess(avoid -> client.dispose())
+        .subscribe();
+
+    boolean await = serverConnectionLatch.await(3, TimeUnit.SECONDS);
+    assertTrue(await, "serverConnectionLatch: " + serverConnectionLatch.getCount());
+  }
+
+  @Test
+  public void testClientDisconnectsAndServerCleanups() throws Exception {
+    CountDownLatch serverConnectionLatch = new CountDownLatch(2);
+
+    createServer(
+        c -> {
+          c.inbound() //
+              .receive()
+              .log("SERVER_INBOUND")
+              .doFinally(s -> serverConnectionLatch.countDown())
+              .then()
+              .subscribe();
+          c.outbound()
+              .send(
+                  Mono.<ByteBuffer>never()
+                      .log("SERVER_OUTBOUND_SEND")
+                      .doFinally(s -> serverConnectionLatch.countDown()))
+              .then()
+              .log("SERVER_OUTBOUND")
+              .subscribe();
+          return c.onDispose();
+        });
 
     Connection client = createConnection();
 
