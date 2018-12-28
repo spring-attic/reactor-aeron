@@ -51,7 +51,7 @@ class AeronServerTest extends BaseAeronTest {
 
     createServer(
         connection -> {
-          connection.inbound().receive().asString().log("receive").subscribe(processor);
+          connection.inbound().receiveAsString().log("receive").subscribe(processor);
           return connection.onDispose();
         });
 

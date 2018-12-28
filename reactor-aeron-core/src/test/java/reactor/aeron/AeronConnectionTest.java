@@ -2,6 +2,7 @@ package reactor.aeron;
 
 import static java.lang.Boolean.TRUE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.aeron.ChannelUriStringBuilder;
 import java.nio.ByteBuffer;
@@ -18,9 +19,10 @@ import reactor.aeron.AeronOptions.Builder;
 import reactor.aeron.client.AeronClient;
 import reactor.aeron.server.AeronServer;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.ReplayProcessor;
 
-public class UnavailableImageTest extends BaseAeronTest {
+public class AeronConnectionTest extends BaseAeronTest {
 
   private ChannelUriStringBuilder serverChannel;
   private ChannelUriStringBuilder clientChannel;
@@ -106,15 +108,12 @@ public class UnavailableImageTest extends BaseAeronTest {
 
     Connection connection =
         createConnection(
-            options -> {
-              options.clientChannel(clientChannel);
-              options.serverChannel(serverChannel);
-            });
+            options -> options.clientChannel(clientChannel).serverChannel(serverChannel));
 
     CountDownLatch latch = new CountDownLatch(1);
     connection.onDispose().doOnSuccess(aVoid -> latch.countDown()).subscribe();
 
-    connection.inbound().receive().asString().log("client").subscribe(processor);
+    connection.inbound().receiveAsString().log("client").subscribe(processor);
 
     processor.take(1).blockLast(Duration.ofSeconds(4));
 
@@ -123,6 +122,110 @@ public class UnavailableImageTest extends BaseAeronTest {
     latch.await(imageLivenessTimeout.toMillis(), TimeUnit.MILLISECONDS);
 
     assertEquals(0, latch.getCount());
+  }
+
+  @Test
+  public void testServerDisconnects() throws Exception {
+    OnDisposable server = createServer(OnDisposable::onDispose);
+
+    CountDownLatch clientConnectionLatch = new CountDownLatch(1);
+
+    Connection client = createConnection();
+
+    client.onDispose().doFinally(s -> clientConnectionLatch.countDown()).subscribe();
+
+    Mono //
+        .delay(Duration.ofSeconds(1))
+        .doOnSuccess(avoid -> server.dispose())
+        .subscribe();
+
+    boolean await = clientConnectionLatch.await(3, TimeUnit.SECONDS);
+    assertTrue(await, "clientConnectionLatch: " + clientConnectionLatch.getCount());
+  }
+
+  @Test
+  public void testServerDisconnectsAndClientCleanups() throws Exception {
+    OnDisposable server = createServer(OnDisposable::onDispose);
+
+    CountDownLatch clientConnectionLatch = new CountDownLatch(2);
+
+    Connection client = createConnection();
+
+    client
+        .inbound() //
+        .receive()
+        .log("CLIENT_INBOUND")
+        .doFinally(s -> clientConnectionLatch.countDown())
+        .then()
+        .subscribe();
+    client
+        .outbound()
+        .send(
+            Mono.<ByteBuffer>never()
+                .log("CLIENT_OUTBOUND_SEND")
+                .doFinally(s -> clientConnectionLatch.countDown()))
+        .then()
+        .log("CLIENT_OUTBOUND")
+        .subscribe();
+
+    Mono //
+        .delay(Duration.ofSeconds(1))
+        .doOnSuccess(avoid -> server.dispose())
+        .subscribe();
+
+    boolean await = clientConnectionLatch.await(3, TimeUnit.SECONDS);
+    assertTrue(await, "clientConnectionLatch: " + clientConnectionLatch.getCount());
+  }
+
+  @Test
+  public void testClientDisconnects() throws Exception {
+    CountDownLatch serverConnectionLatch = new CountDownLatch(1);
+
+    createServer(c -> c.onDispose().doFinally(s -> serverConnectionLatch.countDown()));
+
+    Connection client = createConnection();
+
+    Mono //
+        .delay(Duration.ofSeconds(1))
+        .doOnSuccess(avoid -> client.dispose())
+        .subscribe();
+
+    boolean await = serverConnectionLatch.await(3, TimeUnit.SECONDS);
+    assertTrue(await, "serverConnectionLatch: " + serverConnectionLatch.getCount());
+  }
+
+  @Test
+  public void testClientDisconnectsAndServerCleanups() throws Exception {
+    CountDownLatch serverConnectionLatch = new CountDownLatch(2);
+
+    createServer(
+        c -> {
+          c.inbound() //
+              .receive()
+              .log("SERVER_INBOUND")
+              .doFinally(s -> serverConnectionLatch.countDown())
+              .then()
+              .subscribe();
+          c.outbound()
+              .send(
+                  Mono.<ByteBuffer>never()
+                      .log("SERVER_OUTBOUND_SEND")
+                      .doFinally(s -> serverConnectionLatch.countDown()))
+              .then()
+              .log("SERVER_OUTBOUND")
+              .subscribe();
+          return c.onDispose();
+        });
+
+    Connection client = createConnection();
+
+    Mono //
+        .delay(Duration.ofSeconds(1))
+        .doOnSuccess(avoid -> client.dispose())
+        .subscribe();
+
+    boolean await = serverConnectionLatch.await(3, TimeUnit.SECONDS);
+    assertTrue(await, "serverConnectionLatch: " + serverConnectionLatch.getCount());
   }
 
   private Connection createConnection(Consumer<Builder> options) {
@@ -140,9 +243,6 @@ public class UnavailableImageTest extends BaseAeronTest {
 
   private Connection createConnection() {
     return createConnection(
-        options -> {
-          options.clientChannel(clientChannel);
-          options.serverChannel(serverChannel);
-        });
+        options -> options.clientChannel(clientChannel).serverChannel(serverChannel));
   }
 }

@@ -25,8 +25,7 @@ public class ClientServerSends {
               connection ->
                   connection
                       .inbound()
-                      .receive()
-                      .asString()
+                      .receiveAsString()
                       .log("receive")
                       .then(connection.onDispose()))
           .connect()
