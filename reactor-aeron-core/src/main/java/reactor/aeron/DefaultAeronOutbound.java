@@ -57,29 +57,30 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
                     Duration connectTimeout = options.connectTimeout();
                     long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
 
-                    return Mono.defer(
-                            () -> {
-                              if (publication.isConnected()) {
-                                return Mono.empty();
-                              }
-                              return Mono.error(
-                                  AeronExceptions.failWithPublication(
-                                      "aeron.Publication is not connected"));
-                            })
+                    return checkConnected()
                         .retryBackoff(retryCount, retryInterval, retryInterval)
                         .timeout(connectTimeout)
                         .then()
                         .onErrorResume(
                             th -> {
                               logger.warn(
-                                  "Failed to connect publication: {} for sending data during {}",
+                                  "Failed to connect publication: {} for sending data within {} ms",
                                   publication,
-                                  connectTimeout);
+                                  connectTimeout.toMillis());
                               dispose();
                               return Mono.error(th);
                             });
                   });
         });
+  }
+
+  private Mono<Void> checkConnected() {
+    return Mono.defer(
+        () ->
+            publication.isConnected()
+                ? Mono.empty()
+                : Mono.error(
+                    AeronExceptions.failWithPublication("aeron.Publication is not connected")));
   }
 
   @Override
