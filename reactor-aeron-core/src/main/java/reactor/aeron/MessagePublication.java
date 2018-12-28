@@ -9,7 +9,6 @@ import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.MonoSink;
@@ -58,7 +57,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
             result = publishTasks.offer(new PublishTask(buffer, sink));
           }
           if (!result) {
-            sink.error(Exceptions.failWithRejected());
+            sink.error(AeronExceptions.failWithMessagePublicationUnavailable());
           }
         });
   }
@@ -168,7 +167,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
       if (task == null) {
         break;
       }
-      task.error(Exceptions.failWithCancel());
+      task.error(AeronExceptions.failWithCancel("PublishTask has cancelled"));
     }
   }
 
@@ -207,10 +206,14 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
         BufferClaim bufferClaim = bufferClaims.get();
         long result = publication.tryClaim(msgLength, bufferClaim);
         if (result > 0) {
-          MutableDirectBuffer dstBuffer = bufferClaim.buffer();
-          int index = bufferClaim.offset();
-          dstBuffer.putBytes(index, msgBody, position, limit);
-          bufferClaim.commit();
+          try {
+            MutableDirectBuffer dstBuffer = bufferClaim.buffer();
+            int index = bufferClaim.offset();
+            dstBuffer.putBytes(index, msgBody, position, limit);
+            bufferClaim.commit();
+          } catch (Exception ex) {
+            bufferClaim.abort();
+          }
         }
         return result;
       } else {
