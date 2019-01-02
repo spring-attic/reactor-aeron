@@ -3,7 +3,6 @@ package reactor.aeron.server;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.reactivestreams.Publisher;
-import reactor.aeron.AeronEventLoop;
 import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
@@ -11,8 +10,6 @@ import reactor.aeron.OnDisposable;
 import reactor.core.publisher.Mono;
 
 public final class AeronServer {
-
-  private static final int CONTROL_STREAM_ID = 1;
 
   private final AeronServerSettings settings;
 
@@ -53,39 +50,7 @@ public final class AeronServer {
    * @return mono handle of result
    */
   public Mono<? extends OnDisposable> bind(AeronOptions options) {
-    return Mono.defer(
-        () -> {
-          AeronServerSettings settings = this.settings.options(options);
-          AeronServerHandler serverHandler = new AeronServerHandler(settings);
-
-          AeronResources resources = settings.aeronResources();
-          String category = settings.name();
-          String serverChannel = settings.options().serverChannel();
-          AeronEventLoop eventLoop = resources.nextEventLoop();
-
-          return resources
-              .controlSubscription(
-                  category,
-                  serverChannel,
-                  CONTROL_STREAM_ID,
-                  serverHandler,
-                  eventLoop,
-                  null,
-                  null /**/)
-              .map(
-                  controlSubscription -> {
-                    serverHandler.onSubscription(controlSubscription);
-                    serverHandler
-                        .onDispose()
-                        .doFinally(s -> controlSubscription.dispose())
-                        .subscribe(
-                            null,
-                            ex -> {
-                              // no-op
-                            });
-                    return serverHandler;
-                  });
-        });
+    return Mono.defer(() -> new AeronServerHandler(this.settings.options(options)).start());
   }
 
   /**

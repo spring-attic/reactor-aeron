@@ -1,15 +1,14 @@
 package reactor.aeron.server;
 
+import io.aeron.ChannelUriStringBuilder;
+import io.aeron.Image;
 import java.time.Duration;
-import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.aeron.AeronInbound;
@@ -18,21 +17,19 @@ import reactor.aeron.AeronOutbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronUtils;
 import reactor.aeron.Connection;
-import reactor.aeron.ControlMessageSubscriber;
+import reactor.aeron.DataFragmentHandler;
+import reactor.aeron.DataMessageProcessor;
 import reactor.aeron.DefaultAeronInbound;
 import reactor.aeron.DefaultAeronOutbound;
 import reactor.aeron.MessagePublication;
-import reactor.aeron.MessageType;
 import reactor.aeron.OnDisposable;
 import reactor.aeron.Protocol;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
-final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable {
+final class AeronServerHandler implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronServerHandler.class);
-
-  private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
 
   private final String category;
   private final AeronOptions options;
@@ -40,9 +37,8 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
   private final Function<? super Connection, ? extends Publisher<Void>> handler;
   private final String serverChannel;
 
-  private final AtomicLong nextSessionId = new AtomicLong(0);
-
-  private final List<SessionHandler> handlers = new CopyOnWriteArrayList<>();
+  // TODO think of more performant concurrent hashmap
+  private final Map<Integer, SessionHandler> clients = new ConcurrentHashMap<>(32);
 
   private final MonoProcessor<Void> dispose = MonoProcessor.create();
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
@@ -60,80 +56,44 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
         .subscribe(null, th -> logger.warn("AeronServerHandler disposed with error: " + th));
   }
 
-  @Override
-  public void onSubscription(Subscription subscription) {
-    subscription.request(Long.MAX_VALUE);
+  public Mono<OnDisposable> start() {
+    return Mono.defer(
+        () -> {
+          DataMessageProcessor messageProcessor = new DataMessageProcessor();
+          DataFragmentHandler fragmentHandler = new DataFragmentHandler(messageProcessor);
+          return resources
+              .subscription2(
+                  serverChannel /**/,
+                  fragmentHandler,
+                  this::onImageAvailable,
+                  this::onImageUnavailable)
+              .thenReturn(this);
+        });
   }
 
-  @Override
-  public void onConnect(
-      long connectRequestId,
-      String clientChannel,
-      int clientControlStreamId,
-      int clientSessionStreamId) {
+  private void onImageUnavailable(Image image) {
+    String channel =
+        new ChannelUriStringBuilder()
+            .reliable(true)
+            .media("udp")
+            .controlEndpoint(todo)
+            .sessionId(image.sessionId())
+            .build();
 
-    if (logger.isDebugEnabled()) {
-      logger.debug(
-          "[{}] Received {} for connectRequestId: {}, channel={}, "
-              + "clientControlStreamId={}, clientSessionStreamId={}",
-          category,
-          MessageType.CONNECT,
-          connectRequestId,
-          AeronUtils.minifyChannel(clientChannel),
-          clientControlStreamId,
-          clientSessionStreamId);
-    }
-
-    int serverSessionStreamId = streamIdCounter.incrementAndGet();
-    long sessionId = nextSessionId.incrementAndGet();
-    SessionHandler sessionHandler =
-        new SessionHandler(
-            clientChannel,
-            clientSessionStreamId,
-            clientControlStreamId,
-            connectRequestId,
-            sessionId,
-            serverSessionStreamId);
-
-    sessionHandler
-        .start()
+    resources
+        .publication2(channel, options)
+        .doOnSuccess(mp -> {
+          // TODO create SessionHandler aka Connection and add it to hashmap
+        })
         .subscribe(
-            connection ->
-                handler
-                    .apply(connection) //
-                    .subscribe(connection.disposeSubscriber()),
-            th ->
-                logger.error(
-                    "[{}] Occurred exception on connect to {}, sessionId: {}, "
-                        + "connectRequestId: {}, clientSessionStreamId: {}, "
-                        + "clientControlStreamId: {}, serverSessionStreamId: {}, error: ",
-                    category,
-                    clientChannel,
-                    sessionId,
-                    connectRequestId,
-                    clientSessionStreamId,
-                    clientControlStreamId,
-                    serverSessionStreamId,
-                    th));
+            null,
+            ex -> logger.error("Unexpected exception occurred on creating server outbound: " + ex));
   }
 
-  @Override
-  public void onConnectAck(long connectRequestId, long sessionId, int serverSessionStreamId) {
-    logger.error(
-        "CONNECT_ACK is not supported, connectRequestId: {}",
-        connectRequestId,
-        sessionId,
-        serverSessionStreamId);
-  }
+  private void onImageAvailable(Image image) {
+    int sessionId = image.sessionId();
 
-  @Override
-  public void onDisconnect(long sessionId) {
-    logger.debug("Received DISCONNECT for sessionId: {}", sessionId);
-    handlers
-        .stream()
-        .filter(handler -> handler.sessionId == sessionId)
-        .findFirst()
-        .ifPresent(SessionHandler::dispose);
+    // TODO remove from hashmap of clients
   }
 
   @Override

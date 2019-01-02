@@ -144,6 +144,32 @@ public class AeronResources implements OnDisposable {
         .thenReturn(messagePublication);
   }
 
+  public Mono<MessagePublication> publication2(String channel, AeronOptions options) {
+    return Mono.defer(
+        () -> {
+          AeronEventLoop eventLoop = this.nextEventLoop();
+
+          Publication publication = aeron.addExclusivePublication(channel, AeronUtils.STREAM_ID);
+
+          MessagePublication messagePublication =
+              new MessagePublication("0xcafe000", publication, options, eventLoop);
+
+          return eventLoop
+              .register(messagePublication)
+              .doOnError(
+                  ex -> {
+                    logger.error(
+                        "Failed to register publication: {}, cause: {}",
+                        messagePublication,
+                        ex.toString());
+                    if (!publication.isClosed()) {
+                      publication.close();
+                    }
+                  })
+              .thenReturn(messagePublication);
+        });
+  }
+
   /**
    * Adds control subscription and register it.
    *
@@ -244,6 +270,62 @@ public class AeronResources implements OnDisposable {
 
                     logger.info("{} shutdown complete", this);
                   });
+        });
+  }
+
+  public Mono<MessageSubscription> subscription2(
+      String channel,
+      FragmentHandler fragmentHandler,
+      Consumer<Image> availableImageHandler,
+      Consumer<Image> unavailableImageHandler) {
+
+    return Mono.defer(
+        () -> {
+          AeronEventLoop eventLoop = this.nextEventLoop();
+
+          Subscription subscription =
+              aeron.addSubscription(
+                  channel,
+                  AeronUtils.STREAM_ID,
+                  image -> {
+                    logger.debug(
+                        "onImageAvailable: 0x{} {}",
+                        Integer.toHexString(image.sessionId()),
+                        image.sourceIdentity());
+                    if (availableImageHandler != null) {
+                      availableImageHandler.accept(image);
+                    }
+                    Optional //
+                        .ofNullable(availableImageHandler)
+                        .ifPresent(c -> c.accept(image));
+                  },
+                  image -> {
+                    logger.debug(
+                        "onImageUnavailable: 0x{} {}",
+                        Integer.toHexString(image.sessionId()),
+                        image.sourceIdentity());
+                    Optional //
+                        .ofNullable(unavailableImageHandler)
+                        .ifPresent(c -> c.accept(image));
+                  });
+
+          MessageSubscription messageSubscription =
+              new MessageSubscription(
+                  "0xcafe0000", eventLoop, subscription, new FragmentAssembler(fragmentHandler));
+
+          return eventLoop
+              .register(messageSubscription)
+              .doOnError(
+                  ex -> {
+                    logger.error(
+                        "Failed to register subscription: {}, cause: {}",
+                        messageSubscription,
+                        ex.toString());
+                    if (!subscription.isClosed()) {
+                      subscription.close();
+                    }
+                  })
+              .thenReturn(messageSubscription);
         });
   }
 

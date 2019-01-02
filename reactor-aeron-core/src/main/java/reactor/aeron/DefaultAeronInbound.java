@@ -2,9 +2,6 @@ package reactor.aeron;
 
 import java.nio.ByteBuffer;
 import java.util.Optional;
-import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -76,30 +73,5 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
   @Override
   public boolean isDisposed() {
     return subscription != null && subscription.isDisposed();
-  }
-
-  private static class DataMessageProcessor
-      implements DataMessageSubscriber, Publisher<ByteBuffer> {
-
-    private volatile Subscription subscription;
-    private volatile Subscriber<? super ByteBuffer> subscriber;
-
-    private DataMessageProcessor() {}
-
-    @Override
-    public void onSubscription(Subscription subscription) {
-      this.subscription = subscription;
-    }
-
-    @Override
-    public void onNext(ByteBuffer buffer) {
-      subscriber.onNext(buffer);
-    }
-
-    @Override
-    public void subscribe(Subscriber<? super ByteBuffer> subscriber) {
-      this.subscriber = subscriber;
-      subscriber.onSubscribe(subscription);
-    }
   }
 }
