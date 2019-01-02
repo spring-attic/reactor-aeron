@@ -6,7 +6,14 @@ import java.nio.charset.StandardCharsets;
 /** Aeron utils. */
 public final class AeronUtils {
 
+  /** The stream ID that the server and client use for messages. */
+  public static final int STREAM_ID = 0xcafe0000;
+
   private static final String CHANNEL_PREFIX = "aeron:udp?endpoint=";
+
+  private AeronUtils() {
+    // Do not instantiate
+  }
 
   /**
    * Returns formatted channel.
