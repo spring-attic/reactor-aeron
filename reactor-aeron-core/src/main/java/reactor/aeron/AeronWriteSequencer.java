@@ -14,9 +14,7 @@ import reactor.core.publisher.Operators;
 
 final class AeronWriteSequencer {
 
-  private static final int PREFETCH = 32;
-
-  private final Publisher<?> dataPublisher;
+  private final Publisher<? extends ByteBuffer> dataPublisher;
   private final MessagePublication publication;
 
   private final PublisherSender inner;
@@ -44,7 +42,8 @@ final class AeronWriteSequencer {
    * @param publication message publication
    * @param dataPublisher data publisher
    */
-  private AeronWriteSequencer(MessagePublication publication, Publisher<?> dataPublisher) {
+  private AeronWriteSequencer(
+      MessagePublication publication, Publisher<? extends ByteBuffer> dataPublisher) {
     this.publication = publication;
     // Prepare
     this.dataPublisher = dataPublisher;
@@ -58,7 +57,7 @@ final class AeronWriteSequencer {
    * @param publisher data publisher
    * @return mono handle
    */
-  public Mono<Void> write(Publisher<?> publisher) {
+  public Mono<Void> write(Publisher<? extends ByteBuffer> publisher) {
     Objects.requireNonNull(publisher, "dataPublisher must be not null");
     return new AeronWriteSequencer(publication, publisher).write0();
   }
@@ -70,53 +69,17 @@ final class AeronWriteSequencer {
         .doFinally(s -> inner.cancel());
   }
 
-  static class PublisherSender implements CoreSubscriber<Object>, Subscription {
-
-    static final AtomicReferenceFieldUpdater<PublisherSender, Subscription> MISSED_SUBSCRIPTION =
-        AtomicReferenceFieldUpdater.newUpdater(
-            PublisherSender.class, Subscription.class, "missedSubscription");
-
-    static final AtomicLongFieldUpdater<PublisherSender> MISSED_REQUESTED =
-        AtomicLongFieldUpdater.newUpdater(PublisherSender.class, "missedRequested");
-
-    static final AtomicLongFieldUpdater<PublisherSender> MISSED_PRODUCED =
-        AtomicLongFieldUpdater.newUpdater(PublisherSender.class, "missedProduced");
-
-    static final AtomicIntegerFieldUpdater<PublisherSender> WIP =
-        AtomicIntegerFieldUpdater.newUpdater(PublisherSender.class, "wip");
+  private static class PublisherSender extends MultiSubscriptionSubscriber<ByteBuffer> {
 
     private final AeronWriteSequencer parent;
 
     private final MessagePublication publication;
-    private volatile Subscription missedSubscription;
-    private volatile long missedRequested;
-    private volatile long missedProduced;
-    private volatile int wip;
-
-    private boolean inactive;
-
-    /** The current outstanding request amount. */
-    private long requested;
-
-    private boolean unbounded;
-    /** The current subscription which may null if no Subscriptions have been set. */
-    private Subscription actual;
 
     private long produced;
 
     PublisherSender(AeronWriteSequencer parent, MessagePublication publication) {
       this.parent = parent;
       this.publication = publication;
-    }
-
-    @Override
-    public final void cancel() {
-      // full stop
-      if (!inactive) {
-        inactive = true;
-
-        drain();
-      }
     }
 
     @Override
@@ -141,11 +104,11 @@ final class AeronWriteSequencer {
     }
 
     @Override
-    public void onNext(Object t) {
+    public void onNext(ByteBuffer t) {
       produced++;
 
       publication
-          .enqueue((ByteBuffer) t)
+          .enqueue(t)
           .doOnSuccess(
               avoid -> {
                 if (parent.completed) {
@@ -163,6 +126,59 @@ final class AeronWriteSequencer {
                 parent.newPromise.onError(new Exception("Failed to publish signal", th));
               });
     }
+  }
+
+  /**
+   * It's similar to {@link Operators.MultiSubscriptionSubscriber}.
+   *
+   * <p>A subscription implementation that arbitrates request amounts between subsequent
+   * Subscriptions, including the duration until the first Subscription is set.
+   *
+   * <p>The class is thread safe but switching Subscriptions should happen only when the source
+   * associated with the current Subscription has finished emitting values. Otherwise, two sources
+   * may emit for one request.
+   *
+   * <p>You should call {@link #produced(long)} after each element has been delivered to properly
+   * account the outstanding request amount in case a Subscription switch happens.
+   *
+   * @param <I> the input value type
+   */
+  private abstract static class MultiSubscriptionSubscriber<I>
+      implements CoreSubscriber<I>, Subscription {
+
+    private static final int PREFETCH = 32;
+
+    private static final AtomicReferenceFieldUpdater<MultiSubscriptionSubscriber, Subscription>
+        MISSED_SUBSCRIPTION =
+            AtomicReferenceFieldUpdater.newUpdater(
+                MultiSubscriptionSubscriber.class, Subscription.class, "missedSubscription");
+    private static final AtomicLongFieldUpdater<MultiSubscriptionSubscriber> MISSED_REQUESTED =
+        AtomicLongFieldUpdater.newUpdater(MultiSubscriptionSubscriber.class, "missedRequested");
+    private static final AtomicLongFieldUpdater<MultiSubscriptionSubscriber> MISSED_PRODUCED =
+        AtomicLongFieldUpdater.newUpdater(MultiSubscriptionSubscriber.class, "missedProduced");
+    private static final AtomicIntegerFieldUpdater<MultiSubscriptionSubscriber> WIP =
+        AtomicIntegerFieldUpdater.newUpdater(MultiSubscriptionSubscriber.class, "wip");
+
+    private boolean unbounded;
+    /** The current subscription which may null if no Subscriptions have been set. */
+    private Subscription actual;
+    /** The current outstanding request amount. */
+    private long requested = PREFETCH;
+
+    private volatile Subscription missedSubscription;
+    private volatile long missedRequested;
+    private volatile long missedProduced;
+    private volatile int wip;
+    private volatile boolean inactive;
+
+    @Override
+    public void cancel() {
+      if (!inactive) {
+        inactive = true;
+
+        drain();
+      }
+    }
 
     @Override
     public void onSubscribe(Subscription s) {
@@ -174,9 +190,13 @@ final class AeronWriteSequencer {
       Objects.requireNonNull(s);
 
       if (wip == 0 && WIP.compareAndSet(this, 0, 1)) {
+        Subscription a = actual;
+
+        if (a != null && shouldCancelCurrent()) {
+          a.cancel();
+        }
+
         actual = s;
-        //noinspection AccessStaticViaInstance
-        request(parent.PREFETCH);
 
         long r = requested;
 
@@ -191,7 +211,10 @@ final class AeronWriteSequencer {
         return;
       }
 
-      MISSED_SUBSCRIPTION.set(this, s);
+      Subscription a = MISSED_SUBSCRIPTION.getAndSet(this, s);
+      if (a != null && shouldCancelCurrent()) {
+        a.cancel();
+      }
       drain();
     }
 
@@ -249,14 +272,6 @@ final class AeronWriteSequencer {
 
         if (ms != null) {
           ms = MISSED_SUBSCRIPTION.getAndSet(this, null);
-
-          if (ms == Operators.cancelledSubscription()) {
-            Subscription a = actual;
-            if (a != null) {
-              a.cancel();
-              actual = null;
-            }
-          }
         }
 
         long mr = missedRequested;
@@ -298,6 +313,9 @@ final class AeronWriteSequencer {
           }
 
           if (ms != null) {
+            if (a != null && shouldCancelCurrent()) {
+              a.cancel();
+            }
             actual = ms;
             if (r != 0L) {
               requestAmount = Operators.addCap(requestAmount, r);
@@ -349,6 +367,16 @@ final class AeronWriteSequencer {
       Operators.addCap(MISSED_PRODUCED, this, n);
 
       drain();
+    }
+
+    /**
+     * When setting a new subscription via {@link #onSubscribe}, should the previous subscription be
+     * cancelled?.
+     *
+     * @return true if cancellation is needed
+     */
+    boolean shouldCancelCurrent() {
+      return false;
     }
   }
 }
