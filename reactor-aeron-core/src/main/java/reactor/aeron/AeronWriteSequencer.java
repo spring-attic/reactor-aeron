@@ -14,14 +14,9 @@ import reactor.core.publisher.Operators;
 
 final class AeronWriteSequencer {
 
-  private final Publisher<? extends ByteBuffer> dataPublisher;
+  private static final int PREFETCH = 32;
+
   private final MessagePublication publication;
-
-  private final PublisherSender inner;
-
-  private volatile boolean completed;
-
-  private final MonoProcessor<Void> newPromise;
 
   /**
    * Constructor for templating {@link AeronWriteSequencer} objects.
@@ -30,25 +25,6 @@ final class AeronWriteSequencer {
    */
   AeronWriteSequencer(MessagePublication publication) {
     this.publication = Objects.requireNonNull(publication, "message publication must be present");
-    // Nulls
-    this.dataPublisher = null;
-    this.inner = null;
-    this.newPromise = null;
-  }
-
-  /**
-   * Constructor.
-   *
-   * @param publication message publication
-   * @param dataPublisher data publisher
-   */
-  private AeronWriteSequencer(
-      MessagePublication publication, Publisher<? extends ByteBuffer> dataPublisher) {
-    this.publication = publication;
-    // Prepare
-    this.dataPublisher = dataPublisher;
-    this.newPromise = MonoProcessor.create();
-    this.inner = new PublisherSender(this, publication);
   }
 
   /**
@@ -58,27 +34,30 @@ final class AeronWriteSequencer {
    * @return mono handle
    */
   public Mono<Void> write(Publisher<? extends ByteBuffer> publisher) {
-    Objects.requireNonNull(publisher, "dataPublisher must be not null");
-    return new AeronWriteSequencer(publication, publisher).write0();
-  }
-
-  private Mono<Void> write0() {
-    return Mono.fromRunnable(() -> dataPublisher.subscribe(inner))
-        .then(newPromise)
-        .takeUntilOther(publication.onDispose())
-        .doFinally(s -> inner.cancel());
+    Objects.requireNonNull(publisher, "publisher must be not null");
+    return Mono.defer(
+        () -> {
+          PublisherSender inner = new PublisherSender(publication);
+          publisher.subscribe(inner);
+          inner.request(PREFETCH);
+          return inner
+              .newPromise
+              .takeUntilOther(publication.onDispose())
+              .doFinally(s -> inner.cancel());
+        });
   }
 
   private static class PublisherSender extends MultiSubscriptionSubscriber<ByteBuffer> {
-
-    private final AeronWriteSequencer parent;
 
     private final MessagePublication publication;
 
     private long produced;
 
-    PublisherSender(AeronWriteSequencer parent, MessagePublication publication) {
-      this.parent = parent;
+    private volatile boolean completed;
+
+    private final MonoProcessor<Void> newPromise = MonoProcessor.create();
+
+    PublisherSender(MessagePublication publication) {
       this.publication = publication;
     }
 
@@ -89,7 +68,7 @@ final class AeronWriteSequencer {
       produced = 0L;
       produced(p);
 
-      parent.completed = true;
+      completed = true;
     }
 
     @Override
@@ -99,8 +78,7 @@ final class AeronWriteSequencer {
       produced = 0L;
       produced(p);
 
-      //noinspection ConstantConditions
-      parent.newPromise.onError(t);
+      newPromise.onError(t);
     }
 
     @Override
@@ -111,9 +89,8 @@ final class AeronWriteSequencer {
           .enqueue(t)
           .doOnSuccess(
               avoid -> {
-                if (parent.completed) {
-                  //noinspection ConstantConditions
-                  parent.newPromise.onComplete();
+                if (completed) {
+                  newPromise.onComplete();
                   return;
                 }
                 request(1L);
@@ -122,8 +99,7 @@ final class AeronWriteSequencer {
               null,
               th -> {
                 cancel();
-                //noinspection ConstantConditions
-                parent.newPromise.onError(new Exception("Failed to publish signal", th));
+                newPromise.onError(new Exception("Failed to publish signal", th));
               });
     }
   }
@@ -146,8 +122,6 @@ final class AeronWriteSequencer {
   private abstract static class MultiSubscriptionSubscriber<I>
       implements CoreSubscriber<I>, Subscription {
 
-    private static final int PREFETCH = 32;
-
     private static final AtomicReferenceFieldUpdater<MultiSubscriptionSubscriber, Subscription>
         MISSED_SUBSCRIPTION =
             AtomicReferenceFieldUpdater.newUpdater(
@@ -163,7 +137,7 @@ final class AeronWriteSequencer {
     /** The current subscription which may null if no Subscriptions have been set. */
     private Subscription actual;
     /** The current outstanding request amount. */
-    private long requested = PREFETCH;
+    private long requested;
 
     private volatile Subscription missedSubscription;
     private volatile long missedRequested;
