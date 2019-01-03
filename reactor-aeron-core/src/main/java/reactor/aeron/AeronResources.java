@@ -2,6 +2,7 @@ package reactor.aeron;
 
 import io.aeron.Aeron;
 import io.aeron.Aeron.Context;
+import io.aeron.ExclusivePublication;
 import io.aeron.FragmentAssembler;
 import io.aeron.Image;
 import io.aeron.Publication;
@@ -16,6 +17,7 @@ import org.agrona.CloseHelper;
 import org.agrona.IoUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
@@ -44,7 +46,7 @@ public class AeronResources implements OnDisposable {
         .subscribe(
             avoid -> logger.info("{} has started", this),
             th -> {
-              logger.error("Start of {} failed with error: {}", this, th);
+              logger.error("{} failed to start, cause: {}", this, th);
               dispose();
             });
 
@@ -52,8 +54,9 @@ public class AeronResources implements OnDisposable {
         .then(doDispose())
         .doFinally(s -> onDispose.onComplete())
         .subscribe(
-            avoid -> logger.info("{} closed", this),
-            th -> logger.warn("{} closed with error: {}", this, th.toString()));
+            null,
+            th -> logger.warn("{} closed with error: {}", this, th.toString()),
+            () -> logger.info("{} closed", this));
   }
 
   /**
@@ -112,18 +115,32 @@ public class AeronResources implements OnDisposable {
   }
 
   /**
-   * @param channel
-   * @param connectTimeout
-   * @param backpressureTimeout
-   * @return
+   * Creates aeron {@link ExclusivePublication} then wraps it into {@link MessagePublication}.
+   * Result message publication will be assigned to event loop.
+   *
+   * @param channel aeron channel
+   * @param connectTimeout connect timeout
+   * @param backpressureTimeout backpressure timeout
+   * @return mono result
    */
   public Mono<MessagePublication> publication(
       String channel, Duration connectTimeout, Duration backpressureTimeout) {
+
     return Mono.defer(
         () -> {
-          AeronEventLoop eventLoop = this.nextEventLoop();
+          Publication pub;
+          try {
+            pub = aeron.addExclusivePublication(channel, STREAM_ID);
+          } catch (Exception ex) {
+            logger.error(
+                "{} failed on aeron.addExclusivePublication(), channel: {}, cause: {}",
+                this,
+                channel,
+                ex.toString());
+            throw Exceptions.propagate(ex);
+          }
 
-          Publication pub = aeron.addExclusivePublication(channel, STREAM_ID);
+          AeronEventLoop eventLoop = this.nextEventLoop();
 
           MessagePublication publication =
               new MessagePublication(pub, eventLoop, connectTimeout, backpressureTimeout);
@@ -133,14 +150,16 @@ public class AeronResources implements OnDisposable {
               .doOnError(
                   ex -> {
                     logger.error(
-                        "Failed to register publication: {}, cause: {}",
+                        "{} failed to register publication: {}, cause: {}",
+                        this,
                         publication,
                         ex.toString());
                     if (!pub.isClosed()) {
                       pub.close();
                     }
                   })
-              .thenReturn(publication);
+              .thenReturn(publication)
+              .doOnSuccess(p -> logger.debug("{} registered publication: {}", this, p));
         });
   }
 
@@ -152,11 +171,14 @@ public class AeronResources implements OnDisposable {
   }
 
   /**
-   * @param channel
-   * @param fragmentHandler
-   * @param availableImageHandler
-   * @param unavailableImageHandler
-   * @return
+   * Creates aeron {@link Subscription} then wraps it into {@link MessageSubscription}. Result
+   * message subscription will be assigned to event loop.
+   *
+   * @param channel aeron channel
+   * @param fragmentHandler fragment handler
+   * @param availableImageHandler available image handler; optional
+   * @param unavailableImageHandler unavailable image handler; optional
+   * @return mono result
    */
   public Mono<MessageSubscription> subscription(
       String channel,
@@ -166,33 +188,41 @@ public class AeronResources implements OnDisposable {
 
     return Mono.defer(
         () -> {
-          AeronEventLoop eventLoop = this.nextEventLoop();
+          Subscription sub;
+          try {
+            sub =
+                aeron.addSubscription(
+                    channel,
+                    STREAM_ID,
+                    image -> {
+                      logger.debug(
+                          "{} onImageAvailable: {} {}",
+                          this,
+                          Integer.toHexString(image.sessionId()),
+                          image.sourceIdentity());
+                      if (availableImageHandler != null) {
+                        availableImageHandler.accept(image);
+                      }
+                      Optional.ofNullable(availableImageHandler).ifPresent(c -> c.accept(image));
+                    },
+                    image -> {
+                      logger.debug(
+                          "{} onImageUnavailable: {} {}",
+                          this,
+                          Integer.toHexString(image.sessionId()),
+                          image.sourceIdentity());
+                      Optional.ofNullable(unavailableImageHandler).ifPresent(c -> c.accept(image));
+                    });
+          } catch (Exception ex) {
+            logger.error(
+                "{} failed on aeron.addSubscription(), channel: {}, cause: {}",
+                this,
+                channel,
+                ex.toString());
+            throw Exceptions.propagate(ex);
+          }
 
-          Subscription sub =
-              aeron.addSubscription(
-                  channel,
-                  STREAM_ID,
-                  image -> {
-                    logger.debug(
-                        "onImageAvailable: 0x{} {}",
-                        Integer.toHexString(image.sessionId()),
-                        image.sourceIdentity());
-                    if (availableImageHandler != null) {
-                      availableImageHandler.accept(image);
-                    }
-                    Optional //
-                        .ofNullable(availableImageHandler)
-                        .ifPresent(c -> c.accept(image));
-                  },
-                  image -> {
-                    logger.debug(
-                        "onImageUnavailable: 0x{} {}",
-                        Integer.toHexString(image.sessionId()),
-                        image.sourceIdentity());
-                    Optional //
-                        .ofNullable(unavailableImageHandler)
-                        .ifPresent(c -> c.accept(image));
-                  });
+          AeronEventLoop eventLoop = this.nextEventLoop();
 
           MessageSubscription subscription =
               new MessageSubscription(eventLoop, sub, new FragmentAssembler(fragmentHandler));
@@ -202,14 +232,16 @@ public class AeronResources implements OnDisposable {
               .doOnError(
                   ex -> {
                     logger.error(
-                        "Failed to register subscription: {}, cause: {}",
+                        "{} failed to register subscription: {}, cause: {}",
+                        this,
                         subscription,
                         ex.toString());
                     if (!sub.isClosed()) {
                       sub.close();
                     }
                   })
-              .thenReturn(subscription);
+              .thenReturn(subscription)
+              .doOnSuccess(s -> logger.debug("{} registered subscription: {}", this, s));
         });
   }
 
@@ -249,12 +281,12 @@ public class AeronResources implements OnDisposable {
     File file = context.aeronDirectory();
     if (file.exists()) {
       IoUtil.delete(file, true);
-      logger.debug("Deleted aeron directory {}", file);
+      logger.debug("{} deleted aeron directory {}", this, file);
     }
   }
 
   @Override
   public String toString() {
-    return "AeronResources@" + Integer.toHexString(System.identityHashCode(this));
+    return "AeronResources0x" + Integer.toHexString(System.identityHashCode(this));
   }
 }

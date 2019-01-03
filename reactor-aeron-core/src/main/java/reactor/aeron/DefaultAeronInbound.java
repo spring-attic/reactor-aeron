@@ -5,28 +5,19 @@ import java.util.Optional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+// TODO entire INBOUND process is unclear: what to do with SereverHandler.handler? whois publisher?
+// whois subscription? whois subscriber? whois doing onSubscribe? and etc etc
 public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
 
-  private final String name;
-  private final AeronResources resources;
-
   private volatile ByteBufferFlux flux;
-  private volatile MessageSubscription subscription;
-
-  public DefaultAeronInbound(String name, AeronResources resources) {
-    this.name = name;
-    this.resources = resources;
-  }
+  // private volatile MessageSubscription subscription;
 
   /**
    * Starts inbound.
    *
-   * @param channel server or client channel uri
-   * @param streamId stream id
-   * @param onCompleteHandler callback which will be invoked when this finishes
    * @return success result
    */
-  public Mono<Void> start(String channel, int streamId, Runnable onCompleteHandler) {
+  public Mono<Void> start() {
     return Mono.defer(
         () -> {
           DataMessageProcessor messageProcessor = new DataMessageProcessor();
@@ -46,7 +37,6 @@ public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
                   image -> Optional.ofNullable(onCompleteHandler).ifPresent(Runnable::run))
               .doOnSuccess(
                   result -> {
-                    subscription = result;
                     messageProcessor.onSubscription(subscription);
                   })
               .then();

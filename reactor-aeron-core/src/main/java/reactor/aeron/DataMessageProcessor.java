@@ -5,6 +5,7 @@ import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
+// TODO no clear what to do with this et al
 public class DataMessageProcessor implements DataMessageSubscriber, Publisher<ByteBuffer> {
 
   private volatile Subscription subscription;

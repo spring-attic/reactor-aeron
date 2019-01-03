@@ -177,10 +177,6 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     return onDispose;
   }
 
-  public boolean isConnected() {
-    return publication.isConnected();
-  }
-
   private void disposePublishTasks() {
     for (; ; ) {
       PublishTask task = publishTasks.poll();
@@ -189,6 +185,31 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
       }
       task.error(AeronExceptions.failWithCancel("PublishTask has cancelled"));
     }
+  }
+
+  public Mono<MessagePublication> ensureConnected() {
+    return Mono.defer(
+        () -> {
+          Duration retryInterval = Duration.ofMillis(100);
+          long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
+          retryCount = Math.max(retryCount, 1);
+
+          return ensureConnected0()
+              .retryBackoff(retryCount, retryInterval, retryInterval)
+              .timeout(connectTimeout)
+              .doOnError(
+                  ex -> logger.warn("Failed to connect publication: {}", publication.channel()))
+              .thenReturn(this);
+        });
+  }
+
+  private Mono<Void> ensureConnected0() {
+    return Mono.defer(
+        () ->
+            publication.isConnected()
+                ? Mono.empty()
+                : Mono.error(
+                    AeronExceptions.failWithPublication("aeron.Publication is not connected")));
   }
 
   @Override

@@ -8,7 +8,7 @@ import reactor.aeron.AeronChannelUri;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
 
-public class AeronServerOptions {
+public final class AeronServerOptions {
 
   private AeronResources resources;
   private Function<? super Connection, ? extends Publisher<Void>> handler;

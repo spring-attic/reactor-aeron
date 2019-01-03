@@ -130,8 +130,8 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
     private ClientHandler() {
       clientSessionStreamId = clientSessionStreamIdCounter.get();
       serverChannel = options.serverChannel();
-      inbound = new DefaultAeronInbound(category, resources);
-      outbound = new DefaultAeronOutbound(category, serverChannel, resources, options);
+      inbound = new DefaultAeronInbound();
+      outbound = new DefaultAeronOutbound(serverChannel, resources, options);
 
       controlPublication = Mono.defer(this::newControlPublication).cache();
 
@@ -156,7 +156,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
                 serverSessionStreamId = response.serverSessionStreamId;
 
                 return inbound
-                    .start(clientChannel, clientSessionStreamId, this::dispose)
+                    .start()
                     .then(outbound.start(serverSessionStreamId))
                     .thenReturn(this);
               })

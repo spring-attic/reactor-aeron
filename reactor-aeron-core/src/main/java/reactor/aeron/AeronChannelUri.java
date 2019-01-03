@@ -7,7 +7,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 /** Immutable wrapper around properties of {@link ChannelUriStringBuilder}. */
-public class AeronChannelUri {
+public final class AeronChannelUri {
 
   private String address; // address
   private Integer port; // .. and port
