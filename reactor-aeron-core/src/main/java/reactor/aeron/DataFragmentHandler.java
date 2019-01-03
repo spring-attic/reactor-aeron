@@ -15,6 +15,8 @@ public class DataFragmentHandler implements FragmentHandler {
 
   @Override
   public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
+
+
     ByteBuffer dstBuffer = ByteBuffer.allocate(length);
     buffer.getBytes(offset, dstBuffer, length);
     dstBuffer.rewind();

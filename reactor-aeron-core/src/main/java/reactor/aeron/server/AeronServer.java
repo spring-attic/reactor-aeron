@@ -1,9 +1,8 @@
 package reactor.aeron.server;
 
-import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import org.reactivestreams.Publisher;
-import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
 import reactor.aeron.OnDisposable;
@@ -11,66 +10,59 @@ import reactor.core.publisher.Mono;
 
 public final class AeronServer {
 
-  private final AeronServerSettings settings;
+  private final AeronServerOptions options;
 
-  private AeronServer(AeronServerSettings settings) {
-    this.settings = settings;
+  private AeronServer(AeronServerOptions options) {
+    this.options = options;
   }
 
   /**
    * Create aeron server.
    *
-   * @param aeronResources aeronResources
+   * @param resources aeron resources
    * @return aeron server
    */
-  public static AeronServer create(AeronResources aeronResources) {
-    return create("server", aeronResources);
+  public static AeronServer create(AeronResources resources) {
+    return new AeronServer(new AeronServerOptions().resources(resources));
   }
 
   /**
-   * Create aeron server.
+   * Binds aeron server.
    *
-   * @param name name
-   * @param aeronResources aeronResources
-   * @return aeron server
-   */
-  public static AeronServer create(String name, AeronResources aeronResources) {
-    return new AeronServer(
-        AeronServerSettings.builder().name(name).aeronResources(aeronResources).build());
-  }
-
-  public Mono<? extends OnDisposable> bind() {
-    return bind(settings.options());
-  }
-
-  /**
-   * Binds server with given options.
-   *
-   * @param options server options
    * @return mono handle of result
    */
-  public Mono<? extends OnDisposable> bind(AeronOptions options) {
-    return Mono.defer(() -> new AeronServerHandler(this.settings.options(options)).start());
+  public Mono<? extends OnDisposable> bind() {
+    return bind(s -> s);
   }
 
   /**
-   * Apply {@link AeronOptions} on the given options consumer.
+   * Binds aeron server and applies server options.
    *
-   * @param options a consumer aeron server options
-   * @return a new {@link AeronServer}
+   * @param o unary opearator for performing setup of options
+   * @return mono handle of result
    */
-  public AeronServer options(Consumer<AeronOptions.Builder> options) {
-    return new AeronServer(settings.options(options));
+  public Mono<? extends OnDisposable> bind(UnaryOperator<AeronServerOptions> o) {
+    return Mono.defer(() -> new AeronServerHandler(o.apply(options)).start());
   }
 
   /**
-   * Attach an IO handler to react on connected client.
+   * Setting up server options.
    *
-   * @param handler an IO handler that can dispose underlying connection when {@link Publisher}
+   * @param o unary opearator for performing setup of options
+   * @return aeron server with applied options
+   */
+  public AeronServer options(UnaryOperator<AeronServerOptions> o) {
+    return new AeronServer(o.apply(options));
+  }
+
+  /**
+   * Attach IO handler to react on connected client.
+   *
+   * @param handler IO handler that can dispose underlying connection when {@link Publisher}
    *     terminates.
-   * @return a new {@link AeronServer}
+   * @return new {@link AeronServer}
    */
   public AeronServer handle(Function<? super Connection, ? extends Publisher<Void>> handler) {
-    return new AeronServer(settings.handler(handler));
+    return new AeronServer(options.handler(handler));
   }
 }

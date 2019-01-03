@@ -19,10 +19,10 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
   private final ThreadLocal<BufferClaim> bufferClaims = ThreadLocal.withInitial(BufferClaim::new);
 
-  private final String category;
   private final Publication publication;
-  private final AeronOptions options;
   private final AeronEventLoop eventLoop;
+  private final Duration connectTimeout;
+  private final Duration backpressureTimeout;
 
   private final ManyToOneConcurrentLinkedQueue<PublishTask> publishTasks =
       new ManyToOneConcurrentLinkedQueue<>();
@@ -32,15 +32,19 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
   /**
    * Constructor.
    *
-   * @param category category
    * @param publication publication
+   * @param connectTimeout connect timeout
+   * @param backpressureTimeout backpressure timeout
    */
   MessagePublication(
-      String category, Publication publication, AeronOptions options, AeronEventLoop eventLoop) {
-    this.category = category;
+      Publication publication,
+      AeronEventLoop eventLoop,
+      Duration connectTimeout,
+      Duration backpressureTimeout) {
     this.publication = publication;
-    this.options = options;
     this.eventLoop = eventLoop;
+    this.connectTimeout = connectTimeout;
+    this.backpressureTimeout = backpressureTimeout;
   }
 
   /**
@@ -98,10 +102,10 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
     // Handle failed connection
     if (result == Publication.NOT_CONNECTED) {
-      if (task.isTimeoutElapsed(options.connectTimeout())) {
+      if (task.isTimeoutElapsed(connectTimeout)) {
         logger.warn(
             "aeron.Publication failed to resolve NOT_CONNECTED within {} ms, {}",
-            options.connectTimeout().toMillis(),
+            connectTimeout.toMillis(),
             this);
         ex = AeronExceptions.failWithPublication("Failed to resolve NOT_CONNECTED within timeout");
       }
@@ -109,10 +113,10 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
     // Handle backpressure
     if (result == Publication.BACK_PRESSURED) {
-      if (task.isTimeoutElapsed(options.backpressureTimeout())) {
+      if (task.isTimeoutElapsed(backpressureTimeout)) {
         logger.warn(
             "aeron.Publication failed to resolve BACK_PRESSURED within {} ms, {}",
-            options.backpressureTimeout().toMillis(),
+            backpressureTimeout.toMillis(),
             this);
         ex = AeronExceptions.failWithPublication("Failed to resolve BACK_PRESSURED within timeout");
       }
@@ -120,10 +124,10 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
     // Handle admin action
     if (result == Publication.ADMIN_ACTION) {
-      if (task.isTimeoutElapsed(options.connectTimeout())) {
+      if (task.isTimeoutElapsed(connectTimeout)) {
         logger.warn(
             "aeron.Publication failed to resolve ADMIN_ACTION within {} ms, {}",
-            options.connectTimeout().toMillis(),
+            connectTimeout.toMillis(),
             this);
         ex = AeronExceptions.failWithPublication("Failed to resolve ADMIN_ACTION within timeout");
       }
@@ -189,7 +193,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
   @Override
   public String toString() {
-    return AeronUtils.format(category, "pub", publication.channel(), publication.streamId());
+    return ""; // TODO implement
   }
 
   /**

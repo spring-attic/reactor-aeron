@@ -17,7 +17,6 @@ public final class MessageSubscription
   private static final AtomicLongFieldUpdater<MessageSubscription> REQUESTED =
       AtomicLongFieldUpdater.newUpdater(MessageSubscription.class, "requested");
 
-  private final String category;
   private final AeronEventLoop eventLoop;
   private final Subscription subscription;
   private final FragmentHandler fragmentHandler;
@@ -30,17 +29,12 @@ public final class MessageSubscription
   /**
    * Constructor for message subscriptino.
    *
-   * @param category category
    * @param eventLoop event loop where this message subscription is assigned
    * @param subscription aeron subscription
    * @param fragmentHandler aeron fragment handler
    */
   public MessageSubscription(
-      String category,
-      AeronEventLoop eventLoop,
-      Subscription subscription,
-      FragmentHandler fragmentHandler) {
-    this.category = category;
+      AeronEventLoop eventLoop, Subscription subscription, FragmentHandler fragmentHandler) {
     this.eventLoop = eventLoop;
     this.subscription = subscription;
     this.fragmentHandler = fragmentHandler;
@@ -107,6 +101,6 @@ public final class MessageSubscription
 
   @Override
   public String toString() {
-    return AeronUtils.format(category, "sub", subscription.channel(), subscription.streamId());
+    return ""; // TODO implement
   }
 }

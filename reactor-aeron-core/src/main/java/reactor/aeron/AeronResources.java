@@ -9,6 +9,7 @@ import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
 import io.aeron.logbuffer.FragmentHandler;
 import java.io.File;
+import java.time.Duration;
 import java.util.Optional;
 import java.util.function.Consumer;
 import org.agrona.CloseHelper;
@@ -21,6 +22,9 @@ import reactor.core.publisher.MonoProcessor;
 public class AeronResources implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronResources.class);
+
+  /** The stream ID that the server and client use for messages. */
+  private static final int STREAM_ID = 0xcafe0000;
 
   private final AeronResourcesConfig config;
 
@@ -108,130 +112,36 @@ public class AeronResources implements OnDisposable {
   }
 
   /**
-   * Adds and registers new message publication.
-   *
-   * @param category category
-   * @param channel channel
-   * @param streamId stream id
-   * @param options options
-   * @param eventLoop event loop where publocation would be registered
-   * @return mono handle of creation and registering of message publication
+   * @param channel
+   * @param connectTimeout
+   * @param backpressureTimeout
+   * @return
    */
-  public Mono<MessagePublication> messagePublication(
-      String category,
-      String channel,
-      int streamId,
-      AeronOptions options,
-      AeronEventLoop eventLoop) {
-
-    Publication publication = aeron.addExclusivePublication(channel, streamId);
-
-    MessagePublication messagePublication =
-        new MessagePublication(category, publication, options, eventLoop);
-
-    return eventLoop
-        .register(messagePublication)
-        .doOnError(
-            ex -> {
-              logger.error(
-                  "Failed to register publication: {}, cause: {}",
-                  messagePublication,
-                  ex.toString());
-              if (!publication.isClosed()) {
-                publication.close();
-              }
-            })
-        .thenReturn(messagePublication);
-  }
-
-  public Mono<MessagePublication> publication2(String channel, AeronOptions options) {
+  public Mono<MessagePublication> publication(
+      String channel, Duration connectTimeout, Duration backpressureTimeout) {
     return Mono.defer(
         () -> {
           AeronEventLoop eventLoop = this.nextEventLoop();
 
-          Publication publication = aeron.addExclusivePublication(channel, AeronUtils.STREAM_ID);
+          Publication pub = aeron.addExclusivePublication(channel, STREAM_ID);
 
-          MessagePublication messagePublication =
-              new MessagePublication("0xcafe000", publication, options, eventLoop);
+          MessagePublication publication =
+              new MessagePublication(pub, eventLoop, connectTimeout, backpressureTimeout);
 
           return eventLoop
-              .register(messagePublication)
+              .register(publication)
               .doOnError(
                   ex -> {
                     logger.error(
                         "Failed to register publication: {}, cause: {}",
-                        messagePublication,
+                        publication,
                         ex.toString());
-                    if (!publication.isClosed()) {
-                      publication.close();
+                    if (!pub.isClosed()) {
+                      pub.close();
                     }
                   })
-              .thenReturn(messagePublication);
+              .thenReturn(publication);
         });
-  }
-
-  /**
-   * Adds control subscription and register it.
-   *
-   * @param channel channel
-   * @param streamId stream id
-   * @param subscriber control message subscriber
-   * @param eventLoop event loop where to assign control subscription
-   * @param availableImageHandler called when {@link Image}s become available for consumption. Null
-   *     is valid if no action is to be taken.
-   * @param unavailableImageHandler called when {@link Image}s go unavailable for consumption. Null
-   *     is valid if no action is to be taken.
-   * @return mono handle of creation and registering of control message subscription
-   */
-  public Mono<MessageSubscription> controlSubscription(
-      String category,
-      String channel,
-      int streamId,
-      ControlMessageSubscriber subscriber,
-      AeronEventLoop eventLoop,
-      Consumer<Image> availableImageHandler,
-      Consumer<Image> unavailableImageHandler) {
-
-    return messageSubscription(
-        category + "-control",
-        channel,
-        streamId,
-        new ControlFragmentHandler(subscriber),
-        eventLoop,
-        availableImageHandler,
-        unavailableImageHandler);
-  }
-
-  /**
-   * Adds data subscription and register it.
-   *
-   * @param channel channel
-   * @param streamId stream id
-   * @param subscriber data message subscriber
-   * @param eventLoop event loop where to assign data subscription
-   * @param availableImageHandler called when {@link Image}s become available for consumption. Null
-   *     is valid if no action is to be taken.
-   * @param unavailableImageHandler called when {@link Image}s go unavailable for consumption. Null
-   *     is valid if no action is to be taken.
-   * @return mono handle of creation and registering of data message subscription
-   */
-  public Mono<MessageSubscription> dataSubscription(
-      String category,
-      String channel,
-      int streamId,
-      DataMessageSubscriber subscriber,
-      AeronEventLoop eventLoop,
-      Consumer<Image> availableImageHandler,
-      Consumer<Image> unavailableImageHandler) {
-
-    return messageSubscription(
-        category + "-data",
-        channel,
-        streamId,
-        new DataFragmentHandler(subscriber),
-        eventLoop,
-        availableImageHandler,
-        unavailableImageHandler);
   }
 
   @Override
@@ -239,6 +149,68 @@ public class AeronResources implements OnDisposable {
     if (!isDisposed()) {
       dispose.onComplete();
     }
+  }
+
+  /**
+   * @param channel
+   * @param fragmentHandler
+   * @param availableImageHandler
+   * @param unavailableImageHandler
+   * @return
+   */
+  public Mono<MessageSubscription> subscription(
+      String channel,
+      FragmentHandler fragmentHandler,
+      Consumer<Image> availableImageHandler,
+      Consumer<Image> unavailableImageHandler) {
+
+    return Mono.defer(
+        () -> {
+          AeronEventLoop eventLoop = this.nextEventLoop();
+
+          Subscription sub =
+              aeron.addSubscription(
+                  channel,
+                  STREAM_ID,
+                  image -> {
+                    logger.debug(
+                        "onImageAvailable: 0x{} {}",
+                        Integer.toHexString(image.sessionId()),
+                        image.sourceIdentity());
+                    if (availableImageHandler != null) {
+                      availableImageHandler.accept(image);
+                    }
+                    Optional //
+                        .ofNullable(availableImageHandler)
+                        .ifPresent(c -> c.accept(image));
+                  },
+                  image -> {
+                    logger.debug(
+                        "onImageUnavailable: 0x{} {}",
+                        Integer.toHexString(image.sessionId()),
+                        image.sourceIdentity());
+                    Optional //
+                        .ofNullable(unavailableImageHandler)
+                        .ifPresent(c -> c.accept(image));
+                  });
+
+          MessageSubscription subscription =
+              new MessageSubscription(eventLoop, sub, new FragmentAssembler(fragmentHandler));
+
+          return eventLoop
+              .register(subscription)
+              .doOnError(
+                  ex -> {
+                    logger.error(
+                        "Failed to register subscription: {}, cause: {}",
+                        subscription,
+                        ex.toString());
+                    if (!sub.isClosed()) {
+                      sub.close();
+                    }
+                  })
+              .thenReturn(subscription);
+        });
   }
 
   @Override
@@ -271,120 +243,6 @@ public class AeronResources implements OnDisposable {
                     logger.info("{} shutdown complete", this);
                   });
         });
-  }
-
-  public Mono<MessageSubscription> subscription2(
-      String channel,
-      FragmentHandler fragmentHandler,
-      Consumer<Image> availableImageHandler,
-      Consumer<Image> unavailableImageHandler) {
-
-    return Mono.defer(
-        () -> {
-          AeronEventLoop eventLoop = this.nextEventLoop();
-
-          Subscription subscription =
-              aeron.addSubscription(
-                  channel,
-                  AeronUtils.STREAM_ID,
-                  image -> {
-                    logger.debug(
-                        "onImageAvailable: 0x{} {}",
-                        Integer.toHexString(image.sessionId()),
-                        image.sourceIdentity());
-                    if (availableImageHandler != null) {
-                      availableImageHandler.accept(image);
-                    }
-                    Optional //
-                        .ofNullable(availableImageHandler)
-                        .ifPresent(c -> c.accept(image));
-                  },
-                  image -> {
-                    logger.debug(
-                        "onImageUnavailable: 0x{} {}",
-                        Integer.toHexString(image.sessionId()),
-                        image.sourceIdentity());
-                    Optional //
-                        .ofNullable(unavailableImageHandler)
-                        .ifPresent(c -> c.accept(image));
-                  });
-
-          MessageSubscription messageSubscription =
-              new MessageSubscription(
-                  "0xcafe0000", eventLoop, subscription, new FragmentAssembler(fragmentHandler));
-
-          return eventLoop
-              .register(messageSubscription)
-              .doOnError(
-                  ex -> {
-                    logger.error(
-                        "Failed to register subscription: {}, cause: {}",
-                        messageSubscription,
-                        ex.toString());
-                    if (!subscription.isClosed()) {
-                      subscription.close();
-                    }
-                  })
-              .thenReturn(messageSubscription);
-        });
-  }
-
-  private Mono<MessageSubscription> messageSubscription(
-      String category,
-      String channel,
-      int streamId,
-      FragmentHandler fragmentHandler,
-      AeronEventLoop eventLoop,
-      Consumer<Image> availableImageHandler,
-      Consumer<Image> unavailableImageHandler) {
-
-    Subscription subscription =
-        aeron.addSubscription(
-            channel,
-            streamId,
-            image -> {
-              if (logger.isDebugEnabled()) {
-                logger.debug(
-                    "Available image on: {}, imageSessionId={}, imageSource={}",
-                    AeronUtils.format(category, "sub", channel, streamId),
-                    image.sessionId(),
-                    image.sourceIdentity());
-              }
-              if (availableImageHandler != null) {
-                availableImageHandler.accept(image);
-              }
-            },
-            image -> {
-              if (logger.isDebugEnabled()) {
-                logger.debug(
-                    "Unavailable image on: {}, imageSessionId={}, imageSource={}",
-                    category,
-                    AeronUtils.format(category, "sub", channel, streamId),
-                    image.sessionId(),
-                    image.sourceIdentity());
-              }
-              if (unavailableImageHandler != null) {
-                unavailableImageHandler.accept(image);
-              }
-            });
-
-    MessageSubscription messageSubscription =
-        new MessageSubscription(
-            category, eventLoop, subscription, new FragmentAssembler(fragmentHandler));
-
-    return eventLoop
-        .register(messageSubscription)
-        .doOnError(
-            ex -> {
-              logger.error(
-                  "Failed to register subscription: {}, cause: {}",
-                  messageSubscription,
-                  ex.toString());
-              if (!subscription.isClosed()) {
-                subscription.close();
-              }
-            })
-        .thenReturn(messageSubscription);
   }
 
   private void deleteAeronDirectory(Context context) {

@@ -7,7 +7,6 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import org.reactivestreams.Publisher;
 import reactor.aeron.AeronEventLoop;
-import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
 import reactor.core.publisher.Mono;
@@ -25,7 +24,7 @@ public final class AeronClient {
   /**
    * Create aeron client.
    *
-   * @param aeronResources aeronResources
+   * @param aeronResources resources
    * @return aeron client
    */
   public static AeronClient create(AeronResources aeronResources) {
@@ -36,7 +35,7 @@ public final class AeronClient {
    * Create aeron client.
    *
    * @param name name
-   * @param aeronResources aeronResources
+   * @param aeronResources resources
    * @return aeron client
    */
   public static AeronClient create(String name, AeronResources aeronResources) {
@@ -65,7 +64,7 @@ public final class AeronClient {
                   settings, clientControlStreamId, clientSessionStreamIdCounter);
 
           String category = Optional.ofNullable(settings.name()).orElse("client");
-          AeronResources resources = settings.aeronResources();
+          AeronResources resources = settings.resources();
           String clientChannel = settings.options().clientChannel();
           AeronEventLoop eventLoop = resources.nextEventLoop();
 

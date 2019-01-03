@@ -1,6 +1,5 @@
 package reactor.aeron.server;
 
-import io.aeron.ChannelUriStringBuilder;
 import io.aeron.Image;
 import java.time.Duration;
 import java.util.Map;
@@ -12,7 +11,6 @@ import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.aeron.AeronInbound;
-import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronOutbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronUtils;
@@ -21,9 +19,7 @@ import reactor.aeron.DataFragmentHandler;
 import reactor.aeron.DataMessageProcessor;
 import reactor.aeron.DefaultAeronInbound;
 import reactor.aeron.DefaultAeronOutbound;
-import reactor.aeron.MessagePublication;
 import reactor.aeron.OnDisposable;
-import reactor.aeron.Protocol;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
@@ -31,24 +27,21 @@ final class AeronServerHandler implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronServerHandler.class);
 
-  private final String category;
-  private final AeronOptions options;
+  private final AeronServerOptions options;
   private final AeronResources resources;
   private final Function<? super Connection, ? extends Publisher<Void>> handler;
-  private final String serverChannel;
 
   // TODO think of more performant concurrent hashmap
-  private final Map<Integer, SessionHandler> clients = new ConcurrentHashMap<>(32);
+  private final Map<Integer, SessionHandler> connections = new ConcurrentHashMap<>(32);
 
   private final MonoProcessor<Void> dispose = MonoProcessor.create();
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
-  AeronServerHandler(AeronServerSettings settings) {
-    category = settings.name();
-    options = settings.options();
-    resources = settings.aeronResources();
-    handler = settings.handler();
-    serverChannel = options.serverChannel();
+  AeronServerHandler(AeronServerOptions options) {
+    this.options = options;
+
+    this.resources = options.resources();
+    this.handler = options.handler();
 
     dispose
         .then(doDispose())
@@ -60,40 +53,36 @@ final class AeronServerHandler implements OnDisposable {
     return Mono.defer(
         () -> {
           DataMessageProcessor messageProcessor = new DataMessageProcessor();
+
           DataFragmentHandler fragmentHandler = new DataFragmentHandler(messageProcessor);
+
           return resources
-              .subscription2(
-                  serverChannel /**/,
+              .subscription(
+                  options.inboundUri().asString(),
                   fragmentHandler,
-                  this::onImageAvailable,
-                  this::onImageUnavailable)
+                  this::onImageAvailable /*accept new session*/,
+                  this::onImageUnavailable /*remove session*/)
               .thenReturn(this);
         });
   }
 
   private void onImageUnavailable(Image image) {
-    String channel =
-        new ChannelUriStringBuilder()
-            .reliable(true)
-            .media("udp")
-            .controlEndpoint(todo)
-            .sessionId(image.sessionId())
-            .build();
-
-    resources
-        .publication2(channel, options)
-        .doOnSuccess(mp -> {
-          // TODO create SessionHandler aka Connection and add it to hashmap
-        })
-        .subscribe(
-            null,
-            ex -> logger.error("Unexpected exception occurred on creating server outbound: " + ex));
+    // TODO remove from hashmap of connections
   }
 
   private void onImageAvailable(Image image) {
-    int sessionId = image.sessionId();
-
-    // TODO remove from hashmap of clients
+    resources
+        .publication(
+            options.outboundUri().sessionId(image.sessionId()).asString(),
+            options.connectTimeout(),
+            options.backpressureTimeout())
+        .doOnSuccess(
+            publication -> {
+              new SessionHandler();
+            })
+        .subscribe(
+            null,
+            ex -> logger.error("Unexpected exception occurred on creating server outbound: " + ex));
   }
 
   @Override
@@ -115,12 +104,13 @@ final class AeronServerHandler implements OnDisposable {
     return Mono.defer(
         () ->
             Mono.whenDelayError(
-                handlers
+                connections
+                    .values()
                     .stream()
                     .map(
-                        sessionHandler -> {
-                          sessionHandler.dispose();
-                          return sessionHandler.onDispose();
+                        client -> {
+                          client.dispose();
+                          return client.onDispose();
                         })
                     .collect(Collectors.toList())));
   }
@@ -137,8 +127,6 @@ final class AeronServerHandler implements OnDisposable {
     private final long connectRequestId;
     private final long sessionId;
     private final int clientControlStreamId;
-
-    private final Mono<MessagePublication> controlPublication;
 
     private final MonoProcessor<Void> dispose = MonoProcessor.create();
     private final MonoProcessor<Void> onDispose = MonoProcessor.create();
@@ -159,19 +147,10 @@ final class AeronServerHandler implements OnDisposable {
       this.clientControlStreamId = clientControlStreamId;
       this.inbound = new DefaultAeronInbound(category, resources);
 
-      this.controlPublication =
-          Mono.defer(() -> newControlPublication(clientChannel, clientControlStreamId)).cache();
-
       this.dispose
           .then(doDispose())
           .doFinally(s -> onDispose.onComplete())
           .subscribe(null, th -> logger.warn("SessionHandler disposed with error: " + th));
-    }
-
-    private Mono<MessagePublication> newControlPublication(
-        String clientChannel, int clientControlStreamId) {
-      return resources.messagePublication(
-          category, clientChannel, clientControlStreamId, options, resources.nextEventLoop());
     }
 
     private Mono<? extends Connection> start() {
@@ -281,11 +260,6 @@ final class AeronServerHandler implements OnDisposable {
                                   new RuntimeException("Failed to send CONNECT_ACK", th));
                             }));
           });
-    }
-
-    private Mono<Void> sendConnectAck(MessagePublication publication) {
-      return publication.enqueue(
-          Protocol.createConnectAckBody(sessionId, connectRequestId, serverSessionStreamId));
     }
   }
 }

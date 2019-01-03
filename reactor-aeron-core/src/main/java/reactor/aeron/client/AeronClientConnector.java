@@ -11,7 +11,6 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.aeron.AeronInbound;
-import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronOutbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronUtils;
@@ -55,7 +54,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
       Supplier<Integer> clientSessionStreamIdCounter) {
     options = settings.options();
     category = Optional.ofNullable(settings.name()).orElse("client");
-    resources = settings.aeronResources();
+    resources = settings.resources();
     clientChannel = options.clientChannel();
     this.clientControlStreamId = clientControlStreamId;
     this.clientSessionStreamIdCounter = clientSessionStreamIdCounter;
