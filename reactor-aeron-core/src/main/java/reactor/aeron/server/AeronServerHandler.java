@@ -21,6 +21,7 @@ import reactor.aeron.DefaultAeronInbound;
 import reactor.aeron.DefaultAeronOutbound;
 import reactor.aeron.MessagePublication;
 import reactor.aeron.OnDisposable;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
@@ -30,9 +31,6 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
 
   private final AeronServerOptions options;
   private final AeronResources resources;
-
-  // TODO somehow need to conjunct client given handler-function with a point where
-  // Connection is created
   private final Function<? super Connection, ? extends Publisher<Void>> handler;
 
   // TODO think of more performant concurrent hashmap
@@ -176,6 +174,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
    */
   private void setupConnection(int sessionId, MessagePublication publication) {
     SessionHandler connection = new SessionHandler(sessionId, publication);
+
     connections.put(sessionId, connection);
 
     // register cleanup hook
@@ -188,9 +187,15 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
               // no-op
             });
 
-    handler
-        .apply(connection) // apply handler function
-        .subscribe(connection.disposeSubscriber());
+    try {
+      handler
+          .apply(connection) // apply handler function
+          .subscribe(connection.disposeSubscriber());
+    } catch (Exception ex) {
+      logger.error("{}: unexpected exception occurred on handler.apply(), cause: ", sessionId, ex);
+      connection.dispose();
+      throw Exceptions.propagate(ex);
+    }
   }
 
   @Override
@@ -235,16 +240,16 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
 
     private final int sessionId;
 
-    private final DefaultAeronOutbound outbound;
     private final DefaultAeronInbound inbound;
+    private final DefaultAeronOutbound outbound;
 
     private final MonoProcessor<Void> dispose = MonoProcessor.create();
     private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
     private SessionHandler(int sessionId, MessagePublication publication) {
       this.sessionId = sessionId;
-      this.outbound = new DefaultAeronOutbound(publication);
       this.inbound = new DefaultAeronInbound();
+      this.outbound = new DefaultAeronOutbound(publication);
 
       this.dispose
           .then(doDispose())
@@ -293,8 +298,8 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
           () -> {
             logger.debug("{}: closing {}", Integer.toHexString(sessionId), this);
             return Mono.whenDelayError(
-                    Mono.fromRunnable(outbound::dispose).then(outbound.onDispose()),
-                    Mono.fromRunnable(inbound::dispose).then(inbound.onDispose()))
+                    Mono.fromRunnable(inbound::dispose).then(inbound.onDispose()),
+                    Mono.fromRunnable(outbound::dispose).then(outbound.onDispose()))
                 .doFinally(
                     s -> logger.debug("{}: closed {}", Integer.toHexString(sessionId), this));
           });
