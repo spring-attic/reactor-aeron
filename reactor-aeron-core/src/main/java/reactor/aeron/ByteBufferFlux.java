@@ -8,10 +8,6 @@ import reactor.core.publisher.FluxOperator;
 
 public final class ByteBufferFlux extends FluxOperator<ByteBuffer, ByteBuffer> {
 
-  public static ByteBufferFlux from(String... data) {
-    return new ByteBufferFlux(Flux.fromArray(data).map(AeronUtils::stringToByteBuffer));
-  }
-
   public ByteBufferFlux(Publisher<? extends ByteBuffer> source) {
     this(Flux.from(source));
   }
@@ -27,5 +23,9 @@ public final class ByteBufferFlux extends FluxOperator<ByteBuffer, ByteBuffer> {
 
   public Flux<String> asString() {
     return map(AeronUtils::byteBufferToString);
+  }
+
+  public static ByteBufferFlux from(String... data) {
+    return new ByteBufferFlux(Flux.fromArray(data).map(AeronUtils::stringToByteBuffer));
   }
 }

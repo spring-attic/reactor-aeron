@@ -11,8 +11,9 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
 
   /**
    * Constructor. Stores passed {@link MessagePublication} and creates {@link AeronWriteSequencer}
-   * instance upon it. Stored message publication is bound to lifecycle of this object.
-   * Corresponding dispose functions shutting down publication.
+   * instance upon it. Stored message publication is bound to lifecycle of {@link
+   * DefaultAeronOutbound} instance. Corresponding dispose functions shutting down message
+   * publication.
    *
    * @param publication message publication
    */

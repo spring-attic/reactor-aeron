@@ -6,7 +6,6 @@ import io.aeron.logbuffer.Header;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -18,8 +17,6 @@ import reactor.aeron.AeronInbound;
 import reactor.aeron.AeronOutbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
-import reactor.aeron.DataFragmentHandler;
-import reactor.aeron.DataMessageProcessor;
 import reactor.aeron.DefaultAeronInbound;
 import reactor.aeron.DefaultAeronOutbound;
 import reactor.aeron.MessagePublication;
@@ -62,10 +59,6 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
   public Mono<OnDisposable> start() {
     return Mono.defer(
         () -> {
-          // TODO why need following two objects?
-          DataMessageProcessor messageProcessor = new DataMessageProcessor();
-          DataFragmentHandler fragmentHandler = new DataFragmentHandler(messageProcessor);
-
           String inboundChannel = options.inboundUri().asString();
 
           logger.debug("Starting {} on: {}", this, inboundChannel);
@@ -73,61 +66,19 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
           return resources
               .subscription(
                   inboundChannel,
-                  fragmentHandler,
-                  this::onImageAvailable /*accept new session*/,
-                  this::onImageUnavailable /*remove session*/)
+                  this, /*fragmentHandler*/
+                  this::onImageAvailable, /*setup new session*/
+                  this::onImageUnavailable /*remove and dispose session*/)
               .thenReturn(this)
               .doOnSuccess(h -> logger.debug("{} started on: {}", this, inboundChannel));
         });
   }
 
-  private void onImageUnavailable(Image image) {
-    int sessionId = image.sessionId();
-    SessionHandler sessionHandler = connections.remove(sessionId);
-
-    if (sessionHandler != null) {
-      sessionHandler.dispose();
-      logger.debug(
-          "{}: removed and disposed sessionHandler: {}",
-          Integer.toHexString(sessionId),
-          sessionHandler);
-    } else {
-      logger.debug(
-          "{}: attempt to remove sessionHandler but it's not found (total connections: {})",
-          Integer.toHexString(sessionId),
-          connections.size());
-    }
-  }
-
-  private void onImageAvailable(Image image) {
-    int sessionId = image.sessionId();
-    String outboundChannel = options.outboundUri().sessionId(sessionId).asString();
-
-    logger.debug(
-        "{}: creating sessionHandler: {}", Integer.toHexString(sessionId), outboundChannel);
-
-    Duration connectTimeout = options.connectTimeout();
-    Duration backpressureTimeout = options.backpressureTimeout();
-
-    resources
-        .publication(outboundChannel, connectTimeout, backpressureTimeout)
-        .flatMap(MessagePublication::ensureConnected)
-        .doOnSuccess(p -> connections.put(sessionId, new SessionHandler(sessionId, p)))
-        .subscribe(
-            null,
-            ex ->
-                logger.warn(
-                    "{}: exception occurred on creating sessionHandler: {}, cause: {}",
-                    Integer.toHexString(sessionId),
-                    outboundChannel,
-                    ex.toString()),
-            () ->
-                logger.debug(
-                    "{}: created sessionHandler: {}",
-                    Integer.toHexString(sessionId),
-                    outboundChannel));
-  }
-
+  /**
+   * Inner implementation of aeron's {@link FragmentHandler}. Sits on the server inbound channel and
+   * serves all incoming sessions. By {@link Header#sessionId()} corresponding {@link
+   * SessionHandler} is being found and message passed there.
+   */
   @Override
   public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
     int sessionId = header.sessionId();
@@ -146,6 +97,100 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
     dstBuffer.flip();
 
     // TODO what next
+  }
+
+  /**
+   * Setting up new {@link SessionHandler} identified by {@link Image#sessionId()}. Specifically
+   * creates message publication (aeron {@link io.aeron.Publication} underneath) with
+   * control-endpoint, control-mode and given sessionId. Essentially creates server side MDC for
+   * concrete sessionId; think of this as <i>server-side-individual-MDC</i>.
+   *
+   * @param image source image
+   */
+  private void onImageAvailable(Image image) {
+    int sessionId = image.sessionId();
+    String outboundChannel = options.outboundUri().sessionId(sessionId).asString();
+
+    // not expecting following condition be true at normal circumstances; passing it would mean
+    // aeron changed contract/semantic around sessionId
+    if (connections.containsKey(sessionId)) {
+      logger.error(
+          "{}: sessionHandler already exists: {}", Integer.toHexString(sessionId), outboundChannel);
+      return;
+    }
+
+    logger.debug(
+        "{}: creating sessionHandler: {}", Integer.toHexString(sessionId), outboundChannel);
+
+    Duration connectTimeout = options.connectTimeout();
+    Duration backpressureTimeout = options.backpressureTimeout();
+
+    resources
+        .publication(outboundChannel, connectTimeout, backpressureTimeout)
+        .flatMap(MessagePublication::ensureConnected)
+        .doOnSuccess(publication -> setupConnection(sessionId, publication))
+        .subscribe(
+            null,
+            ex ->
+                logger.warn(
+                    "{}: exception occurred on creating sessionHandler: {}, cause: {}",
+                    Integer.toHexString(sessionId),
+                    outboundChannel,
+                    ex.toString()),
+            () ->
+                logger.debug(
+                    "{}: created sessionHandler: {}",
+                    Integer.toHexString(sessionId),
+                    outboundChannel));
+  }
+
+  /**
+   * Removes {@link SessionHandler} (and then disposes it) by incoming {@link Image#sessionId()}.
+   * See also {@link SessionHandler#dispose()}.
+   *
+   * @param image source image
+   */
+  private void onImageUnavailable(Image image) {
+    int sessionId = image.sessionId();
+    SessionHandler sessionHandler = connections.remove(sessionId);
+
+    if (sessionHandler != null) {
+      sessionHandler.dispose();
+      logger.debug(
+          "{}: removed and disposed sessionHandler: {}",
+          Integer.toHexString(sessionId),
+          sessionHandler);
+    } else {
+      logger.debug(
+          "{}: attempt to remove sessionHandler but it's not found (total connections: {})",
+          Integer.toHexString(sessionId),
+          connections.size());
+    }
+  }
+
+  /**
+   * Creates and setting up {@link SessionHandler}.
+   *
+   * @param sessionId session id
+   * @param publication MDC message publication aka <i>server-side-individual-MDC</i>
+   */
+  private void setupConnection(int sessionId, MessagePublication publication) {
+    SessionHandler connection = new SessionHandler(sessionId, publication);
+    connections.put(sessionId, connection);
+
+    // register cleanup hook
+    connection
+        .onDispose()
+        .doFinally(s -> connections.remove(sessionId))
+        .subscribe(
+            null,
+            th -> {
+              // no-op
+            });
+
+    handler
+        .apply(connection) // apply handler function
+        .subscribe(connection.disposeSubscriber());
   }
 
   @Override
@@ -183,6 +228,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
     return "AeronServerHandler0x" + Integer.toHexString(System.identityHashCode(this));
   }
 
+  /** Server side wrapper around {@link AeronInbound} and {@link AeronOutbound}. */
   private static class SessionHandler implements Connection {
 
     private final Logger logger = LoggerFactory.getLogger(SessionHandler.class);
@@ -246,19 +292,9 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
       return Mono.defer(
           () -> {
             logger.debug("{}: closing {}", Integer.toHexString(sessionId), this);
-
-            Optional.ofNullable(outbound) //
-                .ifPresent(DefaultAeronOutbound::dispose);
-            Optional.ofNullable(inbound) //
-                .ifPresent(DefaultAeronInbound::dispose);
-
             return Mono.whenDelayError(
-                    Optional.ofNullable(outbound)
-                        .map(DefaultAeronOutbound::onDispose)
-                        .orElse(Mono.empty()),
-                    Optional.ofNullable(inbound)
-                        .map(DefaultAeronInbound::onDispose)
-                        .orElse(Mono.empty()))
+                    Mono.fromRunnable(outbound::dispose).then(outbound.onDispose()),
+                    Mono.fromRunnable(inbound::dispose).then(inbound.onDispose()))
                 .doFinally(
                     s -> logger.debug("{}: closed {}", Integer.toHexString(sessionId), this));
           });
