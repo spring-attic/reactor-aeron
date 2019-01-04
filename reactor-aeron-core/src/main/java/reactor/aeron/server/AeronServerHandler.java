@@ -12,8 +12,8 @@ import org.agrona.DirectBuffer;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronInbound;
+import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronOutbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
@@ -25,6 +25,17 @@ import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
+/**
+ *
+ *
+ * <pre>
+ * Server
+ * serverPort->inbound->Sub(endpoint, acceptor[onImageAvailable, onImageUnavailbe])
+ * + onImageAvailable(Image)
+ * sessionId->inbound->EmitterPocessor
+ * serverControlPort->outbound->MDC(sessionId)->Pub(control-endpoint, sessionId)
+ * </pre>
+ */
 final class AeronServerHandler implements FragmentHandler, OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronServerHandler.class);
@@ -57,6 +68,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
   public Mono<OnDisposable> start() {
     return Mono.defer(
         () -> {
+          // Sub(endpoint{address:serverPort})
           String inboundChannel = options.inboundUri().asString();
 
           logger.debug("Starting {} on: {}", this, inboundChannel);
@@ -103,6 +115,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
    */
   private void onImageAvailable(Image image) {
     int sessionId = image.sessionId();
+    // Pub(control-endpoint{address:serverControlPort}, sessionId)->MDC(sessionId)
     String outboundChannel = options.outboundUri().sessionId(sessionId).asString();
 
     // not expecting following condition be true at normal circumstances; passing it would mean
@@ -156,7 +169,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
           sessionHandler);
     } else {
       logger.debug(
-          "{}: attempt to remove sessionHandler but it's not found (total connections: {})",
+          "{}: attempt to remove sessionHandler but it wasn't found (total connections: {})",
           Integer.toHexString(sessionId),
           connections.size());
     }
@@ -242,6 +255,12 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
     private final MonoProcessor<Void> dispose = MonoProcessor.create();
     private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
+    /**
+     * Construcotr.
+     *
+     * @param sessionId session id
+     * @param publication MDC message publication aka <i>server-side-individual-MDC</i>
+     */
     private SessionHandler(int sessionId, MessagePublication publication) {
       this.sessionId = sessionId;
       this.inbound = new DefaultAeronInbound();

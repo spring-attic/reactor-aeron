@@ -135,7 +135,7 @@ public final class AeronEventLoop implements OnDisposable {
                       if (!cancelIfDisposed(sink)) {
                         publications.add(p);
                         logger.debug("Registered {}", p);
-                        sink.success();
+                        sink.success(p);
                       }
                     }));
   }
@@ -155,7 +155,7 @@ public final class AeronEventLoop implements OnDisposable {
                       if (!cancelIfDisposed(sink)) {
                         subscriptions.add(s);
                         logger.debug("Registered {}", s);
-                        sink.success();
+                        sink.success(s);
                       }
                     }));
   }

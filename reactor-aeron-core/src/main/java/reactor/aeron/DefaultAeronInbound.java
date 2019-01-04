@@ -5,7 +5,6 @@ import io.aeron.logbuffer.Header;
 import java.nio.ByteBuffer;
 import org.agrona.DirectBuffer;
 import reactor.core.publisher.EmitterProcessor;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
@@ -39,9 +38,8 @@ public final class DefaultAeronInbound implements AeronInbound, FragmentHandler,
   }
 
   @Override
-  public Flux<ByteBuffer> receive() {
-    // TODO how to use in conjuction with ByteBufferFlux
-    return processor.onBackpressureBuffer();
+  public ByteBufferFlux receive() {
+    return new ByteBufferFlux(processor.onBackpressureBuffer());
   }
 
   @Override

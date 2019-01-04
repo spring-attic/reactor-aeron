@@ -128,34 +128,33 @@ public class AeronResources implements OnDisposable {
 
     return Mono.defer(
         () -> {
-          Publication pub;
-          try {
-            pub = aeron.addExclusivePublication(channel, STREAM_ID);
-          } catch (Exception ex) {
-            logger.error(
-                "{} failed on aeron.addExclusivePublication(), channel: {}, cause: {}",
-                this,
-                channel,
-                ex.toString());
-            throw Exceptions.propagate(ex);
-          }
-
           AeronEventLoop eventLoop = this.nextEventLoop();
 
-          MessagePublication publication =
-              new MessagePublication(pub, eventLoop, connectTimeout, backpressureTimeout);
-
           return eventLoop
-              .registerPublication(publication)
+              .publicationFromSupplier(() -> aeron.addExclusivePublication(channel, STREAM_ID))
               .doOnError(
-                  ex -> {
-                    logger.error(
-                        "{} failed to register: {}, cause: {}", this, publication, ex.toString());
-                    if (!pub.isClosed()) {
-                      pub.close();
-                    }
-                  })
-              .thenReturn(publication)
+                  ex ->
+                      logger.error(
+                          "{} failed on addExclusivePublication(), channel: {}, cause: {}",
+                          this,
+                          channel,
+                          ex.toString()))
+              .flatMap(
+                  aeronPublication ->
+                      eventLoop
+                          .registerPublication(
+                              new MessagePublication(
+                                  aeronPublication, eventLoop, connectTimeout, backpressureTimeout))
+                          .doOnError(
+                              ex -> {
+                                logger.error(
+                                    "{} failed to register message publication, cause: {}",
+                                    this,
+                                    ex.toString());
+                                if (!aeronPublication.isClosed()) {
+                                  aeronPublication.close();
+                                }
+                              }))
               .doOnSuccess(p -> logger.debug("{} registered: {}", this, p));
         });
   }
@@ -185,57 +184,65 @@ public class AeronResources implements OnDisposable {
 
     return Mono.defer(
         () -> {
-          Subscription sub;
-          try {
-            sub =
-                aeron.addSubscription(
-                    channel,
-                    STREAM_ID,
-                    image -> {
-                      logger.debug(
-                          "{} onImageAvailable: {} {}",
-                          this,
-                          Integer.toHexString(image.sessionId()),
-                          image.sourceIdentity());
-                      if (availableImageHandler != null) {
-                        availableImageHandler.accept(image);
-                      }
-                      Optional.ofNullable(availableImageHandler).ifPresent(c -> c.accept(image));
-                    },
-                    image -> {
-                      logger.debug(
-                          "{} onImageUnavailable: {} {}",
-                          this,
-                          Integer.toHexString(image.sessionId()),
-                          image.sourceIdentity());
-                      Optional.ofNullable(unavailableImageHandler).ifPresent(c -> c.accept(image));
-                    });
-          } catch (Exception ex) {
-            logger.error(
-                "{} failed on aeron.addSubscription(), channel: {}, cause: {}",
-                this,
-                channel,
-                ex.toString());
-            throw Exceptions.propagate(ex);
-          }
-
           AeronEventLoop eventLoop = this.nextEventLoop();
 
-          MessageSubscription subscription =
-              new MessageSubscription(eventLoop, sub, new FragmentAssembler(fragmentHandler));
-
           return eventLoop
-              .registerSubscription(subscription)
+              .subscriptionFromSupplier(
+                  () -> aeronSubscription(channel, availableImageHandler, unavailableImageHandler))
               .doOnError(
-                  ex -> {
-                    logger.error(
-                        "{} failed to register: {}, cause: {}", this, subscription, ex.toString());
-                    if (!sub.isClosed()) {
-                      sub.close();
-                    }
-                  })
-              .thenReturn(subscription)
+                  ex ->
+                      logger.error(
+                          "{} failed on aeronSubscription(), channel: {}, cause: {}",
+                          this,
+                          channel,
+                          ex.toString()))
+              .flatMap(
+                  aeronSubscription ->
+                      eventLoop
+                          .registerSubscription(
+                              new MessageSubscription(
+                                  eventLoop,
+                                  aeronSubscription,
+                                  new FragmentAssembler(fragmentHandler)))
+                          .doOnError(
+                              ex -> {
+                                logger.error(
+                                    "{} failed to register message subscription, cause: {}",
+                                    this,
+                                    ex.toString());
+                                if (!aeronSubscription.isClosed()) {
+                                  aeronSubscription.close();
+                                }
+                              }))
               .doOnSuccess(s -> logger.debug("{} registered: {}", this, s));
+        });
+  }
+
+  private Subscription aeronSubscription(
+      String channel,
+      Consumer<Image> availableImageHandler,
+      Consumer<Image> unavailableImageHandler) {
+    return aeron.addSubscription(
+        channel,
+        STREAM_ID,
+        image -> {
+          logger.debug(
+              "{} onImageAvailable: {} {}",
+              this,
+              Integer.toHexString(image.sessionId()),
+              image.sourceIdentity());
+          if (availableImageHandler != null) {
+            availableImageHandler.accept(image);
+          }
+          Optional.ofNullable(availableImageHandler).ifPresent(c -> c.accept(image));
+        },
+        image -> {
+          logger.debug(
+              "{} onImageUnavailable: {} {}",
+              this,
+              Integer.toHexString(image.sessionId()),
+              image.sourceIdentity());
+          Optional.ofNullable(unavailableImageHandler).ifPresent(c -> c.accept(image));
         });
   }
 
