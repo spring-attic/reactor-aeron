@@ -19,7 +19,7 @@ public class ClientThroughput {
     try {
       ByteBuffer buffer = ByteBuffer.allocate(1024);
 
-      AeronClient.create("client", aeronResources)
+      AeronClient.create(aeronResources)
           .options(
               options -> {
                 options.serverChannel(

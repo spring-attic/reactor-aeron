@@ -1,14 +1,11 @@
-package reactor.aeron.server;
+package reactor.aeron;
 
 import java.time.Duration;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.reactivestreams.Publisher;
-import reactor.aeron.AeronChannelUri;
-import reactor.aeron.AeronResources;
-import reactor.aeron.Connection;
 
-public final class AeronServerOptions {
+public final class AeronOptions {
 
   private AeronResources resources;
   private Function<? super Connection, ? extends Publisher<Void>> handler;
@@ -17,9 +14,9 @@ public final class AeronServerOptions {
   private Duration connectTimeout = Duration.ofSeconds(5);
   private Duration backpressureTimeout = Duration.ofSeconds(5);
 
-  public AeronServerOptions() {}
+  public AeronOptions() {}
 
-  public AeronServerOptions(AeronServerOptions other) {
+  public AeronOptions(AeronOptions other) {
     this.resources = other.resources;
     this.handler = other.handler;
     this.inboundUri = other.inboundUri;
@@ -52,12 +49,11 @@ public final class AeronServerOptions {
     return backpressureTimeout;
   }
 
-  public AeronServerOptions resources(AeronResources resources) {
+  public AeronOptions resources(AeronResources resources) {
     return set(s -> s.resources = resources);
   }
 
-  public AeronServerOptions handler(
-      Function<? super Connection, ? extends Publisher<Void>> handler) {
+  public AeronOptions handler(Function<? super Connection, ? extends Publisher<Void>> handler) {
     return set(s -> s.handler = handler);
   }
 
@@ -65,20 +61,20 @@ public final class AeronServerOptions {
     set(s -> s.inboundUri = inboundUri);
   }
 
-  public AeronServerOptions outboundUri(AeronChannelUri outboundUri) {
+  public AeronOptions outboundUri(AeronChannelUri outboundUri) {
     return set(s -> s.outboundUri = outboundUri);
   }
 
-  public AeronServerOptions connectTimeout(Duration connectTimeout) {
+  public AeronOptions connectTimeout(Duration connectTimeout) {
     return set(s -> s.connectTimeout = connectTimeout);
   }
 
-  public AeronServerOptions backpressureTimeout(Duration backpressureTimeout) {
+  public AeronOptions backpressureTimeout(Duration backpressureTimeout) {
     return set(s -> s.backpressureTimeout = backpressureTimeout);
   }
 
-  private AeronServerOptions set(Consumer<AeronServerOptions> c) {
-    AeronServerOptions s = new AeronServerOptions(this);
+  private AeronOptions set(Consumer<AeronOptions> c) {
+    AeronOptions s = new AeronOptions(this);
     c.accept(s);
     return s;
   }

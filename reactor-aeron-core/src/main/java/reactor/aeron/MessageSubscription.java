@@ -9,7 +9,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.Operators;
 
-// TODO not clear what to do with this et al
 public final class MessageSubscription
     implements org.reactivestreams.Subscription, OnDisposable, AutoCloseable {
 

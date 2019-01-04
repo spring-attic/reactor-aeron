@@ -12,6 +12,7 @@ import org.agrona.DirectBuffer;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronInbound;
 import reactor.aeron.AeronOutbound;
 import reactor.aeron.AeronResources;
@@ -28,7 +29,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronServerHandler.class);
 
-  private final AeronServerOptions options;
+  private final AeronOptions options;
   private final AeronResources resources;
   private final Function<? super Connection, ? extends Publisher<Void>> handler;
 
@@ -38,7 +39,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
   private final MonoProcessor<Void> dispose = MonoProcessor.create();
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
-  AeronServerHandler(AeronServerOptions options) {
+  AeronServerHandler(AeronOptions options) {
     this.options = options;
 
     this.resources = options.resources();

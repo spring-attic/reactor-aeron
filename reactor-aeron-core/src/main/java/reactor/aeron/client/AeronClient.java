@@ -1,50 +1,36 @@
 package reactor.aeron.client;
 
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.reactivestreams.Publisher;
 import reactor.aeron.AeronEventLoop;
+import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
 import reactor.core.publisher.Mono;
 
 public final class AeronClient {
 
-  private static final AtomicInteger STREAM_ID_COUNTER = new AtomicInteger();
+  private final AeronOptions options;
 
-  private final AeronClientSettings settings;
-
-  private AeronClient(AeronClientSettings settings) {
-    this.settings = settings;
+  private AeronClient(AeronOptions options) {
+    this.options = options;
   }
 
   /**
    * Create aeron client.
    *
-   * @param aeronResources resources
+   * @param resources resources
    * @return aeron client
    */
-  public static AeronClient create(AeronResources aeronResources) {
-    return create("client", aeronResources);
-  }
-
-  /**
-   * Create aeron client.
-   *
-   * @param name name
-   * @param aeronResources resources
-   * @return aeron client
-   */
-  public static AeronClient create(String name, AeronResources aeronResources) {
-    return new AeronClient(
-        AeronClientSettings.builder().name(name).aeronResources(aeronResources).build());
+  public static AeronClient create(AeronResources resources) {
+    return new AeronClient(new AeronOptions().resources(resources));
   }
 
   public Mono<? extends Connection> connect() {
-    return connect(settings.options());
+    return connect(options.options());
   }
 
   public Mono<? extends Connection> connect(AeronOptions options) {
@@ -54,14 +40,12 @@ public final class AeronClient {
   private Mono<? extends Connection> connect0(AeronOptions options) {
     return Mono.defer(
         () -> {
-          AeronClientSettings settings = this.settings.options(options);
+          AeronClientSettings settings = this.options.options(options);
 
           int clientControlStreamId = STREAM_ID_COUNTER.incrementAndGet();
           Supplier<Integer> clientSessionStreamIdCounter = STREAM_ID_COUNTER::incrementAndGet;
 
-          AeronClientConnector clientConnector =
-              new AeronClientConnector(
-                  settings, clientControlStreamId, clientSessionStreamIdCounter);
+          AeronClientConnector clientConnector = new AeronClientConnector(settings);
 
           String category = Optional.ofNullable(settings.name()).orElse("client");
           AeronResources resources = settings.resources();
@@ -117,7 +101,7 @@ public final class AeronClient {
    * @return a new {@link AeronClient}
    */
   public AeronClient options(Consumer<AeronOptions.Builder> options) {
-    return new AeronClient(settings.options(options));
+    return new AeronClient(this.options.options(options));
   }
 
   /**
@@ -128,6 +112,6 @@ public final class AeronClient {
    * @return a new {@link AeronClient}
    */
   public AeronClient handle(Function<? super Connection, ? extends Publisher<Void>> handler) {
-    return new AeronClient(settings.handler(handler));
+    return new AeronClient(options.handler(handler));
   }
 }

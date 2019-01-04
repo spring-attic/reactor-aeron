@@ -1,16 +1,13 @@
 package reactor.aeron.client;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.aeron.AeronInbound;
+import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronOutbound;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronUtils;
@@ -23,39 +20,21 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
-public final class AeronClientConnector implements ControlMessageSubscriber, OnDisposable {
+public final class AeronClientConnector implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronClientConnector.class);
 
-  private static final int CONTROL_STREAM_ID = 1;
-
-  private static final AtomicLong connectRequestIdCounter =
-      new AtomicLong(System.currentTimeMillis());
-
-  private final String category;
   private final AeronOptions options;
   private final AeronResources resources;
-  private final int clientControlStreamId;
-  private final String clientChannel;
-  private final Supplier<Integer> clientSessionStreamIdCounter;
-
-  private final Map<Long, ConnectAckPromise> connectAckPromises = new ConcurrentHashMap<>();
 
   private final List<ClientHandler> handlers = new CopyOnWriteArrayList<>();
 
   private final MonoProcessor<Void> dispose = MonoProcessor.create();
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
-  AeronClientConnector(
-      AeronClientSettings settings,
-      int clientControlStreamId,
-      Supplier<Integer> clientSessionStreamIdCounter) {
-    options = settings.options();
-    category = Optional.ofNullable(settings.name()).orElse("client");
-    resources = settings.resources();
-    clientChannel = options.clientChannel();
-    this.clientControlStreamId = clientControlStreamId;
-    this.clientSessionStreamIdCounter = clientSessionStreamIdCounter;
+  AeronClientConnector(AeronOptions options) {
+    this.options = options;
+    this.resources = options.resources();
 
     dispose
         .then(doDispose())
@@ -153,10 +132,7 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
                 sessionId = response.sessionId;
                 serverSessionStreamId = response.serverSessionStreamId;
 
-                return inbound
-                    .start()
-                    .then(outbound.start(serverSessionStreamId))
-                    .thenReturn(this);
+                return inbound.start().then(outbound.start(serverSessionStreamId)).thenReturn(this);
               })
           .doOnError(
               ex -> {
@@ -348,56 +324,5 @@ public final class AeronClientConnector implements ControlMessageSubscriber, OnD
         clientChannel,
         clientControlStreamId,
         clientSessionStreamId);
-  }
-
-  /**
-   * ConnectAck promise. Holds pair of connect request UUID and associated MonoProcessor. Clients
-   * use method {@link #promise()} to subscribe. When server responds then method {@link
-   * #success(long, int)} is being called.
-   */
-  private class ConnectAckPromise implements Disposable {
-
-    private final long connectRequestId;
-    private final MonoProcessor<ConnectAckResponse> promise;
-
-    private ConnectAckPromise(long connectRequestId) {
-      this.connectRequestId = connectRequestId;
-      this.promise = MonoProcessor.create();
-    }
-
-    private Mono<ConnectAckResponse> promise() {
-      return promise;
-    }
-
-    private void success(long sessionId, int serverSessionStreamId) {
-      promise.onNext(new ConnectAckResponse(sessionId, serverSessionStreamId));
-      promise.onComplete();
-    }
-
-    @Override
-    public void dispose() {
-      connectAckPromises.remove(connectRequestId);
-      promise.cancel();
-    }
-
-    @Override
-    public boolean isDisposed() {
-      return promise.isDisposed();
-    }
-  }
-
-  /**
-   * Tuple containing connection ack response from server which are: session id and server session
-   * stream id. DTO class.
-   */
-  private static class ConnectAckResponse {
-
-    private final long sessionId;
-    private final int serverSessionStreamId;
-
-    private ConnectAckResponse(long sessionId, int serverSessionStreamId) {
-      this.sessionId = sessionId;
-      this.serverSessionStreamId = serverSessionStreamId;
-    }
   }
 }

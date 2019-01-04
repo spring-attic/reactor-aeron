@@ -3,6 +3,7 @@ package reactor.aeron.server;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import org.reactivestreams.Publisher;
+import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
 import reactor.aeron.OnDisposable;
@@ -10,9 +11,9 @@ import reactor.core.publisher.Mono;
 
 public final class AeronServer {
 
-  private final AeronServerOptions options;
+  private final AeronOptions options;
 
-  private AeronServer(AeronServerOptions options) {
+  private AeronServer(AeronOptions options) {
     this.options = options;
   }
 
@@ -23,7 +24,7 @@ public final class AeronServer {
    * @return aeron server
    */
   public static AeronServer create(AeronResources resources) {
-    return new AeronServer(new AeronServerOptions().resources(resources));
+    return new AeronServer(new AeronOptions().resources(resources));
   }
 
   /**
@@ -41,7 +42,7 @@ public final class AeronServer {
    * @param o unary opearator for performing setup of options
    * @return mono handle of result
    */
-  public Mono<? extends OnDisposable> bind(UnaryOperator<AeronServerOptions> o) {
+  public Mono<? extends OnDisposable> bind(UnaryOperator<AeronOptions> o) {
     return Mono.defer(() -> new AeronServerHandler(o.apply(options)).start());
   }
 
@@ -51,7 +52,7 @@ public final class AeronServer {
    * @param o unary opearator for performing setup of options
    * @return aeron server with applied options
    */
-  public AeronServer options(UnaryOperator<AeronServerOptions> o) {
+  public AeronServer options(UnaryOperator<AeronOptions> o) {
     return new AeronServer(o.apply(options));
   }
 

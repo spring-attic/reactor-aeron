@@ -18,7 +18,7 @@ public class ClientDemo {
     AeronResources aeronResources = AeronResources.start();
     try {
       connection =
-          AeronClient.create("client", aeronResources)
+          AeronClient.create(aeronResources)
               .options(
                   options -> {
                     options.serverChannel(
