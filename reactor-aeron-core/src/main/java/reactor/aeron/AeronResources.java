@@ -146,20 +146,17 @@ public class AeronResources implements OnDisposable {
               new MessagePublication(pub, eventLoop, connectTimeout, backpressureTimeout);
 
           return eventLoop
-              .register(publication)
+              .registerMessagePublication(publication)
               .doOnError(
                   ex -> {
                     logger.error(
-                        "{} failed to register publication: {}, cause: {}",
-                        this,
-                        publication,
-                        ex.toString());
+                        "{} failed to register: {}, cause: {}", this, publication, ex.toString());
                     if (!pub.isClosed()) {
                       pub.close();
                     }
                   })
               .thenReturn(publication)
-              .doOnSuccess(p -> logger.debug("{} registered publication: {}", this, p));
+              .doOnSuccess(p -> logger.debug("{} registered: {}", this, p));
         });
   }
 
@@ -228,20 +225,17 @@ public class AeronResources implements OnDisposable {
               new MessageSubscription(eventLoop, sub, new FragmentAssembler(fragmentHandler));
 
           return eventLoop
-              .register(subscription)
+              .registerMessageSubscription(subscription)
               .doOnError(
                   ex -> {
                     logger.error(
-                        "{} failed to register subscription: {}, cause: {}",
-                        this,
-                        subscription,
-                        ex.toString());
+                        "{} failed to register: {}, cause: {}", this, subscription, ex.toString());
                     if (!sub.isClosed()) {
                       sub.close();
                     }
                   })
               .thenReturn(subscription)
-              .doOnSuccess(s -> logger.debug("{} registered subscription: {}", this, s));
+              .doOnSuccess(s -> logger.debug("{} registered: {}", this, s));
         });
   }
 

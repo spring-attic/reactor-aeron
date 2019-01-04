@@ -159,7 +159,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
   @Override
   public void dispose() {
     eventLoop
-        .dispose(this)
+        .disposeMessagePublication(this)
         .subscribe(
             null,
             th -> {
