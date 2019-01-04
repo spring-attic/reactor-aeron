@@ -146,7 +146,7 @@ public class AeronResources implements OnDisposable {
               new MessagePublication(pub, eventLoop, connectTimeout, backpressureTimeout);
 
           return eventLoop
-              .registerMessagePublication(publication)
+              .registerPublication(publication)
               .doOnError(
                   ex -> {
                     logger.error(
@@ -225,7 +225,7 @@ public class AeronResources implements OnDisposable {
               new MessageSubscription(eventLoop, sub, new FragmentAssembler(fragmentHandler));
 
           return eventLoop
-              .registerMessageSubscription(subscription)
+              .registerSubscription(subscription)
               .doOnError(
                   ex -> {
                     logger.error(

@@ -88,7 +88,7 @@ public final class AeronEventLoop implements OnDisposable {
    * @param supplier factory for {@link Publication} instance
    * @return mono result
    */
-  public Mono<Publication> addPublication(Supplier<Publication> supplier) {
+  public Mono<Publication> publicationFromSupplier(Supplier<Publication> supplier) {
     return worker()
         .flatMap(
             worker ->
@@ -107,7 +107,7 @@ public final class AeronEventLoop implements OnDisposable {
    * @param supplier factory for {@link Subscription} instance
    * @return mono result
    */
-  public Mono<Subscription> addSubscription(Supplier<Subscription> supplier) {
+  public Mono<Subscription> subscriptionFromSupplier(Supplier<Subscription> supplier) {
     return worker()
         .flatMap(
             worker ->
@@ -126,7 +126,7 @@ public final class AeronEventLoop implements OnDisposable {
    * @param p message publication
    * @return mono result of registration
    */
-  public Mono<MessagePublication> registerMessagePublication(MessagePublication p) {
+  public Mono<MessagePublication> registerPublication(MessagePublication p) {
     return worker()
         .flatMap(
             worker ->
@@ -146,7 +146,7 @@ public final class AeronEventLoop implements OnDisposable {
    * @param s message subscription
    * @return mono result of registration
    */
-  public Mono<MessageSubscription> registerMessageSubscription(MessageSubscription s) {
+  public Mono<MessageSubscription> registerSubscription(MessageSubscription s) {
     return worker()
         .flatMap(
             worker ->
@@ -167,7 +167,7 @@ public final class AeronEventLoop implements OnDisposable {
    * @param p message publication
    * @return mono result of dispose of message publication
    */
-  public Mono<Void> disposeMessagePublication(MessagePublication p) {
+  public Mono<Void> disposePublication(MessagePublication p) {
     return worker()
         .flatMap(
             worker ->
@@ -188,7 +188,7 @@ public final class AeronEventLoop implements OnDisposable {
    * @param s message subscription
    * @return mono result of dispose of message subscription
    */
-  public Mono<Void> dispose(MessageSubscription s) {
+  public Mono<Void> disposeSubscription(MessageSubscription s) {
     return worker()
         .flatMap(
             worker ->
@@ -240,8 +240,8 @@ public final class AeronEventLoop implements OnDisposable {
 
   /**
    * Runnable task for submitting to {@link #commandTasks} queue. For usage details see methods:
-   * {@link #registerMessagePublication(MessagePublication)} and {@link
-   * #disposeMessagePublication(MessagePublication)}.
+   * {@link #registerPublication(MessagePublication)} and {@link
+   * #disposePublication(MessagePublication)}.
    */
   private static class CommandTask<T> implements Runnable {
     private final MonoSink<T> sink;
