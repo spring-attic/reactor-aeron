@@ -68,32 +68,40 @@ public final class AeronEventLoop implements OnDisposable {
     return w;
   }
 
-  boolean inEventLoop() {
+  /**
+   * Returns {@code true} if client called this method from within worker thread of {@link
+   * AeronEventLoop}, and {@code false} otherwise.
+   *
+   * @return {@code true} if current thread is worker thread from event loop, and {@code false}
+   *     otherwise
+   */
+  public boolean inEventLoop() {
     return thread == Thread.currentThread();
   }
 
   /**
-   * Registers message publication in event loop.
+   * Registers {@link MessagePublication} in event loop.
    *
    * @param p message publication
    * @return mono result of registration
    */
-  public Mono<Void> register(MessagePublication p) {
+  public Mono<MessagePublication> register(MessagePublication p) {
     return worker().flatMap(w -> command(sink -> registerPublication(p, sink)));
   }
 
   /**
-   * Registers message subscription in event loop.
+   * Registers {@link MessageSubscription} in event loop.
    *
    * @param s message subscription
    * @return mono result of registration
    */
-  public Mono<Void> register(MessageSubscription s) {
+  public Mono<MessageSubscription> register(MessageSubscription s) {
     return worker().flatMap(w -> command(sink -> registerSubscription(s, sink)));
   }
 
   /**
-   * Dispose message publication and remove it from event loop.
+   * Disposes {@link MessagePublication} (which by turn would close aeron {@link
+   * io.aeron.Publication}) and remove it from event loop.
    *
    * @param p message publication
    * @return mono result of dispose of message publication
@@ -103,7 +111,8 @@ public final class AeronEventLoop implements OnDisposable {
   }
 
   /**
-   * Dipose message subscription and remove it event loop.
+   * Diposes {@link MessageSubscription} ((which by turn would close aeron {@link
+   * io.aeron.Subscription})) and remove it event loop.
    *
    * @param s message subscription
    * @return mono result of dispose of message subscription
@@ -123,7 +132,7 @@ public final class AeronEventLoop implements OnDisposable {
     }
   }
 
-  private void registerPublication(MessagePublication p, MonoSink<Void> sink) {
+  private void registerPublication(MessagePublication p, MonoSink<MessagePublication> sink) {
     if (dispose.isDisposed()) {
       sink.error(AeronExceptions.failWithCancel("CommandTask has cancelled"));
       return;
@@ -133,7 +142,7 @@ public final class AeronEventLoop implements OnDisposable {
     sink.success();
   }
 
-  private void registerSubscription(MessageSubscription s, MonoSink<Void> sink) {
+  private void registerSubscription(MessageSubscription s, MonoSink<MessageSubscription> sink) {
     if (dispose.isDisposed()) {
       sink.error(AeronExceptions.failWithCancel("CommandTask has cancelled"));
       return;
@@ -185,8 +194,8 @@ public final class AeronEventLoop implements OnDisposable {
     return workerMono.takeUntilOther(listenUnavailable());
   }
 
-  private Mono<Void> command(Consumer<MonoSink<Void>> consumer) {
-    return Mono.create(sink -> commandTasks.add(new CommandTask(sink, consumer)));
+  private <T> Mono<T> command(Consumer<MonoSink<T>> consumer) {
+    return Mono.create(sink -> commandTasks.add(new CommandTask<>(sink, consumer)));
   }
 
   private <T> Mono<T> listenUnavailable() {
@@ -200,11 +209,11 @@ public final class AeronEventLoop implements OnDisposable {
    * Runnable task for submitting to {@link #commandTasks} queue. For usage see methods {@link
    * #register(MessagePublication)} and {@link #dispose(MessagePublication)}.
    */
-  private static class CommandTask implements Runnable {
-    private final MonoSink<Void> sink;
-    private final Consumer<MonoSink<Void>> consumer;
+  private static class CommandTask<T> implements Runnable {
+    private final MonoSink<T> sink;
+    private final Consumer<MonoSink<T>> consumer;
 
-    private CommandTask(MonoSink<Void> sink, Consumer<MonoSink<Void>> consumer) {
+    private CommandTask(MonoSink<T> sink, Consumer<MonoSink<T>> consumer) {
       this.sink = sink;
       this.consumer = consumer;
     }
