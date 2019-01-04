@@ -3,7 +3,6 @@ package reactor.aeron.server;
 import io.aeron.Image;
 import io.aeron.logbuffer.FragmentHandler;
 import io.aeron.logbuffer.Header;
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -90,11 +89,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
       return;
     }
 
-    ByteBuffer dstBuffer = ByteBuffer.allocate(length);
-    buffer.getBytes(offset, dstBuffer, length);
-    dstBuffer.flip();
-
-    // TODO what next
+    sessionHandler.inbound.onFragment(buffer, offset, length, header);
   }
 
   /**

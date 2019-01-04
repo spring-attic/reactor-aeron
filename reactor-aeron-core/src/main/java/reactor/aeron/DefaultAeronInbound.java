@@ -1,67 +1,65 @@
 package reactor.aeron;
 
+import io.aeron.logbuffer.FragmentHandler;
+import io.aeron.logbuffer.Header;
 import java.nio.ByteBuffer;
-import java.util.Optional;
+import org.agrona.DirectBuffer;
+import reactor.core.publisher.EmitterProcessor;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoProcessor;
 
-// TODO entire INBOUND process is unclear: what to do with SereverHandler.handler? whois publisher?
-// whois subscription? whois subscriber? whois doing onSubscribe? and etc etc
-public final class DefaultAeronInbound implements AeronInbound, OnDisposable {
+public final class DefaultAeronInbound implements AeronInbound, FragmentHandler, OnDisposable {
 
-  private volatile ByteBufferFlux flux;
-  // private volatile MessageSubscription subscription;
+  private final EmitterProcessor<ByteBuffer> processor = EmitterProcessor.create();
+  private final FluxSink<ByteBuffer> sink = processor.sink();
 
-  /**
-   * Starts inbound.
-   *
-   * @return success result
-   */
-  public Mono<Void> start() {
-    return Mono.defer(
-        () -> {
-          DataMessageProcessor messageProcessor = new DataMessageProcessor();
+  private final MonoProcessor<Void> dispose = MonoProcessor.create();
+  private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
-          flux = new ByteBufferFlux(messageProcessor);
+  /** Constructor. */
+  public DefaultAeronInbound() {
+    dispose
+        .then(doDispose())
+        .doFinally(s -> onDispose.onComplete())
+        .subscribe(
+            null,
+            th -> {
+              // no-op
+            });
+  }
 
-          AeronEventLoop eventLoop = resources.nextEventLoop();
-
-          return resources
-              .dataSubscription(
-                  name,
-                  channel,
-                  streamId,
-                  messageProcessor,
-                  eventLoop,
-                  null,
-                  image -> Optional.ofNullable(onCompleteHandler).ifPresent(Runnable::run))
-              .doOnSuccess(
-                  result -> {
-                    messageProcessor.onSubscription(subscription);
-                  })
-              .then();
-        });
+  @Override
+  public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
+    ByteBuffer dstBuffer = ByteBuffer.allocate(length);
+    buffer.getBytes(offset, dstBuffer, length);
+    dstBuffer.flip();
+    sink.next(dstBuffer);
   }
 
   @Override
   public Flux<ByteBuffer> receive() {
-    return flux.takeUntilOther(onDispose());
+    // TODO how to use in conjuction with ByteBufferFlux
+    return processor.onBackpressureBuffer();
   }
 
   @Override
   public void dispose() {
-    if (subscription != null) {
-      subscription.dispose();
-    }
-  }
-
-  @Override
-  public Mono<Void> onDispose() {
-    return subscription != null ? subscription.onDispose() : Mono.empty();
+    dispose.onComplete();
   }
 
   @Override
   public boolean isDisposed() {
-    return subscription != null && subscription.isDisposed();
+    return onDispose.isDisposed();
+  }
+
+  @Override
+  public Mono<Void> onDispose() {
+    return onDispose;
+  }
+
+  private Mono<Void> doDispose() {
+    return Mono.fromRunnable(sink::complete);
   }
 }
