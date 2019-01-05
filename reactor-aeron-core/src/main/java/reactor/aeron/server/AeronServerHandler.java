@@ -80,7 +80,13 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
                   this::onImageAvailable, /*setup new session*/
                   this::onImageUnavailable /*remove and dispose session*/)
               .thenReturn(this)
-              .doOnSuccess(h -> logger.debug("{} started on: {}", this, inboundChannel));
+              .doOnSuccess(handler -> logger.debug("{} started on: {}", this, inboundChannel))
+              .onErrorResume(
+                  ex -> {
+                    logger.error("{} failed to start on: {}", this, inboundChannel);
+                    dispose();
+                    return onDispose().thenReturn(this);
+                  });
         });
   }
 
@@ -225,7 +231,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
   private Mono<Void> doDispose() {
     return Mono.defer(
         () -> {
-          logger.debug("Disposing {}", this);
+          logger.debug("{} is disposing", this);
           return Mono.whenDelayError(
                   connections
                       .values()
@@ -233,7 +239,11 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
                       .peek(SessionHandler::dispose)
                       .map(SessionHandler::onDispose)
                       .collect(Collectors.toList()))
-              .doFinally(s -> connections.clear());
+              .doFinally(
+                  s -> {
+                    logger.debug("{} disposed", this);
+                    connections.clear();
+                  });
         });
   }
 
@@ -311,12 +321,12 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
     private Mono<Void> doDispose() {
       return Mono.defer(
           () -> {
-            logger.debug("{}: closing {}", Integer.toHexString(sessionId), this);
+            logger.debug("{}: is disposing {}", Integer.toHexString(sessionId), this);
             return Mono.whenDelayError(
                     Mono.fromRunnable(inbound::dispose).then(inbound.onDispose()),
                     Mono.fromRunnable(outbound::dispose).then(outbound.onDispose()))
                 .doFinally(
-                    s -> logger.debug("{}: closed {}", Integer.toHexString(sessionId), this));
+                    s -> logger.debug("{}: disposed {}", Integer.toHexString(sessionId), this));
           });
     }
   }

@@ -18,17 +18,17 @@ public final class AeronServer {
   }
 
   /**
-   * Create aeron server.
+   * Creates {@link AeronServer}.
    *
    * @param resources aeron resources
-   * @return aeron server
+   * @return new {@link AeronServer}
    */
   public static AeronServer create(AeronResources resources) {
     return new AeronServer(new AeronOptions().resources(resources));
   }
 
   /**
-   * Binds aeron server.
+   * Binds {@link AeronServer}.
    *
    * @return mono handle of result
    */
@@ -37,23 +37,23 @@ public final class AeronServer {
   }
 
   /**
-   * Binds aeron server and applies server options.
+   * Binds {@link AeronServer} with options.
    *
-   * @param o unary opearator for performing setup of options
+   * @param op unary opearator for performing setup of options
    * @return mono handle of result
    */
-  public Mono<? extends OnDisposable> bind(UnaryOperator<AeronOptions> o) {
-    return Mono.defer(() -> new AeronServerHandler(o.apply(options)).start());
+  public Mono<? extends OnDisposable> bind(UnaryOperator<AeronOptions> op) {
+    return Mono.defer(() -> new AeronServerHandler(op.apply(options)).start());
   }
 
   /**
-   * Setting up server options.
+   * Setting up {@link AeronServer} options.
    *
-   * @param o unary opearator for performing setup of options
-   * @return aeron server with applied options
+   * @param op unary opearator for performing setup of options
+   * @return new {@link AeronServer} with applied options
    */
-  public AeronServer options(UnaryOperator<AeronOptions> o) {
-    return new AeronServer(o.apply(options));
+  public AeronServer options(UnaryOperator<AeronOptions> op) {
+    return new AeronServer(op.apply(options));
   }
 
   /**
@@ -61,7 +61,7 @@ public final class AeronServer {
    *
    * @param handler IO handler that can dispose underlying connection when {@link Publisher}
    *     terminates.
-   * @return new {@link AeronServer}
+   * @return new {@link AeronServer} with handler
    */
   public AeronServer handle(Function<? super Connection, ? extends Publisher<Void>> handler) {
     return new AeronServer(options.handler(handler));

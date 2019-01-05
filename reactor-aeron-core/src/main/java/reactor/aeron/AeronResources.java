@@ -5,7 +5,6 @@ import io.aeron.Aeron.Context;
 import io.aeron.ExclusivePublication;
 import io.aeron.FragmentAssembler;
 import io.aeron.Image;
-import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
 import io.aeron.logbuffer.FragmentHandler;
@@ -17,7 +16,6 @@ import org.agrona.CloseHelper;
 import org.agrona.IoUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
@@ -44,11 +42,12 @@ public class AeronResources implements OnDisposable {
     start
         .doOnTerminate(this::doStart)
         .subscribe(
-            avoid -> logger.info("{} has started", this),
+            null,
             th -> {
-              logger.error("{} failed to start, cause: {}", this, th);
+              logger.error("{} failed to start, cause: {}", this, th.toString());
               dispose();
-            });
+            },
+            () -> logger.info("{} started", this));
 
     dispose
         .then(doDispose())
@@ -259,7 +258,7 @@ public class AeronResources implements OnDisposable {
   private Mono<Void> doDispose() {
     return Mono.defer(
         () -> {
-          logger.info("{} shutdown initiated", this);
+          logger.info("{} shutting down", this);
 
           eventLoopGroup.dispose();
 
@@ -273,7 +272,7 @@ public class AeronResources implements OnDisposable {
                         .map(MediaDriver::context)
                         .ifPresent(context -> IoUtil.delete(context.aeronDirectory(), true));
 
-                    logger.info("{} shutdown complete", this);
+                    logger.info("{} has shutdown", this);
                   });
         });
   }
