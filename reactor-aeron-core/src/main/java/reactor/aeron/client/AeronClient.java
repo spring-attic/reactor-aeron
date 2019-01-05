@@ -20,7 +20,7 @@ public final class AeronClient {
    * Creates {@link AeronClient}.
    *
    * @param resources aeron resources
-   * @return new {@link AeronClient}
+   * @return new {@code AeronClient}
    */
   public static AeronClient create(AeronResources resources) {
     return new AeronClient(new AeronOptions().resources(resources));
@@ -52,10 +52,7 @@ public final class AeronClient {
 
           return clientConnector
               .start()
-              .doOnError(
-                  ex -> {
-                    clientConnector.dispose();
-                  })
+              .doOnError(ex -> clientConnector.dispose())
               .doOnSuccess(
                   connection -> {
                     settings
@@ -64,10 +61,7 @@ public final class AeronClient {
                         .subscribe(connection.disposeSubscriber());
                     connection
                         .onDispose()
-                        .doFinally(
-                            s -> {
-                              clientConnector.dispose();
-                            })
+                        .doFinally(s -> clientConnector.dispose())
                         .subscribe(
                             null,
                             th -> {
@@ -81,7 +75,7 @@ public final class AeronClient {
    * Setting up {@link AeronClient} options.
    *
    * @param op unary opearator for performing setup of options
-   * @return new {@link AeronClient} with applied options
+   * @return new {@code AeronClient} with applied options
    */
   public AeronClient options(UnaryOperator<AeronOptions> op) {
     return new AeronClient(op.apply(options));
@@ -92,7 +86,7 @@ public final class AeronClient {
    *
    * @param handler IO handler that can dispose underlying connection when {@link Publisher}
    *     terminates.
-   * @return new {@link AeronClient} with handler
+   * @return new {@code AeronClient} with handler
    */
   public AeronClient handle(Function<? super Connection, ? extends Publisher<Void>> handler) {
     return new AeronClient(options.handler(handler));

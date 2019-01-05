@@ -21,7 +21,7 @@ public final class AeronServer {
    * Creates {@link AeronServer}.
    *
    * @param resources aeron resources
-   * @return new {@link AeronServer}
+   * @return new {@code AeronServer}
    */
   public static AeronServer create(AeronResources resources) {
     return new AeronServer(new AeronOptions().resources(resources));
@@ -50,7 +50,7 @@ public final class AeronServer {
    * Setting up {@link AeronServer} options.
    *
    * @param op unary opearator for performing setup of options
-   * @return new {@link AeronServer} with applied options
+   * @return new {@code AeronServer} with applied options
    */
   public AeronServer options(UnaryOperator<AeronOptions> op) {
     return new AeronServer(op.apply(options));
@@ -61,7 +61,7 @@ public final class AeronServer {
    *
    * @param handler IO handler that can dispose underlying connection when {@link Publisher}
    *     terminates.
-   * @return new {@link AeronServer} with handler
+   * @return new {@code AeronServer} with handler
    */
   public AeronServer handle(Function<? super Connection, ? extends Publisher<Void>> handler) {
     return new AeronServer(options.handler(handler));
