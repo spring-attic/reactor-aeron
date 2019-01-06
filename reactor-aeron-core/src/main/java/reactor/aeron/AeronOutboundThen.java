@@ -26,6 +26,11 @@ final class AeronOutboundThen implements AeronOutbound {
   }
 
   @Override
+  public AeronOutbound sendString(Publisher<String> dataStream) {
+    return source.sendString(dataStream);
+  }
+
+  @Override
   public Mono<Void> then() {
     return thenMono;
   }

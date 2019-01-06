@@ -65,11 +65,11 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(ByteBufferFlux.from("hello1", "2", "3").log("server"))
+                .send(ByteBufferFlux.fromString("hello1", "2", "3").log("server"))
                 .then(connection.onDispose()));
 
     Connection connection = createConnection();
-    StepVerifier.create(connection.inbound().receiveAsString().log("client"))
+    StepVerifier.create(connection.inbound().receive().asString().log("client"))
         .expectNext("hello1", "2", "3")
         .expectNoEvent(Duration.ofMillis(10))
         .thenCancel()
@@ -86,12 +86,12 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(ByteBufferFlux.from(str, str, str).log("server"))
+                .send(ByteBufferFlux.fromString(str, str, str).log("server"))
                 .then(connection.onDispose()));
 
     Connection connection = createConnection();
 
-    StepVerifier.create(connection.inbound().receiveAsString().log("client"))
+    StepVerifier.create(connection.inbound().receive().asString().log("client"))
         .expectNext(str, str, str)
         .expectNoEvent(Duration.ofMillis(10))
         .thenCancel()
@@ -104,19 +104,19 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(ByteBufferFlux.from("1", "2", "3").log("server"))
+                .send(ByteBufferFlux.fromString("1", "2", "3").log("server"))
                 .then(connection.onDispose()));
 
     Connection connection1 = createConnection();
     Connection connection2 = createConnection();
 
-    StepVerifier.create(connection1.inbound().receiveAsString().log("client-1"))
+    StepVerifier.create(connection1.inbound().receive().asString().log("client-1"))
         .expectNext("1", "2", "3")
         .expectNoEvent(Duration.ofMillis(100))
         .thenCancel()
         .verify();
 
-    StepVerifier.create(connection2.inbound().receiveAsString().log("client-2"))
+    StepVerifier.create(connection2.inbound().receive().asString().log("client-2"))
         .expectNext("1", "2", "3")
         .expectNoEvent(Duration.ofMillis(100))
         .thenCancel()
@@ -126,16 +126,14 @@ class AeronClientTest extends BaseAeronTest {
   @Test
   public void testClientsReceiveDataFromServer200000() {
     int count = 200_000;
-    Flux<ByteBuffer> payloads =
-        Flux.range(0, count).map(String::valueOf).map(AeronUtils::stringToByteBuffer);
+    Flux<String> payloads = Flux.range(0, count).map(String::valueOf);
 
     createServer(
-        connection ->
-            connection.outbound().send(ByteBufferFlux.from(payloads)).then(connection.onDispose()));
+        connection -> connection.outbound().sendString(payloads).then(connection.onDispose()));
 
     Connection connection1 = createConnection();
 
-    StepVerifier.create(connection1.inbound().receiveAsString())
+    StepVerifier.create(connection1.inbound().receive().asString())
         .expectNextCount(count)
         .expectNoEvent(Duration.ofMillis(100))
         .thenCancel()
@@ -154,13 +152,9 @@ class AeronClientTest extends BaseAeronTest {
 
     Connection connection1 = createConnection();
 
-    connection1
-        .outbound()
-        .send(Flux.range(0, count).map(String::valueOf).map(AeronUtils::stringToByteBuffer))
-        .then()
-        .subscribe();
+    connection1.outbound().sendString(Flux.range(0, count).map(String::valueOf)).then().subscribe();
 
-    StepVerifier.create(connection1.inbound().receiveAsString())
+    StepVerifier.create(connection1.inbound().receive().asString())
         .expectNextCount(count)
         .expectNoEvent(Duration.ofMillis(100))
         .thenCancel()
@@ -181,11 +175,12 @@ class AeronClientTest extends BaseAeronTest {
     Connection connection1 = createConnection();
 
     Flux.range(0, count)
-        .flatMap(i -> connection1.outbound().send(ByteBufferFlux.from("client_send:" + i)).then())
+        .flatMap(
+            i -> connection1.outbound().send(ByteBufferFlux.fromString("client_send:" + i)).then())
         .then()
         .subscribe();
 
-    StepVerifier.create(connection1.inbound().receiveAsString())
+    StepVerifier.create(connection1.inbound().receive().asString())
         .expectNextCount(count)
         .expectNoEvent(Duration.ofMillis(100))
         .thenCancel()
@@ -205,13 +200,13 @@ class AeronClientTest extends BaseAeronTest {
 
     Connection connection1 = createConnection();
     Flux.range(0, count)
-        .flatMap(i -> connection1.outbound().send(ByteBufferFlux.from("client-1 send:" + i)).then())
+        .flatMap(i -> connection1.outbound().sendString(Mono.just("client-1 send:" + i)).then())
         .then()
         .subscribe();
 
     Connection connection2 = createConnection();
     Flux.range(0, count)
-        .flatMap(i -> connection2.outbound().send(ByteBufferFlux.from("client-2 send:" + i)).then())
+        .flatMap(i -> connection2.outbound().sendString(Mono.just("client-2 send:" + i)).then())
         .then()
         .subscribe();
 
@@ -219,12 +214,14 @@ class AeronClientTest extends BaseAeronTest {
             Flux.merge(
                 connection1
                     .inbound()
-                    .receiveAsString()
+                    .receive()
+                    .asString()
                     .take(count)
                     .filter(response -> !response.startsWith("client-1 ")),
                 connection2
                     .inbound()
-                    .receiveAsString()
+                    .receive()
+                    .asString()
                     .take(count)
                     .filter(response -> !response.startsWith("client-2 "))))
         .expectComplete()
@@ -237,7 +234,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(ByteBufferFlux.from("1", "2", "3").log("server"))
+                .send(ByteBufferFlux.fromString("1", "2", "3").log("server"))
                 .then(connection.onDispose()));
 
     ReplayProcessor<String> processor1 = ReplayProcessor.create();
@@ -245,13 +242,13 @@ class AeronClientTest extends BaseAeronTest {
 
     createConnection(
         connection -> {
-          connection.inbound().receiveAsString().log("client-1").subscribe(processor1);
+          connection.inbound().receive().asString().log("client-1").subscribe(processor1);
           return connection.onDispose();
         });
 
     createConnection(
         connection -> {
-          connection.inbound().receiveAsString().log("client-2").subscribe(processor2);
+          connection.inbound().receive().asString().log("client-2").subscribe(processor2);
           return connection.onDispose();
         });
 
@@ -280,7 +277,8 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .inbound()
-                .receiveAsString()
+                .receive()
+                .asString()
                 .doOnNext(clientRequests::onNext)
                 // .log("server receive ")
                 .then(connection.onDispose()));
@@ -292,9 +290,7 @@ class AeronClientTest extends BaseAeronTest {
             int count = start + requestPerStream;
             connection
                 .outbound()
-                .send(
-                    Flux.range(start, count)
-                        .map(n -> AeronUtils.stringToByteBuffer(String.valueOf(n))))
+                .sendString(Flux.range(start, count).map(String::valueOf))
                 .then()
                 .subscribe(null, Throwable::printStackTrace);
           }

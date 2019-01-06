@@ -73,10 +73,10 @@ public class AeronConnectionTest extends BaseAeronTest {
     Connection connection = createConnection();
     connection
         .outbound()
-        .send(
+        .sendString(
             Flux.range(1, 100)
                 .delayElements(Duration.ofSeconds(1))
-                .map(i -> AeronUtils.stringToByteBuffer("" + i))
+                .map(String::valueOf)
                 .log("send"))
         .then()
         .subscribe();
@@ -98,7 +98,7 @@ public class AeronConnectionTest extends BaseAeronTest {
                 connection
                     .outbound()
                     .send(
-                        ByteBufferFlux.from("hello1", "2", "3")
+                        ByteBufferFlux.fromString("hello1", "2", "3")
                             .delayElements(Duration.ofSeconds(1))
                             .log("server1"))
                     .then(connection.onDispose()));
@@ -112,7 +112,7 @@ public class AeronConnectionTest extends BaseAeronTest {
     CountDownLatch latch = new CountDownLatch(1);
     connection.onDispose().doOnSuccess(aVoid -> latch.countDown()).subscribe();
 
-    connection.inbound().receiveAsString().log("client").subscribe(processor);
+    connection.inbound().receive().asString().log("client").subscribe(processor);
 
     processor.take(1).blockLast(Duration.ofSeconds(4));
 

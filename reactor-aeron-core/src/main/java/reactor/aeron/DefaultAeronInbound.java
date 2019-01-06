@@ -17,7 +17,6 @@ public final class DefaultAeronInbound implements AeronInbound, FragmentHandler,
   private final MonoProcessor<Void> dispose = MonoProcessor.create();
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
-  /** Constructor. */
   public DefaultAeronInbound() {
     dispose
         .then(doDispose())

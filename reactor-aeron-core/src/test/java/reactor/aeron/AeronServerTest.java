@@ -51,13 +51,13 @@ class AeronServerTest extends BaseAeronTest {
 
     createServer(
         connection -> {
-          connection.inbound().receiveAsString().log("receive").subscribe(processor);
+          connection.inbound().receive().asString().log("receive").subscribe(processor);
           return connection.onDispose();
         });
 
     createConnection()
         .outbound()
-        .send(ByteBufferFlux.from("Hello", "world!").log("send"))
+        .send(ByteBufferFlux.fromString("Hello", "world!").log("send"))
         .then()
         .subscribe();
 
@@ -77,10 +77,10 @@ class AeronServerTest extends BaseAeronTest {
 
     createConnection()
         .outbound()
-        .send(
+        .sendString(
             Flux.range(1, 100)
                 .delayElements(Duration.ofSeconds(1))
-                .map(i -> AeronUtils.stringToByteBuffer("" + i))
+                .map(String::valueOf)
                 .log("send"))
         .then()
         .subscribe();

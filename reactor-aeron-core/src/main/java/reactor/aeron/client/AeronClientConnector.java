@@ -57,25 +57,24 @@ public final class AeronClientConnector {
                     DefaultAeronInbound inbound = new DefaultAeronInbound();
                     DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
 
-                    Mono<MessageSubscription> subscriptionMono =
-                        resources
-                            .subscription(
-                                inboundChannel,
-                                inbound,
-                                image -> {
-                                  // TODO image avaliablae -- good , probalbly log it and that's it
-                                },
-                                image -> {
-                                  // TODO image unavalablei -- dispose entire connection (along with
-                                  //  inbound/outbound/ and publication)
-                                })
-                            .doOnError(
-                                th -> {
-                                  // TODO dispose eveytihngf craetedf  previosusly
-                                });
-
-                    return subscriptionMono.map(
-                        subscription -> new DefaultAeronConnection(sessionId, inbound, outbound));
+                    return resources
+                        .subscription(
+                            inboundChannel,
+                            inbound,
+                            image -> {
+                              // TODO image avaliablae -- good , probalbly log it and that's it
+                            },
+                            image -> {
+                              // TODO image unavalablei -- dispose entire connection (along with
+                              //  inbound/outbound/ and publication)
+                            })
+                        .doOnError(
+                            th -> {
+                              // TODO dispose eveytihngf craetedf  previosusly
+                            })
+                        .map(
+                            subscription ->
+                                new DefaultAeronConnection(sessionId, inbound, outbound));
                   });
         });
   }

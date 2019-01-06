@@ -22,10 +22,14 @@ public final class ByteBufferFlux extends FluxOperator<ByteBuffer, ByteBuffer> {
   }
 
   public Flux<String> asString() {
-    return map(AeronUtils::byteBufferToString);
+    return map(buffer -> buffer.asCharBuffer().toString());
   }
 
-  public static ByteBufferFlux from(String... data) {
-    return new ByteBufferFlux(Flux.fromArray(data).map(AeronUtils::stringToByteBuffer));
+  public static ByteBufferFlux fromString(String... data) {
+    return new ByteBufferFlux(Flux.fromArray(data).map(String::getBytes).map(ByteBuffer::wrap));
+  }
+
+  public static ByteBufferFlux fromString(Publisher<String> source) {
+    return new ByteBufferFlux(Flux.from(source).map(String::getBytes).map(ByteBuffer::wrap));
   }
 }

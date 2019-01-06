@@ -2,6 +2,7 @@ package reactor.aeron;
 
 import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
@@ -25,6 +26,11 @@ public final class DefaultAeronOutbound implements AeronOutbound, OnDisposable {
   @Override
   public AeronOutbound send(Publisher<? extends ByteBuffer> dataStream) {
     return then(sequencer.write(dataStream));
+  }
+
+  @Override
+  public AeronOutbound sendString(Publisher<String> dataStream) {
+    return send(Flux.from(dataStream).map(String::getBytes).map(ByteBuffer::wrap));
   }
 
   @Override
