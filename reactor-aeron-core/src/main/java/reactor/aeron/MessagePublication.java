@@ -153,6 +153,25 @@ public final class MessagePublication implements OnDisposable {
     }
   }
 
+  /**
+   * Delegates to {@link Publication#sessionId()}
+   *
+   * @return aeron {@code Publication} sessionId.
+   */
+  public int sessionId() {
+    return publication.sessionId();
+  }
+
+  /**
+   * Delegates to {@link Publication#isClosed()}.
+   *
+   * @return {@code true} if aeron {@code Publication} is closed, {@code false} otherwise
+   */
+  @Override
+  public boolean isDisposed() {
+    return publication.isClosed();
+  }
+
   @Override
   public void dispose() {
     eventLoop
@@ -165,23 +184,8 @@ public final class MessagePublication implements OnDisposable {
   }
 
   @Override
-  public boolean isDisposed() {
-    return publication.isClosed();
-  }
-
-  @Override
   public Mono<Void> onDispose() {
     return onDispose;
-  }
-
-  private void disposePublishTasks() {
-    for (; ; ) {
-      PublishTask task = publishTasks.poll();
-      if (task == null) {
-        break;
-      }
-      task.error(AeronExceptions.failWithCancel("PublishTask has cancelled"));
-    }
   }
 
   /**
@@ -214,6 +218,16 @@ public final class MessagePublication implements OnDisposable {
                 ? Mono.empty()
                 : Mono.error(
                     AeronExceptions.failWithPublication("aeron.Publication is not connected")));
+  }
+
+  private void disposePublishTasks() {
+    for (; ; ) {
+      PublishTask task = publishTasks.poll();
+      if (task == null) {
+        break;
+      }
+      task.error(AeronExceptions.failWithCancel("PublishTask has cancelled"));
+    }
   }
 
   @Override

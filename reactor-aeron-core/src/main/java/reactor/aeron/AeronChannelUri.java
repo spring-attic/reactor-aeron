@@ -231,7 +231,7 @@ public final class AeronChannelUri {
   }
 
   /**
-   * {@link ChannelUriStringBuilder#initialPosition(long, int, int)}.
+   * Delegates to {@link ChannelUriStringBuilder#initialPosition(long, int, int)}.
    *
    * @param position position
    * @param initialTermId initialTermId

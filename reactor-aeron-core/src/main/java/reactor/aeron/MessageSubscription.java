@@ -1,5 +1,6 @@
 package reactor.aeron;
 
+import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.logbuffer.FragmentHandler;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
@@ -88,6 +89,11 @@ public final class MessageSubscription implements org.reactivestreams.Subscripti
             });
   }
 
+  /**
+   * Delegates to {@link Subscription#isClosed()}.
+   *
+   * @return {@code true} if aeron {@code Subscription} is closed, {@code false} otherwise
+   */
   @Override
   public boolean isDisposed() {
     return subscription.isClosed();
