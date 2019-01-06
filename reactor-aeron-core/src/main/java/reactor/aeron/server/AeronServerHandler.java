@@ -50,7 +50,6 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
 
   AeronServerHandler(AeronOptions options) {
     this.options = options;
-
     this.resources = options.resources();
     this.handler = options.handler();
 
@@ -63,7 +62,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
             () -> logger.debug("{} disposed", this));
   }
 
-  public Mono<OnDisposable> start() {
+  Mono<OnDisposable> start() {
     return Mono.defer(
         () -> {
           // Sub(endpoint{address:serverPort})
@@ -100,7 +99,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
 
     if (connection == null) {
       logger.warn(
-          "{}: received message but connection not found (total connections: {})",
+          "{}: received message but server connection not found (total connections: {})",
           Integer.toHexString(sessionId),
           connections.size());
       return;
@@ -127,27 +126,38 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
     // aeron changed contract/semantic around sessionId
     if (connections.containsKey(sessionId)) {
       logger.error(
-          "{}: connection already exists: {}", Integer.toHexString(sessionId), outboundChannel);
+          "{}: server connection already exists: {}",
+          Integer.toHexString(sessionId),
+          outboundChannel);
       return;
     }
 
-    logger.debug("{}: creating connection: {}", Integer.toHexString(sessionId), outboundChannel);
+    logger.debug(
+        "{}: creating server connection: {}", Integer.toHexString(sessionId), outboundChannel);
 
     resources
         .publication(outboundChannel, options)
         .flatMap(MessagePublication::ensureConnected)
-        .doOnSuccess(publication -> setupConnection(sessionId, publication))
+        .map(
+            publication -> {
+              DefaultAeronInbound inbound = new DefaultAeronInbound();
+              DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
+              return new DefaultAeronConnection(sessionId, inbound, outbound, publication);
+            })
+        .doOnSuccess(connection -> setupConnection(sessionId, connection))
         .subscribe(
             null,
             ex ->
                 logger.warn(
-                    "{}: exception occurred on creating connection: {}, cause: {}",
+                    "{}: failed to create server outbound: {}, cause: {}",
                     Integer.toHexString(sessionId),
                     outboundChannel,
                     ex.toString()),
             () ->
                 logger.debug(
-                    "{}: created connection: {}", Integer.toHexString(sessionId), outboundChannel));
+                    "{}: created server connection: {}",
+                    Integer.toHexString(sessionId),
+                    outboundChannel));
   }
 
   /**
@@ -161,28 +171,22 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
     Connection connection = connections.remove(sessionId);
 
     if (connection != null) {
+      logger.debug("{}: server inbound became unavailable", Integer.toHexString(sessionId));
       connection.dispose();
       logger.debug(
-          "{}: removed and disposed connection: {}", Integer.toHexString(sessionId), connection);
+          "{}: removed and disposed server connection: {}",
+          Integer.toHexString(sessionId),
+          connection);
     } else {
       logger.debug(
-          "{}: attempt to remove connection but it wasn't found (total connections: {})",
+          "{}: attempt to remove server connection but it wasn't found (total connections: {})",
           Integer.toHexString(sessionId),
           connections.size());
     }
   }
 
-  /**
-   * Creates and setting up {@link Connection}.
-   *
-   * @param sessionId session id
-   * @param publication MDC message publication aka <i>server-side-individual-MDC</i>
-   */
-  private void setupConnection(int sessionId, MessagePublication publication) {
-    DefaultAeronInbound inbound = new DefaultAeronInbound();
-    DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
-    Connection connection = new DefaultAeronConnection(sessionId, inbound, outbound);
-
+  private void setupConnection(int sessionId, DefaultAeronConnection connection) {
+    // store
     connections.put(sessionId, connection);
 
     // register cleanup hook
@@ -196,9 +200,9 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
             });
 
     try {
-      handler
-          .apply(connection) // apply handler function
-          .subscribe(connection.disposeSubscriber());
+      if (handler != null && !connection.isDisposed()) {
+        handler.apply(connection).subscribe(connection.disposeSubscriber());
+      }
     } catch (Exception ex) {
       logger.error("{}: unexpected exception occurred on handler.apply(), cause: ", sessionId, ex);
       connection.dispose();
