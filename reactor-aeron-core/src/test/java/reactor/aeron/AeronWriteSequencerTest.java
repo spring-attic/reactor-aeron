@@ -29,13 +29,13 @@ class AeronWriteSequencerTest {
   private static final int PREFETCH = 32;
   private static final int FLUX_REQUESTS = PREFETCH * 4;
 
-  private AeronWriteSequencer aeronWriteSequencer;
+  private AeronWriteSequencerNewImpl aeronWriteSequencer;
   private MessagePublication messagePublication;
 
   @BeforeEach
   void setUp() {
     this.messagePublication = Mockito.mock(MessagePublication.class);
-    this.aeronWriteSequencer = new AeronWriteSequencer(messagePublication);
+    this.aeronWriteSequencer = new AeronWriteSequencerNewImpl(messagePublication);
   }
 
   @Test
