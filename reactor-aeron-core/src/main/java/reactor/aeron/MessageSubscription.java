@@ -1,30 +1,24 @@
 package reactor.aeron;
 
-import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.logbuffer.FragmentHandler;
-import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.core.publisher.Operators;
 
-public final class MessageSubscription implements org.reactivestreams.Subscription, OnDisposable {
+// TODO investigate why org.reactivestreams.Subscription were needed
+public final class MessageSubscription implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(MessageSubscription.class);
 
-  private static final AtomicLongFieldUpdater<MessageSubscription> REQUESTED =
-      AtomicLongFieldUpdater.newUpdater(MessageSubscription.class, "requested");
+  private static final int PREFETCH = 32;
 
   private final AeronEventLoop eventLoop;
-  private final Subscription subscription;
+  private final Subscription subscription; // aeron subscription
   private final FragmentHandler fragmentHandler;
 
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
-
-  @SuppressWarnings("FieldCanBeLocal")
-  private volatile long requested = 0;
 
   /**
    * Constructor for message subscriptino.
@@ -46,25 +40,10 @@ public final class MessageSubscription implements org.reactivestreams.Subscripti
    * @return the number of fragments received
    */
   public int poll() {
-    int r = (int) Math.min(requested, 8);
-    int numOfPolled = 0;
-    if (r > 0) {
-      numOfPolled = subscription.poll(fragmentHandler, r);
-      System.out.println("OK, let's go POLL");
-      if (numOfPolled > 0) {
-        Operators.produced(REQUESTED, this, numOfPolled);
-      }
-    }
-    return numOfPolled;
+    // TODO after removing reactiveStreams.Subscription removed from here:
+    //  r, numOfPolled, requested; investigate why they were needed
+    return subscription.poll(fragmentHandler, PREFETCH);
   }
-
-  @Override
-  public void request(long n) {
-    Operators.addCap(REQUESTED, this, n);
-  }
-
-  @Override
-  public void cancel() {}
 
   /**
    * Closes aeron {@link Subscription}. Can only be called from within {@link AeronEventLoop} worker
