@@ -25,20 +25,26 @@ class AeronClientTest extends BaseAeronTest {
 
   private int serverPort;
   private int serverControlPort;
-  private AeronResources aeronResources;
+  private AeronResources clientResources;
+  private AeronResources serverResources;
 
   @BeforeEach
   void beforeEach() {
     serverPort = SocketUtils.findAvailableUdpPort();
     serverControlPort = SocketUtils.findAvailableUdpPort();
-    aeronResources = AeronResources.start();
+    clientResources = AeronResources.start();
+    serverResources = AeronResources.start();
   }
 
   @AfterEach
   void afterEach() {
-    if (aeronResources != null) {
-      aeronResources.dispose();
-      aeronResources.onDispose().block(TIMEOUT);
+    if (clientResources != null) {
+      clientResources.dispose();
+      clientResources.onDispose().block(TIMEOUT);
+    }
+    if (serverResources != null) {
+      serverResources.dispose();
+      serverResources.onDispose().block(TIMEOUT);
     }
   }
 
@@ -304,7 +310,7 @@ class AeronClientTest extends BaseAeronTest {
 
   private Connection createConnection(
       Function<? super Connection, ? extends Publisher<Void>> handler) {
-    return AeronClient.create(aeronResources)
+    return AeronClient.create(clientResources)
         .options("localhost", serverPort, serverControlPort)
         .handle(handler)
         .connect()
@@ -313,7 +319,7 @@ class AeronClientTest extends BaseAeronTest {
 
   private OnDisposable createServer(
       Function<? super Connection, ? extends Publisher<Void>> handler) {
-    return AeronServer.create(aeronResources)
+    return AeronServer.create(serverResources)
         .options("localhost", serverPort, serverControlPort)
         .handle(handler)
         .bind()

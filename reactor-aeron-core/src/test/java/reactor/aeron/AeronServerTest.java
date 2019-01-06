@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.ByteBuffer;
 import java.time.Duration;
-import java.util.Optional;
 import java.util.function.Function;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,18 +19,27 @@ class AeronServerTest extends BaseAeronTest {
 
   private int serverPort;
   private int serverControlPort;
-  private AeronResources aeronResources;
+  private AeronResources clientResources;
+  private AeronResources serverResources;
 
   @BeforeEach
   void beforeEach() {
     serverPort = SocketUtils.findAvailableUdpPort();
     serverControlPort = SocketUtils.findAvailableUdpPort();
-    aeronResources = AeronResources.start(AeronResourcesConfig.builder().build());
+    clientResources = AeronResources.start();
+    serverResources = AeronResources.start();
   }
 
   @AfterEach
   void afterEach() {
-    Optional.ofNullable(aeronResources).ifPresent(AeronResources::dispose);
+    if (clientResources != null) {
+      clientResources.dispose();
+      clientResources.onDispose().block(TIMEOUT);
+    }
+    if (serverResources != null) {
+      serverResources.dispose();
+      serverResources.onDispose().block(TIMEOUT);
+    }
   }
 
   @Test
@@ -84,7 +92,7 @@ class AeronServerTest extends BaseAeronTest {
   }
 
   private Connection createConnection() {
-    return AeronClient.create(aeronResources)
+    return AeronClient.create(clientResources)
         .options("localhost", serverPort, serverControlPort)
         .connect()
         .block(TIMEOUT);
@@ -92,7 +100,7 @@ class AeronServerTest extends BaseAeronTest {
 
   private OnDisposable createServer(
       Function<? super Connection, ? extends Publisher<Void>> handler) {
-    return AeronServer.create(aeronResources)
+    return AeronServer.create(serverResources)
         .options("localhost", serverPort, serverControlPort)
         .handle(handler)
         .bind()

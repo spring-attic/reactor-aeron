@@ -1,6 +1,8 @@
 package reactor.aeron;
 
 import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.StandardCharsets;
 import org.reactivestreams.Publisher;
 import reactor.core.CoreSubscriber;
 import reactor.core.publisher.Flux;
@@ -22,14 +24,16 @@ public final class ByteBufferFlux extends FluxOperator<ByteBuffer, ByteBuffer> {
   }
 
   public Flux<String> asString() {
-    return map(buffer -> buffer.asCharBuffer().toString());
+    return map(buffer -> StandardCharsets.UTF_8.decode(buffer).toString());
   }
 
   public static ByteBufferFlux fromString(String... data) {
-    return new ByteBufferFlux(Flux.fromArray(data).map(String::getBytes).map(ByteBuffer::wrap));
+    return new ByteBufferFlux(
+        Flux.fromArray(data).map(s -> s.getBytes(StandardCharsets.UTF_8)).map(ByteBuffer::wrap));
   }
 
   public static ByteBufferFlux fromString(Publisher<String> source) {
-    return new ByteBufferFlux(Flux.from(source).map(String::getBytes).map(ByteBuffer::wrap));
+    return new ByteBufferFlux(
+        Flux.from(source).map(s -> s.getBytes(StandardCharsets.UTF_8)).map(ByteBuffer::wrap));
   }
 }
