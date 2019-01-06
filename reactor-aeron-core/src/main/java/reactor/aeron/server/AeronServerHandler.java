@@ -3,7 +3,6 @@ package reactor.aeron.server;
 import io.aeron.Image;
 import io.aeron.logbuffer.FragmentHandler;
 import io.aeron.logbuffer.Header;
-import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -135,11 +134,8 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
     logger.debug(
         "{}: creating sessionHandler: {}", Integer.toHexString(sessionId), outboundChannel);
 
-    Duration connectTimeout = options.connectTimeout();
-    Duration backpressureTimeout = options.backpressureTimeout();
-
     resources
-        .publication(outboundChannel, connectTimeout, backpressureTimeout)
+        .publication(outboundChannel, options)
         .flatMap(MessagePublication::ensureConnected)
         .doOnSuccess(publication -> setupConnection(sessionId, publication))
         .subscribe(

@@ -9,8 +9,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.Operators;
 
-public final class MessageSubscription
-    implements org.reactivestreams.Subscription, OnDisposable, AutoCloseable {
+public final class MessageSubscription implements org.reactivestreams.Subscription, OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(MessageSubscription.class);
 
@@ -65,7 +64,7 @@ public final class MessageSubscription
   @Override
   public void cancel() {}
 
-  @Override
+  /** TODO wrote sometghign meaninglful */
   public void close() {
     if (!eventLoop.inEventLoop()) {
       throw new IllegalStateException("Can only close aeron subscription from within event loop");

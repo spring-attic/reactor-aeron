@@ -4,6 +4,7 @@ import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.Queue;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
 import org.agrona.concurrent.UnsafeBuffer;
@@ -13,7 +14,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.MonoSink;
 
-public final class MessagePublication implements OnDisposable, AutoCloseable {
+public final class MessagePublication implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(MessagePublication.class);
 
@@ -23,9 +24,9 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
   private final AeronEventLoop eventLoop;
   private final Duration connectTimeout;
   private final Duration backpressureTimeout;
+  private final Duration adminActionTimeout;
 
-  private final ManyToOneConcurrentLinkedQueue<PublishTask> publishTasks =
-      new ManyToOneConcurrentLinkedQueue<>();
+  private final Queue<PublishTask> publishTasks = new ManyToOneConcurrentLinkedQueue<>();
 
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
@@ -33,18 +34,14 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
    * Constructor.
    *
    * @param publication publication
-   * @param connectTimeout connect timeout
-   * @param backpressureTimeout backpressure timeout
+   * @param options aeron options
    */
-  MessagePublication(
-      Publication publication,
-      AeronEventLoop eventLoop,
-      Duration connectTimeout,
-      Duration backpressureTimeout) {
+  MessagePublication(Publication publication, AeronEventLoop eventLoop, AeronOptions options) {
     this.publication = publication;
     this.eventLoop = eventLoop;
-    this.connectTimeout = connectTimeout;
-    this.backpressureTimeout = backpressureTimeout;
+    this.connectTimeout = options.connectTimeout();
+    this.backpressureTimeout = options.backpressureTimeout();
+    this.adminActionTimeout = options.adminActionTimeout();
   }
 
   /**
@@ -124,10 +121,10 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
     // Handle admin action
     if (result == Publication.ADMIN_ACTION) {
-      if (task.isTimeoutElapsed(connectTimeout)) {
+      if (task.isTimeoutElapsed(adminActionTimeout)) {
         logger.warn(
             "aeron.Publication failed to resolve ADMIN_ACTION within {} ms, {}",
-            connectTimeout.toMillis(),
+            adminActionTimeout.toMillis(),
             this);
         ex = AeronExceptions.failWithPublication("Failed to resolve ADMIN_ACTION within timeout");
       }
@@ -142,7 +139,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     return 0;
   }
 
-  @Override
+  /** TODO wrote sometghign meaninglful */
   public void close() {
     if (!eventLoop.inEventLoop()) {
       throw new IllegalStateException("Can only close aeron publication from within event loop");
@@ -187,6 +184,13 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     }
   }
 
+  /**
+   * Spins (in async fashion) until {@link Publication#isConnected()} would have returned {@code
+   * true} or {@code connectTimeout} elapsed. See also {@link
+   * MessagePublication#ensureConnected0()}.
+   *
+   * @return mono result
+   */
   public Mono<MessagePublication> ensureConnected() {
     return Mono.defer(
         () -> {

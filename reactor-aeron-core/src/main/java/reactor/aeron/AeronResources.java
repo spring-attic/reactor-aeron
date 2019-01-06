@@ -9,7 +9,6 @@ import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
 import io.aeron.logbuffer.FragmentHandler;
 import java.io.File;
-import java.time.Duration;
 import java.util.Optional;
 import java.util.function.Consumer;
 import org.agrona.CloseHelper;
@@ -118,13 +117,10 @@ public class AeronResources implements OnDisposable {
    * Result message publication will be assigned to event loop.
    *
    * @param channel aeron channel
-   * @param connectTimeout connect timeout
-   * @param backpressureTimeout backpressure timeout
+   * @param options aeorn options
    * @return mono result
    */
-  public Mono<MessagePublication> publication(
-      String channel, Duration connectTimeout, Duration backpressureTimeout) {
-
+  public Mono<MessagePublication> publication(String channel, AeronOptions options) {
     return Mono.defer(
         () -> {
           AeronEventLoop eventLoop = this.nextEventLoop();
@@ -142,8 +138,7 @@ public class AeronResources implements OnDisposable {
                   aeronPublication ->
                       eventLoop
                           .registerPublication(
-                              new MessagePublication(
-                                  aeronPublication, eventLoop, connectTimeout, backpressureTimeout))
+                              new MessagePublication(aeronPublication, eventLoop, options))
                           .doOnError(
                               ex -> {
                                 logger.error(
@@ -180,7 +175,6 @@ public class AeronResources implements OnDisposable {
       FragmentHandler fragmentHandler,
       Consumer<Image> availableImageHandler,
       Consumer<Image> unavailableImageHandler) {
-
     return Mono.defer(
         () -> {
           AeronEventLoop eventLoop = this.nextEventLoop();
