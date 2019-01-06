@@ -19,19 +19,13 @@ public class ClientDemo {
     try {
       connection =
           AeronClient.create(aeronResources)
-              .options(
-                  options -> {
-                    options.serverChannel(
-                        channel -> channel.media("udp").reliable(true).endpoint("localhost:13000"));
-                    options.clientChannel(
-                        channel -> channel.media("udp").reliable(true).endpoint("localhost:12001"));
-                  })
+              .options("localhost", 13000, 13001)
               .handle(
                   connection1 -> {
                     System.out.println("Handler invoked");
                     return connection1
                         .outbound()
-                        .send(ByteBufferFlux.from("Hello", "world!").log("send"))
+                        .send(ByteBufferFlux.fromString("Hello", "world!").log("send"))
                         .then(connection1.onDispose());
                   })
               .connect()

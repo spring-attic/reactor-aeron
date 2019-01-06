@@ -7,8 +7,8 @@ import org.reactivestreams.Publisher;
 
 /**
  * Immutable wrapper around options for full-duplex aeron <i>connection</i> between client and
- * server. Note, it's mandatory to set {@code resources}, {@code handler}, {@code inboundUri} and
- * {@code outboundUri}, everything rest may come with defaults.
+ * server. Note, it's mandatory to set {@code resources}, {@code inboundUri} and {@code
+ * outboundUri}, everything rest may come with defaults.
  */
 public final class AeronOptions {
 
@@ -57,8 +57,8 @@ public final class AeronOptions {
     return inboundUri;
   }
 
-  public void inboundUri(AeronChannelUri inboundUri) {
-    set(s -> s.inboundUri = inboundUri);
+  public AeronOptions inboundUri(AeronChannelUri inboundUri) {
+    return set(s -> s.inboundUri = inboundUri);
   }
 
   public AeronChannelUri outboundUri() {

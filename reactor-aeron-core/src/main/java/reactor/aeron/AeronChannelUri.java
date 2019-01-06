@@ -16,10 +16,10 @@ public final class AeronChannelUri {
   private String endpoint; // endpoint right away (preferred if set)
   private String controlEndpoint; // control endpoint right away (preferred if set)
   private Integer mtu; // zero
-  private String controlMode = CommonContext.MDC_CONTROL_MODE_DYNAMIC; // dynamic
+  private String controlMode;
   private Integer sessionId;
   private String media = CommonContext.UDP_MEDIA; // udp
-  private Boolean reliable = true; // reliable is true
+  private Boolean reliable = Boolean.TRUE; // reliable is true
   private Integer ttl; // multicast setting
   private Integer termOffset;
   private Integer termLength;
@@ -114,8 +114,12 @@ public final class AeronChannelUri {
     return controlMode;
   }
 
-  public AeronChannelUri controlMode(String controlMode) {
-    return set(u -> u.controlMode = controlMode);
+  public AeronChannelUri controlModeDynamic() {
+    return set(u -> u.controlMode = CommonContext.MDC_CONTROL_MODE_DYNAMIC);
+  }
+
+  public AeronChannelUri controlModeManual() {
+    return set(u -> u.controlMode = CommonContext.MDC_CONTROL_MODE_MANUAL);
   }
 
   public Integer sessionId() {

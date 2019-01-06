@@ -3,6 +3,7 @@ package reactor.aeron.server;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import org.reactivestreams.Publisher;
+import reactor.aeron.AeronChannelUri;
 import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
@@ -54,6 +55,31 @@ public final class AeronServer {
    */
   public AeronServer options(UnaryOperator<AeronOptions> op) {
     return new AeronServer(op.apply(options));
+  }
+
+  /**
+   * Shortcut server settings.
+   *
+   * <p>Combination {@code address} + {@code port} shall create {@code inbound} server side entity,
+   * by turn combination {@code address} + {@code controlPort} will result in {@code outbound}
+   * server side component.
+   *
+   * @param address server address
+   * @param port server port
+   * @param controlPort server control port
+   * @return new {@code AeronServer} with applied options
+   */
+  public AeronServer options(String address, int port, int controlPort) {
+    return new AeronServer(options)
+        .options(
+            opts -> {
+              AeronChannelUri inboundUri = opts.inboundUri();
+              AeronChannelUri outboundUri = opts.outboundUri();
+              return opts //
+                  .inboundUri(inboundUri.endpoint(address, port))
+                  .outboundUri(
+                      outboundUri.controlModeDynamic().controlEndpoint(address, controlPort));
+            });
   }
 
   /**

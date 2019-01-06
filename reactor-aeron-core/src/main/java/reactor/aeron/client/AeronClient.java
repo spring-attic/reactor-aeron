@@ -3,6 +3,7 @@ package reactor.aeron.client;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import org.reactivestreams.Publisher;
+import reactor.aeron.AeronChannelUri;
 import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
@@ -79,6 +80,26 @@ public final class AeronClient {
    */
   public AeronClient options(UnaryOperator<AeronOptions> op) {
     return new AeronClient(op.apply(options));
+  }
+
+  /**
+   * Shortcut client settings.
+   *
+   * @param address server address
+   * @param port server port
+   * @param controlPort server control port
+   * @return new {@code AeronClient} with applied options
+   */
+  public AeronClient options(String address, int port, int controlPort) {
+    return new AeronClient(options)
+        .options(
+            opts -> {
+              AeronChannelUri inboundUri = opts.inboundUri();
+              AeronChannelUri outboundUri = opts.outboundUri();
+              return opts //
+                  .inboundUri(inboundUri.controlModeDynamic().controlEndpoint(address, port))
+                  .outboundUri(outboundUri.endpoint(address, controlPort));
+            });
   }
 
   /**
