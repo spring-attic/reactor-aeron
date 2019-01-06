@@ -32,7 +32,9 @@ public interface AeronOutbound extends Publisher<Void> {
    *
    * @return a {@link Mono} of pending outbound(s) write completion
    */
-  Mono<Void> then();
+  default Mono<Void> then() {
+    return Mono.empty();
+  }
 
   /**
    * Append a {@link Publisher} task such as a Mono and return a new {@link AeronOutbound} to

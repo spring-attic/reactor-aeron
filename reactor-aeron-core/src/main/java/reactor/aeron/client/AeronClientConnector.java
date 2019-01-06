@@ -1,5 +1,7 @@
 package reactor.aeron.client;
 
+import java.util.function.Function;
+import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.aeron.AeronOptions;
@@ -9,8 +11,9 @@ import reactor.aeron.DefaultAeronConnection;
 import reactor.aeron.DefaultAeronInbound;
 import reactor.aeron.DefaultAeronOutbound;
 import reactor.aeron.MessagePublication;
-import reactor.aeron.MessageSubscription;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoProcessor;
 
 /**
  * Full-duplex aeron client connector. Schematically can be described as:
@@ -20,16 +23,18 @@ import reactor.core.publisher.Mono;
  * serverPort->outbound->Pub(endpoint, sessionId)
  * serverControlPort->inbound->MDC(sessionId)->Sub(control-endpoint, sessionId)</pre>
  */
-public final class AeronClientConnector {
+final class AeronClientConnector {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronClientConnector.class);
 
   private final AeronOptions options;
   private final AeronResources resources;
+  private final Function<? super Connection, ? extends Publisher<Void>> handler;
 
   AeronClientConnector(AeronOptions options) {
     this.options = options;
     this.resources = options.resources();
+    this.handler = options.handler();
   }
 
   /**
@@ -37,11 +42,11 @@ public final class AeronClientConnector {
    *
    * @return mono result
    */
-  public Mono<Connection> start() {
+  Mono<Connection> start() {
     return Mono.defer(
         () -> {
           // outbound->Pub(endpoint, sessionId)
-          String outboundChannel = options.outboundUri().toString();
+          String outboundChannel = options.outboundUri().asString();
 
           return resources
               .publication(outboundChannel, options)
@@ -50,32 +55,89 @@ public final class AeronClientConnector {
               .flatMap(MessagePublication::ensureConnected)
               .flatMap(
                   publication -> {
+                    final DefaultAeronInbound inbound = new DefaultAeronInbound();
+                    final DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
+
                     // inbound->MDC(sessionId)->Sub(control-endpoint, sessionId)
                     int sessionId = publication.sessionId();
-                    String inboundChannel = options.inboundUri().sessionId(sessionId).toString();
+                    String inboundChannel = options.inboundUri().sessionId(sessionId).asString();
+                    logger.debug(
+                        "{}: creating client connection: {}",
+                        Integer.toHexString(sessionId),
+                        inboundChannel);
 
-                    DefaultAeronInbound inbound = new DefaultAeronInbound();
-                    DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
+                    // setup cleanup hook to use it onwards
+                    MonoProcessor<Void> inboundUnavailable = MonoProcessor.create();
 
                     return resources
                         .subscription(
                             inboundChannel,
-                            inbound,
+                            inbound, /*fragmentHandler*/
+                            image ->
+                                logger.debug(
+                                    "{}: created client inbound: {}",
+                                    Integer.toHexString(sessionId),
+                                    inboundChannel),
                             image -> {
-                              // TODO image avaliablae -- good , probalbly log it and that's it
-                            },
-                            image -> {
-                              // TODO image unavalablei -- dispose entire connection (along with
-                              //  inbound/outbound/ and publication)
+                              logger.debug(
+                                  "{}: client inbound became unavaliable",
+                                  Integer.toHexString(sessionId));
+                              inboundUnavailable.onComplete();
                             })
                         .doOnError(
                             th -> {
-                              // TODO dispose eveytihngf craetedf  previosusly
+                              logger.warn(
+                                  "{}: failed to create client inbound: {}, cause: {}",
+                                  Integer.toHexString(sessionId),
+                                  inboundChannel,
+                                  th.toString());
+                              // dispose outbound resource
+                              publication.dispose();
                             })
                         .map(
                             subscription ->
-                                new DefaultAeronConnection(sessionId, inbound, outbound));
+                                new DefaultAeronConnection(
+                                    sessionId, inbound, outbound, subscription, publication))
+                        .doOnSuccess(
+                            connection ->
+                                setupConnection(sessionId, connection, inboundUnavailable))
+                        .doOnSuccess(
+                            connection ->
+                                logger.debug(
+                                    "{}: created client connection: {}",
+                                    Integer.toHexString(sessionId),
+                                    inboundChannel));
                   });
         });
+  }
+
+  private void setupConnection(
+      int sessionId, DefaultAeronConnection connection, MonoProcessor<Void> disposeHook) {
+    // listen shutdown
+    disposeHook
+        .doOnTerminate(connection::dispose)
+        .subscribe(
+            null,
+            th -> {
+              // no-op
+            });
+
+    if (handler == null) {
+      logger.warn("{}: handler function is not specified", Integer.toHexString(sessionId));
+      return;
+    }
+
+    try {
+      if (!connection.isDisposed()) {
+        handler.apply(connection).subscribe(connection.disposeSubscriber());
+      }
+    } catch (Exception ex) {
+      logger.error(
+          "{}: unexpected exception occurred on handler.apply(), cause: ",
+          Integer.toHexString(sessionId),
+          ex);
+      connection.dispose();
+      throw Exceptions.propagate(ex);
+    }
   }
 }

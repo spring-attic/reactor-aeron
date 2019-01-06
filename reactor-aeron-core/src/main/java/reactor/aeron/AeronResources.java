@@ -148,8 +148,7 @@ public class AeronResources implements OnDisposable {
                                 if (!aeronPublication.isClosed()) {
                                   aeronPublication.close();
                                 }
-                              }))
-              .doOnSuccess(p -> logger.debug("{} registered: {}", this, p));
+                              }));
         });
   }
 
@@ -206,8 +205,7 @@ public class AeronResources implements OnDisposable {
                                 if (!aeronSubscription.isClosed()) {
                                   aeronSubscription.close();
                                 }
-                              }))
-              .doOnSuccess(s -> logger.debug("{} registered: {}", this, s));
+                              }));
         });
   }
 
@@ -224,9 +222,6 @@ public class AeronResources implements OnDisposable {
               this,
               Integer.toHexString(image.sessionId()),
               image.sourceIdentity());
-          if (availableImageHandler != null) {
-            availableImageHandler.accept(image);
-          }
           Optional.ofNullable(availableImageHandler).ifPresent(c -> c.accept(image));
         },
         image -> {
@@ -261,8 +256,10 @@ public class AeronResources implements OnDisposable {
               .doFinally(
                   s -> {
                     CloseHelper.quietClose(aeron);
+
                     CloseHelper.quietClose(mediaDriver);
-                    Optional.ofNullable(mediaDriver) //
+
+                    Optional.ofNullable(mediaDriver)
                         .map(MediaDriver::context)
                         .ifPresent(context -> IoUtil.delete(context.aeronDirectory(), true));
 

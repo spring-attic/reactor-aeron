@@ -50,6 +50,7 @@ public final class MessageSubscription implements org.reactivestreams.Subscripti
     int numOfPolled = 0;
     if (r > 0) {
       numOfPolled = subscription.poll(fragmentHandler, r);
+      System.out.println("OK, let's go POLL");
       if (numOfPolled > 0) {
         Operators.produced(REQUESTED, this, numOfPolled);
       }
@@ -65,7 +66,13 @@ public final class MessageSubscription implements org.reactivestreams.Subscripti
   @Override
   public void cancel() {}
 
-  /** TODO wrote sometghign meaninglful */
+  /**
+   * Closes aeron {@link Subscription}. Can only be called from within {@link AeronEventLoop} worker
+   * thred.
+   *
+   * <p><b>NOTE:</b> this method is not for public client (despite it was declared with {@code
+   * public} signifier).
+   */
   public void close() {
     if (!eventLoop.inEventLoop()) {
       throw new IllegalStateException("Can only close aeron subscription from within event loop");
@@ -106,6 +113,6 @@ public final class MessageSubscription implements org.reactivestreams.Subscripti
 
   @Override
   public String toString() {
-    return ""; // TODO implement
+    return "MessageSubscription{sub=" + subscription.channel() + "}";
   }
 }

@@ -74,7 +74,7 @@ public final class MessagePublication implements OnDisposable {
       return 0;
     }
 
-    long result = task.run();
+    long result = task.publish();
     if (result > 0) {
       publishTasks.poll();
       task.success();
@@ -139,7 +139,13 @@ public final class MessagePublication implements OnDisposable {
     return 0;
   }
 
-  /** TODO wrote sometghign meaninglful */
+  /**
+   * Closes aeron {@link Publication}. Can only be called from within {@link AeronEventLoop} worker
+   * thred.
+   *
+   * <p><b>NOTE:</b> this method is not for public client (despite it was declared with {@code
+   * public} signifier).
+   */
   public void close() {
     if (!eventLoop.inEventLoop()) {
       throw new IllegalStateException("Can only close aeron publication from within event loop");
@@ -232,7 +238,7 @@ public final class MessagePublication implements OnDisposable {
 
   @Override
   public String toString() {
-    return ""; // TODO implement
+    return "MessagePublication{pub=" + publication.channel() + "}";
   }
 
   /**
@@ -252,7 +258,7 @@ public final class MessagePublication implements OnDisposable {
       this.sink = sink;
     }
 
-    private long run() {
+    private long publish() {
       if (start == 0) {
         start = System.currentTimeMillis();
       }

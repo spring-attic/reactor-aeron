@@ -22,7 +22,8 @@ public class AeronConnectionTest extends BaseAeronTest {
 
   private int serverPort;
   private int serverControlPort;
-  private AeronResources aeronResources;
+  private AeronResources clientResources;
+  private AeronResources serverResources;
   private Duration imageLivenessTimeout;
 
   @BeforeEach
@@ -30,7 +31,13 @@ public class AeronConnectionTest extends BaseAeronTest {
     serverPort = SocketUtils.findAvailableUdpPort();
     serverControlPort = SocketUtils.findAvailableUdpPort();
     imageLivenessTimeout = Duration.ofSeconds(1);
-    aeronResources =
+    clientResources =
+        AeronResources.start(
+            AeronResourcesConfig //
+                .builder()
+                .imageLivenessTimeout(imageLivenessTimeout)
+                .build());
+    serverResources =
         AeronResources.start(
             AeronResourcesConfig //
                 .builder()
@@ -40,9 +47,13 @@ public class AeronConnectionTest extends BaseAeronTest {
 
   @AfterEach
   void afterEach() {
-    if (aeronResources != null) {
-      aeronResources.dispose();
-      aeronResources.onDispose().block(TIMEOUT);
+    if (clientResources != null) {
+      clientResources.dispose();
+      clientResources.onDispose().block(TIMEOUT);
+    }
+    if (serverResources != null) {
+      serverResources.dispose();
+      serverResources.onDispose().block(TIMEOUT);
     }
   }
 
@@ -70,7 +81,7 @@ public class AeronConnectionTest extends BaseAeronTest {
         .then()
         .subscribe();
 
-    processor.blockFirst();
+    processor.blockFirst(TIMEOUT);
 
     connection.dispose();
 
@@ -215,7 +226,7 @@ public class AeronConnectionTest extends BaseAeronTest {
   }
 
   private Connection createConnection() {
-    return AeronClient.create(aeronResources)
+    return AeronClient.create(clientResources)
         .options("localhost", serverPort, serverControlPort)
         .connect()
         .block(TIMEOUT);
@@ -223,7 +234,7 @@ public class AeronConnectionTest extends BaseAeronTest {
 
   private OnDisposable createServer(
       Function<? super Connection, ? extends Publisher<Void>> handler) {
-    return AeronServer.create(aeronResources)
+    return AeronServer.create(serverResources)
         .options("localhost", serverPort, serverControlPort)
         .handle(handler)
         .bind()

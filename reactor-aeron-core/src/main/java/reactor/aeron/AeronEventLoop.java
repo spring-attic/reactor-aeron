@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.agrona.concurrent.IdleStrategy;
@@ -21,8 +20,6 @@ import reactor.core.publisher.MonoSink;
 public final class AeronEventLoop implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronEventLoop.class);
-
-  private final AtomicInteger workerCounter = new AtomicInteger();
 
   private static final String workerNameFormat = "reactor-aeron-%s-%d";
 
@@ -40,10 +37,12 @@ public final class AeronEventLoop implements OnDisposable {
 
   private final List<MessagePublication> publications = new ArrayList<>();
   private final List<MessageSubscription> subscriptions = new ArrayList<>();
+  private final int i;
 
   private volatile Thread thread;
 
-  AeronEventLoop(IdleStrategy idleStrategy) {
+  AeronEventLoop(int i, IdleStrategy idleStrategy) {
+    this.i = i;
     this.idleStrategy = idleStrategy;
     this.workerMono = Mono.fromCallable(this::createWorker).cache();
   }
@@ -60,10 +59,7 @@ public final class AeronEventLoop implements OnDisposable {
 
   private Worker createWorker() {
     String threadName =
-        String.format(
-            workerNameFormat,
-            Integer.toHexString(System.identityHashCode(this)),
-            workerCounter.incrementAndGet());
+        String.format(workerNameFormat, Integer.toHexString(System.identityHashCode(this)), i);
     ThreadFactory threadFactory = defaultThreadFactory(threadName);
     Worker w = new Worker();
     thread = threadFactory.newThread(w);

@@ -7,7 +7,6 @@ import reactor.core.publisher.Mono;
 final class AeronOutboundThen implements AeronOutbound {
 
   private final Mono<Void> thenMono;
-
   private final AeronOutbound source;
 
   AeronOutboundThen(AeronOutbound source, Publisher<Void> thenPublisher) {
