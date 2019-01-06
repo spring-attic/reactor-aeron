@@ -11,7 +11,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.core.publisher.MonoSink;
 
 public class MessagePublication implements OnDisposable, AutoCloseable {
 
@@ -50,15 +49,17 @@ public class MessagePublication implements OnDisposable, AutoCloseable {
    * @return mono handle
    */
   public Mono<Void> enqueue(ByteBuffer buffer) {
-    return Mono.create(
-        sink -> {
+    return Mono.defer(
+        () -> {
+          MonoProcessor<Void> sink = MonoProcessor.create();
           boolean result = false;
           if (!isDisposed()) {
             result = publishTasks.offer(new PublishTask(buffer, sink));
           }
           if (!result) {
-            sink.error(AeronExceptions.failWithMessagePublicationUnavailable());
+            sink.onError(AeronExceptions.failWithMessagePublicationUnavailable());
           }
+          return sink;
         });
   }
 
@@ -77,6 +78,11 @@ public class MessagePublication implements OnDisposable, AutoCloseable {
     if (result > 0) {
       publishTasks.poll();
       task.success();
+      return 1;
+    }
+
+    if (result == 0) {
+      publishTasks.poll();
       return 1;
     }
 
@@ -200,16 +206,19 @@ public class MessagePublication implements OnDisposable, AutoCloseable {
   private class PublishTask {
 
     private final ByteBuffer msgBody;
-    private final MonoSink<Void> sink;
+    private final MonoProcessor<Void> sink;
 
     private long start;
 
-    private PublishTask(ByteBuffer msgBody, MonoSink<Void> sink) {
+    private PublishTask(ByteBuffer msgBody, MonoProcessor<Void> sink) {
       this.msgBody = msgBody;
       this.sink = sink;
     }
 
     private long run() {
+      if (sink.isDisposed()) {
+        return 0;
+      }
       if (start == 0) {
         start = System.currentTimeMillis();
       }
@@ -242,11 +251,11 @@ public class MessagePublication implements OnDisposable, AutoCloseable {
     }
 
     private void success() {
-      sink.success();
+      sink.onComplete();
     }
 
     private void error(Throwable ex) {
-      sink.error(ex);
+      sink.onError(ex);
     }
   }
 }
