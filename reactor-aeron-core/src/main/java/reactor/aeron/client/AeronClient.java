@@ -43,33 +43,7 @@ public final class AeronClient {
    * @return mono handle of result
    */
   public Mono<? extends Connection> connect(UnaryOperator<AeronOptions> op) {
-    return Mono.defer(() -> connect0(op.apply(options)));
-  }
-
-  private Mono<? extends Connection> connect0(AeronOptions options) {
-    return Mono.defer(
-        () -> {
-          AeronClientConnector clientConnector = new AeronClientConnector(options);
-
-          return clientConnector
-              .start()
-              .doOnError(ex -> clientConnector.dispose())
-              .doOnSuccess(
-                  connection -> {
-                    settings
-                        .handler() //
-                        .apply(connection)
-                        .subscribe(connection.disposeSubscriber());
-                    connection
-                        .onDispose()
-                        .doFinally(s -> clientConnector.dispose())
-                        .subscribe(
-                            null,
-                            th -> {
-                              // no-op
-                            });
-                  });
-        });
+    return Mono.defer(() -> new AeronClientConnector(op.apply(options)).start());
   }
 
   /**
