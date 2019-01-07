@@ -1,7 +1,6 @@
 package reactor.aeron;
 
 import io.aeron.Aeron;
-import io.aeron.Aeron.Context;
 import io.aeron.ExclusivePublication;
 import io.aeron.FragmentAssembler;
 import io.aeron.Image;
@@ -106,7 +105,8 @@ public class AeronResources implements OnDisposable {
               new AeronEventLoopGroup(config.idleStrategySupplier(), config.numOfWorkers());
 
           Runtime.getRuntime()
-              .addShutdownHook(new Thread(() -> deleteAeronDirectory(aeronContext)));
+              .addShutdownHook(
+                  new Thread(() -> deleteAeronDirectory(aeronContext.aeronDirectory())));
 
           logger.info(
               "{} has initialized embedded mediaDriver, aeron directory: {}",
@@ -304,11 +304,10 @@ public class AeronResources implements OnDisposable {
         });
   }
 
-  private void deleteAeronDirectory(Context context) {
-    File file = context.aeronDirectory();
-    if (file.exists()) {
-      IoUtil.delete(file, true);
-      logger.debug("{} deleted aeron directory {}", this, file);
+  private void deleteAeronDirectory(File aeronDirectory) {
+    if (aeronDirectory.exists()) {
+      IoUtil.delete(aeronDirectory, true);
+      logger.debug("{} deleted aeron directory {}", this, aeronDirectory);
     }
   }
 

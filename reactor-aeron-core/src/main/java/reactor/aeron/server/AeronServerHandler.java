@@ -162,8 +162,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
   }
 
   /**
-   * Removes {@link Connection} (and then disposes it) by incoming {@link Image#sessionId()}. See
-   * also {@link Connection#dispose()}.
+   * Disposes {@link Connection} corresponding to {@link Image#sessionId()}.
    *
    * @param image source image
    */
@@ -245,11 +244,13 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
           logger.debug("Aeron server handler is disposing");
           List<Mono<Void>> monos = new ArrayList<>();
 
+          // dispose server acceptor subscription
           monos.add(
               Optional.ofNullable(subscription)
                   .map(s -> Mono.fromRunnable(s::dispose).then(s.onDispose()))
                   .orElse(Mono.empty()));
 
+          // dispose all existing connections
           connections
               .values()
               .stream()
