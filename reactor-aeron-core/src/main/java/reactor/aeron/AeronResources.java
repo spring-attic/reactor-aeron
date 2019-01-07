@@ -242,10 +242,8 @@ public class AeronResources implements OnDisposable {
               Optional.ofNullable(unavailableImageHandler).ifPresent(c -> c.accept(image));
             });
     long endTime = System.nanoTime();
-    logger.debug(
-        "Added subscription for channel {}, spent: {}ns",
-        channel,
-        Duration.ofNanos(endTime - startTime));
+    Duration spent = Duration.ofNanos(endTime - startTime);
+    logger.debug("Added subscription for channel {}, spent: {} ns", channel, spent);
     return subscription;
   }
 
