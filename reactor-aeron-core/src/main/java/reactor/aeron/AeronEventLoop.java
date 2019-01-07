@@ -5,6 +5,7 @@ import io.aeron.Subscription;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadFactory;
@@ -325,7 +326,7 @@ public final class AeronEventLoop implements OnDisposable {
       for (Iterator<MessagePublication> it = publications.iterator(); it.hasNext(); ) {
         MessagePublication p = it.next();
         it.remove();
-        closePublication(p);
+        closePublication(p, null /*sink*/);
       }
     }
 
@@ -333,44 +334,26 @@ public final class AeronEventLoop implements OnDisposable {
       for (Iterator<MessageSubscription> it = subscriptions.iterator(); it.hasNext(); ) {
         MessageSubscription s = it.next();
         it.remove();
-        closeSubscription(s);
+        closeSubscription(s, null /*sink*/);
       }
     }
-  }
-
-  private void closePublication(MessagePublication p) {
-    closePublication(p, null);
   }
 
   private void closePublication(MessagePublication p, MonoSink<Void> sink) {
+    p.close();
     try {
-      p.close();
-      if (sink != null) {
-        sink.success();
-      }
+      Optional.ofNullable(sink).ifPresent(MonoSink::success);
     } catch (Exception ex) {
-      logger.warn("Exception occurred on publication.close(): {}, cause: {}", p, ex.toString());
-      if (sink != null) {
-        sink.error(ex);
-      }
+      sink.error(ex);
     }
   }
 
-  private void closeSubscription(MessageSubscription s) {
-    closeSubscription(s, null);
-  }
-
   private void closeSubscription(MessageSubscription s, MonoSink<Void> sink) {
+    s.close();
     try {
-      s.close();
-      if (sink != null) {
-        sink.success();
-      }
+      Optional.ofNullable(sink).ifPresent(MonoSink::success);
     } catch (Exception ex) {
-      logger.warn("Exception occurred on subscription.close(): {}, cause: {}", s, ex.toString());
-      if (sink != null) {
-        sink.error(ex);
-      }
+      sink.error(ex);
     }
   }
 
