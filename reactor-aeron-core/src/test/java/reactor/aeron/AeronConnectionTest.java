@@ -20,29 +20,22 @@ import reactor.core.publisher.ReplayProcessor;
 
 public class AeronConnectionTest extends BaseAeronTest {
 
+  private static final Duration IMAGE_TIMEOUT = Duration.ofSeconds(1);
+
+  private static final AeronResourcesConfig RESOURCES_CONFIG =
+      AeronResourcesConfig.builder().numOfWorkers(1).imageLivenessTimeout(IMAGE_TIMEOUT).build();
+
   private int serverPort;
   private int serverControlPort;
   private AeronResources clientResources;
   private AeronResources serverResources;
-  private Duration imageLivenessTimeout;
 
   @BeforeEach
   void beforeEach() {
     serverPort = SocketUtils.findAvailableUdpPort();
     serverControlPort = SocketUtils.findAvailableUdpPort();
-    imageLivenessTimeout = Duration.ofSeconds(1);
-    clientResources =
-        AeronResources.start(
-            AeronResourcesConfig //
-                .builder()
-                .imageLivenessTimeout(imageLivenessTimeout)
-                .build());
-    serverResources =
-        AeronResources.start(
-            AeronResourcesConfig //
-                .builder()
-                .imageLivenessTimeout(imageLivenessTimeout)
-                .build());
+    clientResources = AeronResources.start(RESOURCES_CONFIG);
+    serverResources = AeronResources.start(RESOURCES_CONFIG);
   }
 
   @AfterEach
@@ -85,7 +78,7 @@ public class AeronConnectionTest extends BaseAeronTest {
 
     connection.dispose();
 
-    latch.await(imageLivenessTimeout.toMillis(), TimeUnit.MILLISECONDS);
+    latch.await(IMAGE_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
 
     assertEquals(0, latch.getCount());
   }
@@ -116,7 +109,7 @@ public class AeronConnectionTest extends BaseAeronTest {
 
     server.dispose();
 
-    latch.await(imageLivenessTimeout.toMillis(), TimeUnit.MILLISECONDS);
+    latch.await(IMAGE_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
 
     assertEquals(0, latch.getCount());
   }
