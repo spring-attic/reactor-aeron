@@ -5,7 +5,6 @@ import io.aeron.Subscription;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadFactory;
@@ -93,8 +92,7 @@ public final class AeronEventLoop implements OnDisposable {
                 command(
                     sink -> {
                       if (!cancelIfDisposed(sink)) {
-                        Mono.fromSupplier(supplier)
-                            .subscribe(sink::success, sink::error, sink::success);
+                        Mono.fromSupplier(supplier).subscribe(sink::success, sink::error);
                       }
                     }));
   }
@@ -112,8 +110,7 @@ public final class AeronEventLoop implements OnDisposable {
                 command(
                     sink -> {
                       if (!cancelIfDisposed(sink)) {
-                        Mono.fromSupplier(supplier)
-                            .subscribe(sink::success, sink::error, sink::success);
+                        Mono.fromSupplier(supplier).subscribe(sink::success, sink::error);
                       }
                     }));
   }
@@ -171,11 +168,8 @@ public final class AeronEventLoop implements OnDisposable {
             worker ->
                 command(
                     sink -> {
-                      boolean removed = publications.remove(p);
-                      if (removed) {
-                        logger.debug("Removed {}", p);
-                      }
-                      closePublication(p, sink);
+                      publications.remove(p);
+                      Mono.fromRunnable(p::close).subscribe(null, sink::error, sink::success);
                     }));
   }
 
@@ -192,11 +186,8 @@ public final class AeronEventLoop implements OnDisposable {
             worker ->
                 command(
                     sink -> {
-                      boolean removed = subscriptions.remove(s);
-                      if (removed) {
-                        logger.debug("Removed {}", s);
-                      }
-                      closeSubscription(s, sink);
+                      subscriptions.remove(s);
+                      Mono.fromRunnable(s::close).subscribe(null, sink::error, sink::success);
                     }));
   }
 
@@ -326,7 +317,12 @@ public final class AeronEventLoop implements OnDisposable {
       for (Iterator<MessagePublication> it = publications.iterator(); it.hasNext(); ) {
         MessagePublication p = it.next();
         it.remove();
-        closePublication(p, null /*sink*/);
+        Mono.fromRunnable(p::close)
+            .subscribe(
+                null,
+                th -> {
+                  // no-op
+                });
       }
     }
 
@@ -334,26 +330,13 @@ public final class AeronEventLoop implements OnDisposable {
       for (Iterator<MessageSubscription> it = subscriptions.iterator(); it.hasNext(); ) {
         MessageSubscription s = it.next();
         it.remove();
-        closeSubscription(s, null /*sink*/);
+        Mono.fromRunnable(s::close)
+            .subscribe(
+                null,
+                th -> {
+                  // no-op
+                });
       }
-    }
-  }
-
-  private void closePublication(MessagePublication p, MonoSink<Void> sink) {
-    p.close();
-    try {
-      Optional.ofNullable(sink).ifPresent(MonoSink::success);
-    } catch (Exception ex) {
-      sink.error(ex);
-    }
-  }
-
-  private void closeSubscription(MessageSubscription s, MonoSink<Void> sink) {
-    s.close();
-    try {
-      Optional.ofNullable(sink).ifPresent(MonoSink::success);
-    } catch (Exception ex) {
-      sink.error(ex);
     }
   }
 

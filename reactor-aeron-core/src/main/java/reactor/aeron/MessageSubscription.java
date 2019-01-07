@@ -5,6 +5,7 @@ import io.aeron.logbuffer.FragmentHandler;
 import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
@@ -65,9 +66,10 @@ public final class MessageSubscription implements OnDisposable {
     }
     try {
       subscription.close();
-      logger.debug("aeron.Subscription closed: {}", this);
+      logger.debug("Disposed {}", this);
     } catch (Exception ex) {
-      logger.warn("aeron.Subscription closed: {} with error: {}", this, ex.toString());
+      logger.warn("Disposed {} with error: {}", this, ex.toString());
+      throw Exceptions.propagate(ex);
     } finally {
       onDispose.onComplete();
     }

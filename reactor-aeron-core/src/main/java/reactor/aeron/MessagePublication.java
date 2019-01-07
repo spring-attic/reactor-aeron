@@ -10,6 +10,7 @@ import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.MonoSink;
@@ -153,9 +154,10 @@ public final class MessagePublication implements OnDisposable {
     }
     try {
       publication.close();
-      logger.debug("aeron.Publication closed: {}", this);
+      logger.debug("Disposed {}", this);
     } catch (Exception ex) {
-      logger.warn("aeron.Publication closed: {} with error: {}", this, ex.toString());
+      logger.warn("Disposed {} with error: {}", this, ex.toString());
+      throw Exceptions.propagate(ex);
     } finally {
       disposePublishTasks();
       onDispose.onComplete();
