@@ -219,25 +219,34 @@ public class AeronResources implements OnDisposable {
       String channel,
       Consumer<Image> availableImageHandler,
       Consumer<Image> unavailableImageHandler) {
-    return aeron.addSubscription(
+    logger.debug("Adding subscription for channel {}", channel);
+    long startTime = System.nanoTime();
+    Subscription subscription =
+        aeron.addSubscription(
+            channel,
+            STREAM_ID,
+            image -> {
+              logger.debug(
+                  "{} onImageAvailable: {} {}",
+                  this,
+                  Integer.toHexString(image.sessionId()),
+                  image.sourceIdentity());
+              Optional.ofNullable(availableImageHandler).ifPresent(c -> c.accept(image));
+            },
+            image -> {
+              logger.debug(
+                  "{} onImageUnavailable: {} {}",
+                  this,
+                  Integer.toHexString(image.sessionId()),
+                  image.sourceIdentity());
+              Optional.ofNullable(unavailableImageHandler).ifPresent(c -> c.accept(image));
+            });
+    long endTime = System.nanoTime();
+    logger.debug(
+        "Added subscription for channel {}, spent: {}ns",
         channel,
-        STREAM_ID,
-        image -> {
-          logger.debug(
-              "{} onImageAvailable: {} {}",
-              this,
-              Integer.toHexString(image.sessionId()),
-              image.sourceIdentity());
-          Optional.ofNullable(availableImageHandler).ifPresent(c -> c.accept(image));
-        },
-        image -> {
-          logger.debug(
-              "{} onImageUnavailable: {} {}",
-              this,
-              Integer.toHexString(image.sessionId()),
-              image.sourceIdentity());
-          Optional.ofNullable(unavailableImageHandler).ifPresent(c -> c.accept(image));
-        });
+        Duration.ofNanos(endTime - startTime));
+    return subscription;
   }
 
   @Override
