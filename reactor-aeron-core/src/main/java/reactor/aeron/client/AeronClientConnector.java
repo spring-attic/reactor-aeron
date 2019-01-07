@@ -77,9 +77,7 @@ final class AeronClientConnector {
                             inbound, /*fragmentHandler*/
                             image ->
                                 logger.debug(
-                                    "{}: created client inbound: {}",
-                                    Integer.toHexString(sessionId),
-                                    inboundChannel),
+                                    "{}: created client inbound", Integer.toHexString(sessionId)),
                             image -> {
                               logger.debug(
                                   "{}: client inbound became unavaliable",
@@ -90,9 +88,8 @@ final class AeronClientConnector {
                         .doOnError(
                             th -> {
                               logger.warn(
-                                  "{}: failed to create client inbound: {}, cause: {}",
+                                  "{}: failed to create client inbound, cause: {}",
                                   Integer.toHexString(sessionId),
-                                  inboundChannel,
                                   th.toString());
                               // dispose outbound resource
                               publication.dispose();
@@ -118,7 +115,9 @@ final class AeronClientConnector {
       int sessionId, DefaultAeronConnection connection, MonoProcessor<Void> disposeHook) {
     // listen shutdown
     disposeHook
-        .doOnTerminate(connection::dispose)
+        .then(Mono.fromRunnable(connection::dispose).then(connection.onDispose()))
+        .doFinally(
+            s -> logger.debug("{}: client connection disposed", Integer.toHexString(sessionId)))
         .subscribe(
             null,
             th -> {

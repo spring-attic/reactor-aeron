@@ -124,17 +124,14 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
    * @param image source image
    */
   private void onImageAvailable(Image image) {
-    int sessionId = image.sessionId();
     // Pub(control-endpoint{address:serverControlPort}, sessionId)->MDC(sessionId)
+    int sessionId = image.sessionId();
     String outboundChannel = options.outboundUri().sessionId(sessionId).asString();
 
     // not expecting following condition be true at normal circumstances; passing it would mean
     // aeron changed contract/semantic around sessionId
     if (connections.containsKey(sessionId)) {
-      logger.error(
-          "{}: server connection already exists: {}",
-          Integer.toHexString(sessionId),
-          outboundChannel);
+      logger.error("{}: server connection already exists!?", Integer.toHexString(sessionId));
       return;
     }
 
@@ -154,9 +151,8 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
             null,
             ex ->
                 logger.warn(
-                    "{}: failed to create server outbound: {}, cause: {}",
+                    "{}: failed to create server outbound, cause: {}",
                     Integer.toHexString(sessionId),
-                    outboundChannel,
                     ex.toString()),
             () ->
                 logger.debug(
@@ -178,10 +174,15 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
     if (connection != null) {
       logger.debug("{}: server inbound became unavailable", Integer.toHexString(sessionId));
       connection.dispose();
-      logger.debug(
-          "{}: removed and disposed server connection: {}",
-          Integer.toHexString(sessionId),
-          connection);
+      connection
+          .onDispose()
+          .doFinally(
+              s -> logger.debug("{}: server connection disposed", Integer.toHexString(sessionId)))
+          .subscribe(
+              null,
+              th -> {
+                // no-op
+              });
     } else {
       logger.debug(
           "{}: attempt to remove server connection but it wasn't found (total connections: {})",
