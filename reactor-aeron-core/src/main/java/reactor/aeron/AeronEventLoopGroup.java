@@ -30,8 +30,9 @@ public class AeronEventLoopGroup implements OnDisposable {
    */
   public AeronEventLoopGroup(Supplier<IdleStrategy> idleStrategy, int workers) {
     this.eventLoops = new AeronEventLoop[workers];
+    String parentId = Integer.toHexString(System.identityHashCode(this));
     for (int i = 0; i < workers; i++) {
-      eventLoops[i] = new AeronEventLoop(i, idleStrategy.get());
+      eventLoops[i] = new AeronEventLoop(i, parentId, idleStrategy.get());
     }
     // Setup shutdown
     Mono.whenDelayError(

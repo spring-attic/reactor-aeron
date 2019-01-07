@@ -211,7 +211,7 @@ public class AeronResources implements OnDisposable {
                                   aeronSubscription.close();
                                 }
                               }))
-              .timeout(Duration.ofSeconds(3));
+              .timeout(Duration.ofSeconds(4));
         });
   }
 
