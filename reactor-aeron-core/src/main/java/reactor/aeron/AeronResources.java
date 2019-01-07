@@ -131,7 +131,7 @@ public class AeronResources implements OnDisposable {
               .doOnError(
                   ex ->
                       logger.error(
-                          "{} failed on addExclusivePublication(), channel: {}, cause: {}",
+                          "{} failed on aeronPublication(), channel: {}, cause: {}",
                           this,
                           channel,
                           ex.toString()))
