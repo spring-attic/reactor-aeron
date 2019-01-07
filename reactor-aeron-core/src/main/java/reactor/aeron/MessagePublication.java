@@ -233,7 +233,11 @@ public final class MessagePublication implements OnDisposable {
       if (task == null) {
         break;
       }
-      task.error(AeronExceptions.failWithCancel("PublishTask has cancelled"));
+      try {
+        task.error(AeronExceptions.failWithCancel("PublishTask has cancelled"));
+      } catch (Exception ex) {
+        // no-op
+      }
     }
   }
 
