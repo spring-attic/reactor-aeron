@@ -1,6 +1,7 @@
 package reactor.aeron;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.ByteBuffer;
@@ -55,6 +56,11 @@ public class AeronConnectionTest extends BaseAeronTest {
       serverResources.dispose();
       serverResources.onDispose().block(TIMEOUT);
     }
+  }
+
+  @Test
+  public void testClientCouldNotConnectToServer() {
+    assertThrows(RuntimeException.class, this::createConnection);
   }
 
   @Test

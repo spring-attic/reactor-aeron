@@ -49,11 +49,6 @@ class AeronClientTest extends BaseAeronTest {
   }
 
   @Test
-  public void testClientCouldNotConnectToServer() {
-    assertThrows(RuntimeException.class, this::createConnection);
-  }
-
-  @Test
   public void testClientReceivesDataFromServer() {
     createServer(
         connection ->
