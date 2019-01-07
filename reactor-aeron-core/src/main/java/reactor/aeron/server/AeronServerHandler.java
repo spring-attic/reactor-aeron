@@ -17,7 +17,6 @@ import reactor.aeron.Connection;
 import reactor.aeron.DefaultAeronConnection;
 import reactor.aeron.DefaultAeronInbound;
 import reactor.aeron.DefaultAeronOutbound;
-import reactor.aeron.MessagePublication;
 import reactor.aeron.OnDisposable;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
@@ -138,7 +137,6 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
 
     resources
         .publication(outboundChannel, options)
-        .flatMap(MessagePublication::ensureConnected)
         .map(
             publication -> {
               DefaultAeronInbound inbound = new DefaultAeronInbound();

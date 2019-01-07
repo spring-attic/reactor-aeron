@@ -261,8 +261,8 @@ class AeronClientTest extends BaseAeronTest {
 
   @Test
   public void testConcurrentSendingStreams() {
-    int overallCount = 200;
-    int streams = 2;
+    int overallCount = 1000;
+    int streams = 4;
     int requestPerStream = overallCount / streams;
 
     ReplayProcessor<String> clientRequests = ReplayProcessor.create();
