@@ -1,7 +1,6 @@
 package reactor.aeron;
 
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.aeron.driver.Configuration;
 import java.time.Duration;
@@ -187,32 +186,35 @@ class AeronClientTest extends BaseAeronTest {
                 .flatMap(byteBuffer -> connection.outbound().send(Mono.just(byteBuffer)).then())
                 .then(connection.onDispose()));
 
-    Connection connection1 = createConnection();
-    Flux.range(0, count)
-        .flatMap(i -> connection1.outbound().sendString(Mono.just("client-1 send:" + i)).then())
-        .then()
-        .subscribe();
+    ReplayProcessor<String> processor1 = ReplayProcessor.create();
+    ReplayProcessor<String> processor2 = ReplayProcessor.create();
 
-    Connection connection2 = createConnection();
-    Flux.range(0, count)
-        .flatMap(i -> connection2.outbound().sendString(Mono.just("client-2 send:" + i)).then())
-        .then()
-        .subscribe();
+    createConnection(
+        connection -> {
+          connection.inbound().receive().asString().subscribe(processor1);
+          Flux.range(0, count)
+              .flatMap(
+                  i -> connection.outbound().sendString(Mono.just("client-1 send:" + i)).then())
+              .then()
+              .subscribe();
+          return connection.onDispose();
+        });
+
+    createConnection(
+        connection -> {
+          connection.inbound().receive().asString().subscribe(processor2);
+          Flux.range(0, count)
+              .flatMap(
+                  i -> connection.outbound().sendString(Mono.just("client-2 send:" + i)).then())
+              .then()
+              .subscribe();
+          return connection.onDispose();
+        });
 
     StepVerifier.create(
             Flux.merge(
-                connection1
-                    .inbound()
-                    .receive()
-                    .asString()
-                    .take(count)
-                    .filter(response -> !response.startsWith("client-1 ")),
-                connection2
-                    .inbound()
-                    .receive()
-                    .asString()
-                    .take(count)
-                    .filter(response -> !response.startsWith("client-2 "))))
+                processor1.take(count).filter(response -> !response.startsWith("client-1 ")),
+                processor2.take(count).filter(response -> !response.startsWith("client-2 "))))
         .expectComplete()
         .verify(Duration.ofSeconds(20));
   }

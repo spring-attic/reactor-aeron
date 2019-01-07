@@ -86,6 +86,8 @@ class AeronServerTest extends BaseAeronTest {
 
     server.dispose();
 
+    // TODO add StepVerifier here and remove ThreadWatcher class
+
     ThreadWatcher threadWatcher = new ThreadWatcher();
 
     assertTrue(threadWatcher.awaitTerminated(5000, "single-", "parallel-"));
