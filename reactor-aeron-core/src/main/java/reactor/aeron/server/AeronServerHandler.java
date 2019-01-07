@@ -3,10 +3,12 @@ package reactor.aeron.server;
 import io.aeron.Image;
 import io.aeron.logbuffer.FragmentHandler;
 import io.aeron.logbuffer.Header;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 import org.agrona.DirectBuffer;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
@@ -17,6 +19,7 @@ import reactor.aeron.Connection;
 import reactor.aeron.DefaultAeronConnection;
 import reactor.aeron.DefaultAeronInbound;
 import reactor.aeron.DefaultAeronOutbound;
+import reactor.aeron.MessageSubscription;
 import reactor.aeron.OnDisposable;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
@@ -40,6 +43,8 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
   private final AeronOptions options;
   private final AeronResources resources;
   private final Function<? super Connection, ? extends Publisher<Void>> handler;
+
+  private volatile MessageSubscription subscription; // server acceptor subscription
 
   // TODO think of more performant concurrent hashmap
   private final Map<Integer, Connection> connections = new ConcurrentHashMap<>(32);
@@ -76,6 +81,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
                   this, /*fragmentHandler*/
                   this::onImageAvailable, /*setup new session*/
                   this::onImageUnavailable /*remove and dispose session*/)
+              .doOnSuccess(subscription -> this.subscription = subscription)
               .thenReturn(this)
               .doOnSuccess(
                   handler -> logger.debug("Started aeron server handler on: {}", inboundChannel))
@@ -236,14 +242,21 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
     return Mono.defer(
         () -> {
           logger.debug("Aeron server handler is disposing");
-          return Mono.whenDelayError(
-                  connections
-                      .values()
-                      .stream()
-                      .peek(Connection::dispose)
-                      .map(Connection::onDispose)
-                      .collect(Collectors.toList()))
-              .doFinally(s -> connections.clear());
+          List<Mono<Void>> monos = new ArrayList<>();
+
+          monos.add(
+              Optional.ofNullable(subscription)
+                  .map(s -> Mono.fromRunnable(s::dispose).then(s.onDispose()))
+                  .orElse(Mono.empty()));
+
+          connections
+              .values()
+              .stream()
+              .peek(Connection::dispose)
+              .map(Connection::onDispose)
+              .forEach(monos::add);
+
+          return Mono.whenDelayError(monos).doFinally(s -> connections.clear());
         });
   }
 
