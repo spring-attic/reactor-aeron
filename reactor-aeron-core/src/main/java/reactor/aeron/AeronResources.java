@@ -127,7 +127,7 @@ public class AeronResources implements OnDisposable {
           AeronEventLoop eventLoop = this.nextEventLoop();
 
           return eventLoop
-              .publicationFromSupplier(() -> aeron.addExclusivePublication(channel, STREAM_ID))
+              .publicationFromSupplier(() -> aeronPublication(channel))
               .doOnError(
                   ex ->
                       logger.error(
@@ -151,6 +151,19 @@ public class AeronResources implements OnDisposable {
                                 }
                               }));
         });
+  }
+
+  private ExclusivePublication aeronPublication(String channel) {
+    logger.debug("Adding aeron.Publication for channel {}", channel);
+    long startTime = System.nanoTime();
+
+    ExclusivePublication publication = aeron.addExclusivePublication(channel, STREAM_ID);
+
+    long endTime = System.nanoTime();
+    long spent = Duration.ofNanos(endTime - startTime).toNanos();
+    logger.debug("Added aeron.Publication for channel {}, spent: {} ns", channel, spent);
+
+    return publication;
   }
 
   @Override
@@ -220,7 +233,7 @@ public class AeronResources implements OnDisposable {
       Consumer<Image> availableImageHandler,
       Consumer<Image> unavailableImageHandler) {
 
-    logger.debug("Adding subscription for channel {}", channel);
+    logger.debug("Adding aeron.Subscription for channel {}", channel);
     long startTime = System.nanoTime();
 
     Subscription subscription =
@@ -245,8 +258,8 @@ public class AeronResources implements OnDisposable {
             });
 
     long endTime = System.nanoTime();
-    Duration spent = Duration.ofNanos(endTime - startTime);
-    logger.debug("Added subscription for channel {}, spent: {} ns", channel, spent);
+    long spent = Duration.ofNanos(endTime - startTime).toNanos();
+    logger.debug("Added aeron.Subscription for channel {}, spent: {} ns", channel, spent);
 
     return subscription;
   }
