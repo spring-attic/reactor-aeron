@@ -37,12 +37,12 @@ public final class AeronEventLoop implements OnDisposable {
 
   private final List<MessagePublication> publications = new ArrayList<>();
   private final List<MessageSubscription> subscriptions = new ArrayList<>();
-  private final int i;
+  private final int workerInd;
 
   private volatile Thread thread;
 
-  AeronEventLoop(int i, IdleStrategy idleStrategy) {
-    this.i = i;
+  AeronEventLoop(int workerInd, IdleStrategy idleStrategy) {
+    this.workerInd = workerInd;
     this.idleStrategy = idleStrategy;
     this.workerMono = Mono.fromCallable(this::createWorker).cache();
   }
@@ -59,7 +59,8 @@ public final class AeronEventLoop implements OnDisposable {
 
   private Worker createWorker() {
     String threadName =
-        String.format(workerNameFormat, Integer.toHexString(System.identityHashCode(this)), i);
+        String.format(
+            workerNameFormat, Integer.toHexString(System.identityHashCode(this)), workerInd);
     ThreadFactory threadFactory = defaultThreadFactory(threadName);
     Worker w = new Worker();
     thread = threadFactory.newThread(w);

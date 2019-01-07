@@ -160,7 +160,7 @@ public final class MessagePublication implements OnDisposable {
   }
 
   /**
-   * Delegates to {@link Publication#sessionId()}
+   * Delegates to {@link Publication#sessionId()}.
    *
    * @return aeron {@code Publication} sessionId.
    */
