@@ -23,9 +23,6 @@ import reactor.test.StepVerifier;
 
 class AeronClientTest extends BaseAeronTest {
 
-  private static final AeronResourcesConfig RESOURCES_CONFIG =
-      AeronResourcesConfig.builder().numOfWorkers(1).build();
-
   private int serverPort;
   private int serverControlPort;
   private AeronResources clientResources;
@@ -35,8 +32,8 @@ class AeronClientTest extends BaseAeronTest {
   void beforeEach() {
     serverPort = SocketUtils.findAvailableUdpPort();
     serverControlPort = SocketUtils.findAvailableUdpPort();
-    clientResources = AeronResources.start(RESOURCES_CONFIG);
-    serverResources = AeronResources.start(RESOURCES_CONFIG);
+    clientResources = AeronResources.start(AeronResourcesConfig.builder().numOfWorkers(1).build());
+    serverResources = AeronResources.start(AeronResourcesConfig.builder().numOfWorkers(1).build());
   }
 
   @AfterEach

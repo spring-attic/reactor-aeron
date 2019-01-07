@@ -40,7 +40,7 @@ public class AeronResources implements OnDisposable {
     this.config = config;
 
     start
-        .doOnTerminate(this::doStart)
+        .then(doStart())
         .subscribe(
             null,
             th -> {
@@ -85,28 +85,34 @@ public class AeronResources implements OnDisposable {
     }
   }
 
-  private void doStart() {
-    MediaDriver.Context mediaContext =
-        new MediaDriver.Context()
-            .aeronDirectoryName(config.aeronDirectoryName())
-            .mtuLength(config.mtuLength())
-            .imageLivenessTimeoutNs(config.imageLivenessTimeout().toNanos())
-            .dirDeleteOnStart(config.isDirDeleteOnStart());
+  private Mono<Void> doStart() {
+    return Mono.fromRunnable(
+        () -> {
+          MediaDriver.Context mediaContext =
+              new MediaDriver.Context()
+                  .aeronDirectoryName(config.aeronDirectoryName())
+                  .mtuLength(config.mtuLength())
+                  .imageLivenessTimeoutNs(config.imageLivenessTimeout().toNanos())
+                  .dirDeleteOnStart(config.isDirDeleteOnStart());
 
-    mediaDriver = MediaDriver.launchEmbedded(mediaContext);
+          mediaDriver = MediaDriver.launchEmbedded(mediaContext);
 
-    Aeron.Context aeronContext = new Aeron.Context();
-    String directoryName = mediaDriver.aeronDirectoryName();
-    aeronContext.aeronDirectoryName(directoryName);
+          Aeron.Context aeronContext = new Aeron.Context();
+          aeronContext.aeronDirectoryName(mediaDriver.aeronDirectoryName());
 
-    aeron = Aeron.connect(aeronContext);
+          aeron = Aeron.connect(aeronContext);
 
-    eventLoopGroup = new AeronEventLoopGroup(config.idleStrategySupplier(), config.numOfWorkers());
+          eventLoopGroup =
+              new AeronEventLoopGroup(config.idleStrategySupplier(), config.numOfWorkers());
 
-    Runtime.getRuntime().addShutdownHook(new Thread(() -> deleteAeronDirectory(aeronContext)));
+          Runtime.getRuntime()
+              .addShutdownHook(new Thread(() -> deleteAeronDirectory(aeronContext)));
 
-    logger.info(
-        "{} has initialized embedded media mediaDriver, aeron directory: {}", this, directoryName);
+          logger.info(
+              "{} has initialized embedded mediaDriver, aeron directory: {}",
+              this,
+              aeronContext.aeronDirectoryName());
+        });
   }
 
   public AeronEventLoop nextEventLoop() {

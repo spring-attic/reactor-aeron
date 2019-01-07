@@ -22,9 +22,6 @@ public class AeronConnectionTest extends BaseAeronTest {
 
   private static final Duration IMAGE_TIMEOUT = Duration.ofSeconds(1);
 
-  private static final AeronResourcesConfig RESOURCES_CONFIG =
-      AeronResourcesConfig.builder().numOfWorkers(1).imageLivenessTimeout(IMAGE_TIMEOUT).build();
-
   private int serverPort;
   private int serverControlPort;
   private AeronResources clientResources;
@@ -34,8 +31,18 @@ public class AeronConnectionTest extends BaseAeronTest {
   void beforeEach() {
     serverPort = SocketUtils.findAvailableUdpPort();
     serverControlPort = SocketUtils.findAvailableUdpPort();
-    clientResources = AeronResources.start(RESOURCES_CONFIG);
-    serverResources = AeronResources.start(RESOURCES_CONFIG);
+    clientResources =
+        AeronResources.start(
+            AeronResourcesConfig.builder()
+                .numOfWorkers(1)
+                .imageLivenessTimeout(IMAGE_TIMEOUT)
+                .build());
+    serverResources =
+        AeronResources.start(
+            AeronResourcesConfig.builder()
+                .numOfWorkers(1)
+                .imageLivenessTimeout(IMAGE_TIMEOUT)
+                .build());
   }
 
   @AfterEach
