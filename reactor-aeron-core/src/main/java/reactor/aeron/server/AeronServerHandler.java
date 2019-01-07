@@ -73,6 +73,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
           return resources
               .subscription(
                   inboundChannel,
+                  options,
                   this, /*fragmentHandler*/
                   this::onImageAvailable, /*setup new session*/
                   this::onImageUnavailable /*remove and dispose session*/)

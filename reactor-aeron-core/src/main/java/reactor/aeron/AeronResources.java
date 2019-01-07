@@ -138,7 +138,7 @@ public class AeronResources implements OnDisposable {
                   aeronPublication ->
                       eventLoop
                           .registerPublication(
-                              new MessagePublication(aeronPublication, eventLoop, options))
+                              new MessagePublication(aeronPublication, options, eventLoop))
                           .doOnError(
                               ex -> {
                                 logger.error(
@@ -164,6 +164,7 @@ public class AeronResources implements OnDisposable {
    * message subscription will be assigned to event loop.
    *
    * @param channel aeron channel
+   * @param options aeron options
    * @param fragmentHandler fragment handler
    * @param availableImageHandler available image handler; optional
    * @param unavailableImageHandler unavailable image handler; optional
@@ -171,6 +172,7 @@ public class AeronResources implements OnDisposable {
    */
   public Mono<MessageSubscription> subscription(
       String channel,
+      AeronOptions options,
       FragmentHandler fragmentHandler,
       Consumer<Image> availableImageHandler,
       Consumer<Image> unavailableImageHandler) {
@@ -193,8 +195,9 @@ public class AeronResources implements OnDisposable {
                       eventLoop
                           .registerSubscription(
                               new MessageSubscription(
-                                  eventLoop,
                                   aeronSubscription,
+                                  options,
+                                  eventLoop,
                                   new FragmentAssembler(fragmentHandler)))
                           .doOnError(
                               ex -> {

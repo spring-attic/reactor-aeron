@@ -33,10 +33,11 @@ public final class MessagePublication implements OnDisposable {
   /**
    * Constructor.
    *
-   * @param publication publication
+   * @param publication aeron publication
    * @param options aeron options
+   * @param eventLoop aeron event loop where this {@code MessagePublication} is assigned
    */
-  MessagePublication(Publication publication, AeronEventLoop eventLoop, AeronOptions options) {
+  MessagePublication(Publication publication, AeronOptions options, AeronEventLoop eventLoop) {
     this.publication = publication;
     this.eventLoop = eventLoop;
     this.connectTimeout = options.connectTimeout();
@@ -212,7 +213,7 @@ public final class MessagePublication implements OnDisposable {
               .retryBackoff(retryCount, retryInterval, retryInterval)
               .timeout(connectTimeout)
               .doOnError(
-                  ex -> logger.warn("Failed to connect publication: {}", publication.channel()))
+                  ex -> logger.warn("aeron.Publication is not connected after several retries"))
               .thenReturn(this);
         });
   }
