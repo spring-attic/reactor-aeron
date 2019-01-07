@@ -8,6 +8,8 @@ import reactor.core.Disposable;
 import reactor.core.publisher.EmitterProcessor;
 import reactor.core.publisher.FluxSink;
 
+// TODO think of better design for inbound -- dont allow clients cast to FragmentHandler or
+// Disposable
 public final class DefaultAeronInbound implements AeronInbound, FragmentHandler, Disposable {
 
   private final EmitterProcessor<ByteBuffer> processor = EmitterProcessor.create();

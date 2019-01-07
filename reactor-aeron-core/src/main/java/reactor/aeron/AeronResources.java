@@ -9,6 +9,7 @@ import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
 import io.aeron.logbuffer.FragmentHandler;
 import java.io.File;
+import java.time.Duration;
 import java.util.Optional;
 import java.util.function.Consumer;
 import org.agrona.CloseHelper;
@@ -183,6 +184,7 @@ public class AeronResources implements OnDisposable {
           return eventLoop
               .subscriptionFromSupplier(
                   () -> aeronSubscription(channel, availableImageHandler, unavailableImageHandler))
+              .timeout(Duration.ofSeconds(3))
               .doOnError(
                   ex ->
                       logger.error(
@@ -208,7 +210,8 @@ public class AeronResources implements OnDisposable {
                                 if (!aeronSubscription.isClosed()) {
                                   aeronSubscription.close();
                                 }
-                              }));
+                              }))
+              .timeout(Duration.ofSeconds(3));
         });
   }
 
