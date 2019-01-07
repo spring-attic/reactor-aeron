@@ -46,7 +46,7 @@ public final class MessageSubscription implements OnDisposable {
    *
    * @return the number of fragments received
    */
-  public int poll() {
+  int poll() {
     // TODO after removing reactiveStreams.Subscription removed from here:
     //  r, numOfPolled, requested; investigate why they were needed
     return subscription.poll(fragmentHandler, PREFETCH);
