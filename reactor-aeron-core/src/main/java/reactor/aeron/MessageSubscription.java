@@ -68,7 +68,7 @@ public final class MessageSubscription implements OnDisposable {
       subscription.close();
       logger.debug("Disposed {}", this);
     } catch (Exception ex) {
-      logger.warn("Disposed {} with error: {}", this, ex.toString());
+      logger.warn("{} failed on aeron.Subscription close(): {}", this, ex.toString());
       throw Exceptions.propagate(ex);
     } finally {
       onDispose.onComplete();

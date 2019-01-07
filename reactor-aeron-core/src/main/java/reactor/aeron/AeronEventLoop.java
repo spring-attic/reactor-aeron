@@ -21,30 +21,34 @@ public final class AeronEventLoop implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronEventLoop.class);
 
-  private static final String workerNameFormat = "reactor-aeron-%s-%d";
+  private static final String WORKER_NAME_FORMAT = "reactor-aeron-%x-%d";
 
   private final IdleStrategy idleStrategy;
 
-  // Dispose signals
+  private final int workerId; // worker id
+  private final int groupId; // event loop group id
+
+  private final Queue<CommandTask> commands = new ConcurrentLinkedQueue<>();
+  private final List<MessagePublication> publications = new ArrayList<>();
+  private final List<MessageSubscription> subscriptions = new ArrayList<>();
+
   private final MonoProcessor<Void> dispose = MonoProcessor.create();
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
-  // Worker
   private final Mono<Worker> workerMono;
-
-  // Commands
-  private final Queue<CommandTask> commandTasks = new ConcurrentLinkedQueue<>();
-
-  private final List<MessagePublication> publications = new ArrayList<>();
-  private final List<MessageSubscription> subscriptions = new ArrayList<>();
-  private final int workerId;
-  private final String parentId;
 
   private volatile Thread thread;
 
-  AeronEventLoop(int workerId, String parentId, IdleStrategy idleStrategy) {
+  /**
+   * Constructor.
+   *
+   * @param workerId worker id
+   * @param groupId id of parent {@link AeronEventLoopGroup}
+   * @param idleStrategy {@link IdleStrategy} instance for this event loop
+   */
+  AeronEventLoop(int workerId, int groupId, IdleStrategy idleStrategy) {
     this.workerId = workerId;
-    this.parentId = parentId;
+    this.groupId = groupId;
     this.idleStrategy = idleStrategy;
     this.workerMono = Mono.fromCallable(this::createWorker).cache();
   }
@@ -54,13 +58,13 @@ public final class AeronEventLoop implements OnDisposable {
       Thread thread = new Thread(r);
       thread.setName(threadName);
       thread.setUncaughtExceptionHandler(
-          (t, e) -> logger.error("Uncaught exception occurred: " + e));
+          (t, e) -> logger.error("Uncaught exception occurred: ", e));
       return thread;
     };
   }
 
   private Worker createWorker() {
-    String threadName = String.format(workerNameFormat, parentId, workerId);
+    String threadName = String.format(WORKER_NAME_FORMAT, groupId, workerId);
     ThreadFactory threadFactory = defaultThreadFactory(threadName);
     Worker w = new Worker();
     thread = threadFactory.newThread(w);
@@ -217,7 +221,7 @@ public final class AeronEventLoop implements OnDisposable {
   }
 
   private <T> Mono<T> command(Consumer<MonoSink<T>> consumer) {
-    return Mono.create(sink -> commandTasks.add(new CommandTask<>(sink, consumer)));
+    return Mono.create(sink -> commands.add(new CommandTask<>(sink, consumer)));
   }
 
   private <T> Mono<T> listenUnavailable() {
@@ -228,9 +232,8 @@ public final class AeronEventLoop implements OnDisposable {
   }
 
   /**
-   * Runnable task for submitting to {@link #commandTasks} queue. For usage details see methods:
-   * {@link #registerPublication(MessagePublication)} and {@link
-   * #disposePublication(MessagePublication)}.
+   * Runnable task for submitting to {@link #commands} queue. For usage details see methods: {@link
+   * #registerPublication(MessagePublication)} and {@link #disposePublication(MessagePublication)}.
    */
   private static class CommandTask<T> implements Runnable {
     private final MonoSink<T> sink;
@@ -245,9 +248,9 @@ public final class AeronEventLoop implements OnDisposable {
     public void run() {
       try {
         consumer.accept(sink);
-      } catch (Exception ex) {
-        logger.warn("Exception occurred on CommandTask: " + ex);
-        sink.error(ex);
+      } catch (Exception e) {
+        logger.error("Exception occurred on CommandTask: ", e);
+        sink.error(e);
       }
     }
   }
@@ -269,7 +272,7 @@ public final class AeronEventLoop implements OnDisposable {
       while (!dispose.isDisposed()) {
 
         // Commands
-        processCommandTasks();
+        processCommands();
 
         int result = 0;
         //noinspection ForLoopReplaceableByForEach
@@ -277,7 +280,7 @@ public final class AeronEventLoop implements OnDisposable {
           try {
             result += publications.get(i).proceed();
           } catch (Exception ex) {
-            logger.error("Unexpected exception occurred on publication.proceed(): " + ex);
+            logger.error("Unexpected exception occurred on publication.proceed(): ", ex);
           }
         }
 
@@ -286,7 +289,7 @@ public final class AeronEventLoop implements OnDisposable {
           try {
             result += subscriptions.get(i).poll();
           } catch (Exception ex) {
-            logger.error("Unexpected exception occurred on subscription.poll(): " + ex);
+            logger.error("Unexpected exception occurred on subscription.poll(): ", ex);
           }
         }
 
@@ -295,7 +298,7 @@ public final class AeronEventLoop implements OnDisposable {
 
       // Dispose publications, subscriptions and commands
       try {
-        processCommandTasks();
+        processCommands();
         disposeSubscriptions();
         disposePublications();
       } finally {
@@ -303,9 +306,9 @@ public final class AeronEventLoop implements OnDisposable {
       }
     }
 
-    private void processCommandTasks() {
+    private void processCommands() {
       for (; ; ) {
-        CommandTask task = commandTasks.poll();
+        CommandTask task = commands.poll();
         if (task == null) {
           break;
         }

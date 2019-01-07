@@ -156,7 +156,7 @@ public final class MessagePublication implements OnDisposable {
       publication.close();
       logger.debug("Disposed {}", this);
     } catch (Exception ex) {
-      logger.warn("Disposed {} with error: {}", this, ex.toString());
+      logger.warn("{} failed on aeron.Publication close(): {}", this, ex.toString());
       throw Exceptions.propagate(ex);
     } finally {
       disposePublishTasks();

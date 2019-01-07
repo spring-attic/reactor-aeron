@@ -15,32 +15,34 @@ import reactor.core.publisher.MonoProcessor;
  */
 public class AeronEventLoopGroup implements OnDisposable {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(AeronEventLoopGroup.class);
+  private static final Logger logger = LoggerFactory.getLogger(AeronEventLoopGroup.class);
 
-  // State
+  private final int id = System.identityHashCode(this);
   private final AeronEventLoop[] eventLoops;
   private final AtomicInteger idx = new AtomicInteger();
+
+  private final MonoProcessor<Void> dispose = MonoProcessor.create();
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
   /**
-   * Constructs an instance of {@link AeronEventLoopGroup}.
+   * Constructor.
    *
-   * @param idleStrategy idle strategy to follow between work cycles
-   * @param workers number of instances in group
+   * @param numOfWorkers number of {@link AeronEventLoop} instances in the group
+   * @param idleStrategySupplier factory for {@link IdleStrategy} instances
    */
-  public AeronEventLoopGroup(Supplier<IdleStrategy> idleStrategy, int workers) {
-    this.eventLoops = new AeronEventLoop[workers];
-    String parentId = Integer.toHexString(System.identityHashCode(this));
-    for (int i = 0; i < workers; i++) {
-      eventLoops[i] = new AeronEventLoop(i, parentId, idleStrategy.get());
+  public AeronEventLoopGroup(int numOfWorkers, Supplier<IdleStrategy> idleStrategySupplier) {
+    this.eventLoops = new AeronEventLoop[numOfWorkers];
+    for (int i = 0; i < numOfWorkers; i++) {
+      eventLoops[i] = new AeronEventLoop(i, id, idleStrategySupplier.get());
     }
-    // Setup shutdown
-    Mono.whenDelayError(
-            Arrays.stream(eventLoops) //
-                .map(AeronEventLoop::onDispose)
-                .toArray(Mono<?>[]::new))
+
+    dispose
+        .then(doDispose())
         .doFinally(s -> onDispose.onComplete())
-        .subscribe(null, ex -> LOGGER.error("Unexpected exception occurred: " + ex));
+        .subscribe(
+            null,
+            th -> logger.warn("{} failed on doDispose(): {}", this, th.toString()),
+            () -> logger.debug("Disposed {}", this));
   }
 
   /**
@@ -52,26 +54,35 @@ public class AeronEventLoopGroup implements OnDisposable {
     return eventLoops[Math.abs(idx.getAndIncrement() % eventLoops.length)];
   }
 
-  /**
-   * Completes successfully once all the workers in the group are disposed.
-   *
-   * @return mono that completes once workers are disposed
-   */
-  @Override
-  public Mono<Void> onDispose() {
-    return onDispose;
-  }
-
-  /** Dispose all the workers in group. */
   @Override
   public void dispose() {
-    if (!isDisposed()) {
-      Arrays.stream(eventLoops).forEach(AeronEventLoop::dispose);
-    }
+    dispose.onComplete();
   }
 
   @Override
   public boolean isDisposed() {
     return onDispose.isDisposed();
+  }
+
+  @Override
+  public Mono<Void> onDispose() {
+    return onDispose;
+  }
+
+  private Mono<Void> doDispose() {
+    return Mono.defer(
+        () -> {
+          logger.debug("Disposing {}", this);
+          return Mono.whenDelayError(
+              Arrays.stream(eventLoops)
+                  .peek(AeronEventLoop::dispose)
+                  .map(AeronEventLoop::onDispose)
+                  .toArray(Mono<?>[]::new));
+        });
+  }
+
+  @Override
+  public String toString() {
+    return "AeronEventLoopGroup0x" + id;
   }
 }

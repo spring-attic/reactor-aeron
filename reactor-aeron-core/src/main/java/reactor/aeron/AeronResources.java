@@ -45,16 +45,15 @@ public class AeronResources implements OnDisposable {
             th -> {
               logger.error("{} failed to start, cause: {}", this, th.toString());
               dispose();
-            },
-            () -> logger.info("{} started", this));
+            });
 
     dispose
         .then(doDispose())
         .doFinally(s -> onDispose.onComplete())
         .subscribe(
             null,
-            th -> logger.warn("{} closed with error: {}", this, th.toString()),
-            () -> logger.info("{} closed", this));
+            th -> logger.warn("{} failed on doDispose(): {}", this, th.toString()),
+            () -> logger.debug("Disposed {}", this));
   }
 
   /**
@@ -102,14 +101,14 @@ public class AeronResources implements OnDisposable {
           aeron = Aeron.connect(aeronContext);
 
           eventLoopGroup =
-              new AeronEventLoopGroup(config.idleStrategySupplier(), config.numOfWorkers());
+              new AeronEventLoopGroup(config.numOfWorkers(), config.idleStrategySupplier());
 
           Runtime.getRuntime()
               .addShutdownHook(
                   new Thread(() -> deleteAeronDirectory(aeronContext.aeronDirectory())));
 
-          logger.info(
-              "{} has initialized embedded mediaDriver, aeron directory: {}",
+          logger.debug(
+              "{} has initialized embedded media driver, aeron directory: {}",
               this,
               aeronContext.aeronDirectoryName());
         });
@@ -149,7 +148,7 @@ public class AeronResources implements OnDisposable {
                           .doOnError(
                               ex -> {
                                 logger.error(
-                                    "{} failed to register message publication, cause: {}",
+                                    "{} failed on registerPublication(), cause: {}",
                                     this,
                                     ex.toString());
                                 if (!aeronPublication.isClosed()) {
@@ -223,7 +222,7 @@ public class AeronResources implements OnDisposable {
                           .doOnError(
                               ex -> {
                                 logger.error(
-                                    "{} failed to register message subscription, cause: {}",
+                                    "{} failed on registerSubscription(), cause: {}",
                                     this,
                                     ex.toString());
                                 if (!aeronSubscription.isClosed()) {
@@ -283,7 +282,7 @@ public class AeronResources implements OnDisposable {
   private Mono<Void> doDispose() {
     return Mono.defer(
         () -> {
-          logger.info("{} shutting down", this);
+          logger.debug("Disposing {}", this);
 
           eventLoopGroup.dispose();
 
@@ -298,8 +297,6 @@ public class AeronResources implements OnDisposable {
                     Optional.ofNullable(mediaDriver)
                         .map(MediaDriver::context)
                         .ifPresent(context -> IoUtil.delete(context.aeronDirectory(), true));
-
-                    logger.info("{} has shutdown", this);
                   });
         });
   }

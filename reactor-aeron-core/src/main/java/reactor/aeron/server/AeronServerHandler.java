@@ -62,8 +62,8 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
         .doFinally(s -> onDispose.onComplete())
         .subscribe(
             null,
-            th -> logger.warn("Disposed aeron server handler with error: {}", th.toString()),
-            () -> logger.debug("Disposed aeron server handler"));
+            th -> logger.warn("{} failed on doDispose(): {}", this, th.toString()),
+            () -> logger.debug("Disposed {}", this));
   }
 
   Mono<OnDisposable> start() {
@@ -72,7 +72,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
           // Sub(endpoint{address:serverPort})
           String inboundChannel = options.inboundUri().asString();
 
-          logger.debug("Starting aeron server handler on: {}", inboundChannel);
+          logger.debug("Starting {} on: {}", this, inboundChannel);
 
           return resources
               .subscription(
@@ -83,11 +83,10 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
                   this::onImageUnavailable /*remove and dispose session*/)
               .doOnSuccess(subscription -> this.subscription = subscription)
               .thenReturn(this)
-              .doOnSuccess(
-                  handler -> logger.debug("Started aeron server handler on: {}", inboundChannel))
+              .doOnSuccess(handler -> logger.debug("Started {} on: {}", this, inboundChannel))
               .doOnError(
                   ex -> {
-                    logger.error("Failed to start aeron server handler on: {}", inboundChannel);
+                    logger.error("Failed to start {} on: {}", this, inboundChannel);
                     dispose();
                   });
         });
@@ -241,7 +240,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
   private Mono<Void> doDispose() {
     return Mono.defer(
         () -> {
-          logger.debug("Aeron server handler is disposing");
+          logger.debug("Disposing {}", this);
           List<Mono<Void>> monos = new ArrayList<>();
 
           // dispose server acceptor subscription

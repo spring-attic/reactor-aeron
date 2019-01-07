@@ -67,11 +67,8 @@ public final class DefaultAeronConnection implements Connection {
         .doFinally(s -> onDispose.onComplete())
         .subscribe(
             null,
-            th ->
-                logger.warn(
-                    "{}: aeron connection disposed with error: {}",
-                    Integer.toHexString(sessionId),
-                    th.toString()));
+            th -> logger.warn("{} failed on doDispose(): {}", this, th.toString()),
+            () -> logger.debug("Disposed {}", this));
   }
 
   @Override
@@ -102,15 +99,18 @@ public final class DefaultAeronConnection implements Connection {
   private Mono<Void> doDispose() {
     return Mono.defer(
         () -> {
-          logger.debug("{}: disposing {}", Integer.toHexString(sessionId), this);
+          logger.debug("Disposing {}", this);
           return Mono.whenDelayError(
-                  Mono.fromRunnable(inbound::dispose),
-                  Optional.ofNullable(subscription)
-                      .map(s -> Mono.fromRunnable(s::dispose).then(s.onDispose()))
-                      .orElse(Mono.empty()),
-                  Mono.fromRunnable(publication::dispose).then(publication.onDispose()))
-              .doFinally(
-                  s -> logger.debug("{}: disposed {}", Integer.toHexString(sessionId), this));
+              Mono.fromRunnable(inbound::dispose),
+              Optional.ofNullable(subscription)
+                  .map(s -> Mono.fromRunnable(s::dispose).then(s.onDispose()))
+                  .orElse(Mono.empty()),
+              Mono.fromRunnable(publication::dispose).then(publication.onDispose()));
         });
+  }
+
+  @Override
+  public String toString() {
+    return "DefaultAeronConnection0x" + Integer.toHexString(sessionId);
   }
 }

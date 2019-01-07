@@ -1,7 +1,6 @@
 package reactor.aeron;
 
 import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 import org.reactivestreams.Publisher;
 import reactor.core.CoreSubscriber;
