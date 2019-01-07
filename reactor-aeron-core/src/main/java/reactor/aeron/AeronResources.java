@@ -4,6 +4,7 @@ import io.aeron.Aeron;
 import io.aeron.ExclusivePublication;
 import io.aeron.FragmentAssembler;
 import io.aeron.Image;
+import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
 import io.aeron.logbuffer.FragmentHandler;
@@ -17,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
+import reactor.core.scheduler.Schedulers;
 
 public class AeronResources implements OnDisposable {
 
@@ -78,9 +80,7 @@ public class AeronResources implements OnDisposable {
   }
 
   private void start0() {
-    if (!isDisposed()) {
-      start.onComplete();
-    }
+    start.onComplete();
   }
 
   private Mono<Void> doStart() {
@@ -101,7 +101,8 @@ public class AeronResources implements OnDisposable {
           aeron = Aeron.connect(aeronContext);
 
           eventLoopGroup =
-              new AeronEventLoopGroup(config.numOfWorkers(), config.idleStrategySupplier());
+              new AeronEventLoopGroup(
+                  "reactor-aeron", config.numOfWorkers(), config.idleStrategySupplier());
 
           Runtime.getRuntime()
               .addShutdownHook(
@@ -114,10 +115,6 @@ public class AeronResources implements OnDisposable {
         });
   }
 
-  public AeronEventLoop nextEventLoop() {
-    return eventLoopGroup.next();
-  }
-
   /**
    * Creates aeron {@link ExclusivePublication} then wraps it into {@link MessagePublication}.
    * Result message publication will be assigned to event loop.
@@ -128,21 +125,20 @@ public class AeronResources implements OnDisposable {
    */
   public Mono<MessagePublication> publication(String channel, AeronOptions options) {
     return Mono.defer(
-        () -> {
-          AeronEventLoop eventLoop = this.nextEventLoop();
-
-          return eventLoop
-              .publicationFromSupplier(() -> aeronPublication(channel))
-              .doOnError(
-                  ex ->
-                      logger.error(
-                          "{} failed on aeronPublication(), channel: {}, cause: {}",
-                          this,
-                          channel,
-                          ex.toString()))
-              .flatMap(
-                  aeronPublication ->
-                      eventLoop
+        () ->
+            aeronPublication(channel)
+                .subscribeOn(Schedulers.parallel())
+                .doOnError(
+                    ex ->
+                        logger.error(
+                            "{} failed on aeronPublication(), channel: {}, cause: {}",
+                            this,
+                            channel,
+                            ex.toString()))
+                .flatMap(
+                    aeronPublication -> {
+                      AeronEventLoop eventLoop = eventLoopGroup.next();
+                      return eventLoop
                           .registerPublication(
                               new MessagePublication(aeronPublication, options, eventLoop))
                           .doOnError(
@@ -154,28 +150,29 @@ public class AeronResources implements OnDisposable {
                                 if (!aeronPublication.isClosed()) {
                                   aeronPublication.close();
                                 }
-                              }));
-        });
+                              });
+                    }));
   }
 
-  private ExclusivePublication aeronPublication(String channel) {
-    logger.debug("Adding aeron.Publication for channel {}", channel);
-    long startTime = System.nanoTime();
+  private Mono<Publication> aeronPublication(String channel) {
+    return Mono.fromCallable(
+        () -> {
+          logger.debug("Adding aeron.Publication for channel {}", channel);
+          long startTime = System.nanoTime();
 
-    ExclusivePublication publication = aeron.addExclusivePublication(channel, STREAM_ID);
+          Publication publication = aeron.addExclusivePublication(channel, STREAM_ID);
 
-    long endTime = System.nanoTime();
-    long spent = Duration.ofNanos(endTime - startTime).toNanos();
-    logger.debug("Added aeron.Publication for channel {}, spent: {} ns", channel, spent);
+          long endTime = System.nanoTime();
+          long spent = Duration.ofNanos(endTime - startTime).toNanos();
+          logger.debug("Added aeron.Publication for channel {}, spent: {} ns", channel, spent);
 
-    return publication;
+          return publication;
+        });
   }
 
   @Override
   public void dispose() {
-    if (!isDisposed()) {
-      dispose.onComplete();
-    }
+    dispose.onComplete();
   }
 
   /**
@@ -196,23 +193,20 @@ public class AeronResources implements OnDisposable {
       Consumer<Image> availableImageHandler,
       Consumer<Image> unavailableImageHandler) {
     return Mono.defer(
-        () -> {
-          AeronEventLoop eventLoop = this.nextEventLoop();
-
-          return eventLoop
-              .subscriptionFromSupplier(
-                  () -> aeronSubscription(channel, availableImageHandler, unavailableImageHandler))
-              .timeout(Duration.ofSeconds(3))
-              .doOnError(
-                  ex ->
-                      logger.error(
-                          "{} failed on aeronSubscription(), channel: {}, cause: {}",
-                          this,
-                          channel,
-                          ex.toString()))
-              .flatMap(
-                  aeronSubscription ->
-                      eventLoop
+        () ->
+            aeronSubscription(channel, availableImageHandler, unavailableImageHandler)
+                .subscribeOn(Schedulers.parallel())
+                .doOnError(
+                    ex ->
+                        logger.error(
+                            "{} failed on aeronSubscription(), channel: {}, cause: {}",
+                            this,
+                            channel,
+                            ex.toString()))
+                .flatMap(
+                    aeronSubscription -> {
+                      AeronEventLoop eventLoop = eventLoopGroup.next();
+                      return eventLoop
                           .registerSubscription(
                               new MessageSubscription(
                                   aeronSubscription,
@@ -228,45 +222,46 @@ public class AeronResources implements OnDisposable {
                                 if (!aeronSubscription.isClosed()) {
                                   aeronSubscription.close();
                                 }
-                              }))
-              .timeout(Duration.ofSeconds(4));
-        });
+                              });
+                    }));
   }
 
-  private Subscription aeronSubscription(
+  private Mono<Subscription> aeronSubscription(
       String channel,
       Consumer<Image> availableImageHandler,
       Consumer<Image> unavailableImageHandler) {
+    return Mono.fromCallable(
+        () -> {
+          logger.debug("Adding aeron.Subscription for channel {}", channel);
+          long startTime = System.nanoTime();
 
-    logger.debug("Adding aeron.Subscription for channel {}", channel);
-    long startTime = System.nanoTime();
+          Subscription subscription =
+              aeron.addSubscription(
+                  channel,
+                  STREAM_ID,
+                  image -> {
+                    logger.debug(
+                        "{} onImageAvailable: {} {}",
+                        this,
+                        Integer.toHexString(image.sessionId()),
+                        image.sourceIdentity());
+                    Optional.ofNullable(availableImageHandler).ifPresent(c -> c.accept(image));
+                  },
+                  image -> {
+                    logger.debug(
+                        "{} onImageUnavailable: {} {}",
+                        this,
+                        Integer.toHexString(image.sessionId()),
+                        image.sourceIdentity());
+                    Optional.ofNullable(unavailableImageHandler).ifPresent(c -> c.accept(image));
+                  });
 
-    Subscription subscription =
-        aeron.addSubscription(
-            channel,
-            STREAM_ID,
-            image -> {
-              logger.debug(
-                  "{} onImageAvailable: {} {}",
-                  this,
-                  Integer.toHexString(image.sessionId()),
-                  image.sourceIdentity());
-              Optional.ofNullable(availableImageHandler).ifPresent(c -> c.accept(image));
-            },
-            image -> {
-              logger.debug(
-                  "{} onImageUnavailable: {} {}",
-                  this,
-                  Integer.toHexString(image.sessionId()),
-                  image.sourceIdentity());
-              Optional.ofNullable(unavailableImageHandler).ifPresent(c -> c.accept(image));
-            });
+          long endTime = System.nanoTime();
+          long spent = Duration.ofNanos(endTime - startTime).toNanos();
+          logger.debug("Added aeron.Subscription for channel {}, spent: {} ns", channel, spent);
 
-    long endTime = System.nanoTime();
-    long spent = Duration.ofNanos(endTime - startTime).toNanos();
-    logger.debug("Added aeron.Subscription for channel {}, spent: {} ns", channel, spent);
-
-    return subscription;
+          return subscription;
+        });
   }
 
   @Override
@@ -284,10 +279,9 @@ public class AeronResources implements OnDisposable {
         () -> {
           logger.debug("Disposing {}", this);
 
-          eventLoopGroup.dispose();
-
-          return eventLoopGroup
-              .onDispose()
+          return Mono //
+              .fromRunnable(eventLoopGroup::dispose)
+              .then(eventLoopGroup.onDispose())
               .doFinally(
                   s -> {
                     CloseHelper.quietClose(aeron);

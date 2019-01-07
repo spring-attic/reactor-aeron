@@ -27,13 +27,15 @@ public class AeronEventLoopGroup implements OnDisposable {
   /**
    * Constructor.
    *
+   * @param name name
    * @param numOfWorkers number of {@link AeronEventLoop} instances in the group
    * @param idleStrategySupplier factory for {@link IdleStrategy} instances
    */
-  public AeronEventLoopGroup(int numOfWorkers, Supplier<IdleStrategy> idleStrategySupplier) {
+  public AeronEventLoopGroup(
+      String name, int numOfWorkers, Supplier<IdleStrategy> idleStrategySupplier) {
     this.eventLoops = new AeronEventLoop[numOfWorkers];
     for (int i = 0; i < numOfWorkers; i++) {
-      eventLoops[i] = new AeronEventLoop(i, id, idleStrategySupplier.get());
+      eventLoops[i] = new AeronEventLoop(name, i, id, idleStrategySupplier.get());
     }
 
     dispose

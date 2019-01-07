@@ -21,10 +21,9 @@ public final class AeronEventLoop implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronEventLoop.class);
 
-  private static final String WORKER_NAME_FORMAT = "reactor-aeron-%x-%d";
-
   private final IdleStrategy idleStrategy;
 
+  private final String name;
   private final int workerId; // worker id
   private final int groupId; // event loop group id
 
@@ -42,11 +41,13 @@ public final class AeronEventLoop implements OnDisposable {
   /**
    * Constructor.
    *
+   * @param name name
    * @param workerId worker id
    * @param groupId id of parent {@link AeronEventLoopGroup}
    * @param idleStrategy {@link IdleStrategy} instance for this event loop
    */
-  AeronEventLoop(int workerId, int groupId, IdleStrategy idleStrategy) {
+  AeronEventLoop(String name, int workerId, int groupId, IdleStrategy idleStrategy) {
+    this.name = name;
     this.workerId = workerId;
     this.groupId = groupId;
     this.idleStrategy = idleStrategy;
@@ -64,7 +65,7 @@ public final class AeronEventLoop implements OnDisposable {
   }
 
   private Worker createWorker() {
-    String threadName = String.format(WORKER_NAME_FORMAT, groupId, workerId);
+    String threadName = String.format("%s-%x-%d", name, groupId, workerId);
     ThreadFactory threadFactory = defaultThreadFactory(threadName);
     Worker w = new Worker();
     thread = threadFactory.newThread(w);
