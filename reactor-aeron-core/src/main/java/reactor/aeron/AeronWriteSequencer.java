@@ -26,7 +26,7 @@ final class AeronWriteSequencer {
   private final MonoProcessor<Void> newPromise;
 
   /**
-   * Constructor for templating {@link AeronWriteSequencer} objects.
+   * Template constructor. See also {@link #AeronWriteSequencer(MessagePublication, Publisher)}.
    *
    * @param publication message publication
    */
@@ -39,15 +39,15 @@ final class AeronWriteSequencer {
   }
 
   /**
-   * Constructor.
+   * Constructor for creating branched {@link AeronWriteSequencer} objects.
    *
    * @param publication message publication
    * @param dataPublisher data publisher
    */
   private AeronWriteSequencer(MessagePublication publication, Publisher<?> dataPublisher) {
-    this.publication = publication;
+    this.publication = Objects.requireNonNull(publication, "message publication must be present");
     // Prepare
-    this.dataPublisher = dataPublisher;
+    this.dataPublisher = Objects.requireNonNull(dataPublisher, "data publisher must be not null");
     this.newPromise = MonoProcessor.create();
     this.inner = new PublisherSender(this, publication);
   }
@@ -59,7 +59,6 @@ final class AeronWriteSequencer {
    * @return mono handle
    */
   public Mono<Void> write(Publisher<?> publisher) {
-    Objects.requireNonNull(publisher, "dataPublisher must be not null");
     return new AeronWriteSequencer(publication, publisher).write0();
   }
 
