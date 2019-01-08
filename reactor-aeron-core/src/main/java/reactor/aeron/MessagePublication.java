@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
+import reactor.core.publisher.MonoSink;
 
 public class MessagePublication implements OnDisposable, AutoCloseable {
 
@@ -49,17 +50,15 @@ public class MessagePublication implements OnDisposable, AutoCloseable {
    * @return mono handle
    */
   public Mono<Void> enqueue(ByteBuffer buffer) {
-    return Mono.defer(
-        () -> {
-          MonoProcessor<Void> sink = MonoProcessor.create();
+    return Mono.create(
+        sink -> {
           boolean result = false;
           if (!isDisposed()) {
             result = publishTasks.offer(new PublishTask(buffer, sink));
           }
           if (!result) {
-            sink.onError(AeronExceptions.failWithMessagePublicationUnavailable());
+            sink.error(AeronExceptions.failWithMessagePublicationUnavailable());
           }
-          return sink;
         });
   }
 
@@ -78,11 +77,6 @@ public class MessagePublication implements OnDisposable, AutoCloseable {
     if (result > 0) {
       publishTasks.poll();
       task.success();
-      return 1;
-    }
-
-    if (result == 0) {
-      publishTasks.poll();
       return 1;
     }
 
@@ -206,19 +200,21 @@ public class MessagePublication implements OnDisposable, AutoCloseable {
   private class PublishTask {
 
     private final ByteBuffer msgBody;
-    private final MonoProcessor<Void> sink;
+    private final MonoSink<Void> sink;
+    private volatile boolean isDisposed = false;
 
     private long start;
 
-    private PublishTask(ByteBuffer msgBody, MonoProcessor<Void> sink) {
+    private PublishTask(ByteBuffer msgBody, MonoSink<Void> sink) {
       this.msgBody = msgBody;
-      this.sink = sink;
+      this.sink = sink.onDispose(() -> isDisposed = true);
     }
 
     private long run() {
-      if (sink.isDisposed()) {
-        return 0;
+      if (isDisposed) {
+        return 1;
       }
+
       if (start == 0) {
         start = System.currentTimeMillis();
       }
@@ -251,11 +247,15 @@ public class MessagePublication implements OnDisposable, AutoCloseable {
     }
 
     private void success() {
-      sink.onComplete();
+      if (!isDisposed) {
+        sink.success();
+      }
     }
 
     private void error(Throwable ex) {
-      sink.onError(ex);
+      if (!isDisposed) {
+        sink.error(ex);
+      }
     }
   }
 }
