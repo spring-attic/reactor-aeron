@@ -10,11 +10,6 @@ final class AeronWriteSequencer {
 
   private final MessagePublication publication;
 
-  /**
-   * Constructor for templating {@link AeronWriteSequencer} objects.
-   *
-   * @param publication message publication
-   */
   AeronWriteSequencer(MessagePublication publication) {
     this.publication = Objects.requireNonNull(publication, "message publication must be present");
   }
