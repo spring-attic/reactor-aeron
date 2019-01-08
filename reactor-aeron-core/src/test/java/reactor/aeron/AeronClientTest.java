@@ -216,7 +216,7 @@ class AeronClientTest extends BaseAeronTest {
                 processor1.take(count).filter(response -> !response.startsWith("client-1 ")),
                 processor2.take(count).filter(response -> !response.startsWith("client-2 "))))
         .expectComplete()
-        .verify(Duration.ofSeconds(20));
+        .verify(Duration.ofSeconds(30));
   }
 
   @Test
