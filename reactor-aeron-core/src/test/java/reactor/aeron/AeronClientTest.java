@@ -24,6 +24,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.test.StepVerifier;
+import reactor.util.concurrent.Queues;
 
 class AeronClientTest extends BaseAeronTest {
 
@@ -270,7 +271,7 @@ class AeronClientTest extends BaseAeronTest {
 
   @Test
   public void testConcurrentSendingStreams() {
-    int overallCount = 200;
+    int overallCount = Queues.SMALL_BUFFER_SIZE * 4;
     int streams = 2;
     int requestPerStream = overallCount / streams;
 

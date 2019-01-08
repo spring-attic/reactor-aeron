@@ -1,7 +1,6 @@
 package reactor.aeron;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -21,21 +20,22 @@ import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
+import reactor.util.concurrent.Queues;
 
 class AeronWriteSequencerTest {
 
   private static final Duration TIMEOUT = Duration.ofSeconds(2);
 
-  private static final int PREFETCH = 32;
+  private static final int PREFETCH = Queues.SMALL_BUFFER_SIZE;
   private static final int FLUX_REQUESTS = PREFETCH * 4;
 
-  private AeronWriteSequencerNewImpl aeronWriteSequencer;
+  private AeronWriteSequencer aeronWriteSequencer;
   private MessagePublication messagePublication;
 
   @BeforeEach
   void setUp() {
     this.messagePublication = Mockito.mock(MessagePublication.class);
-    this.aeronWriteSequencer = new AeronWriteSequencerNewImpl(messagePublication);
+    this.aeronWriteSequencer = new AeronWriteSequencer(messagePublication);
   }
 
   @Test
@@ -87,12 +87,8 @@ class AeronWriteSequencerTest {
     StepVerifier.create(aeronWriteSequencer.write(request))
         .expectErrorSatisfies(
             actual -> {
-              // workaround to get cause
-              assertEquals("Failed to publish signal", actual.getMessage());
-              assertNotNull(actual.getCause());
-
-              assertEquals(expected.getClass(), actual.getCause().getClass());
-              assertEquals(expected.getMessage(), actual.getCause().getMessage());
+              assertEquals(expected.getClass(), actual.getClass());
+              assertEquals(expected.getMessage(), actual.getMessage());
             })
         .verify(TIMEOUT);
   }
@@ -227,7 +223,7 @@ class AeronWriteSequencerTest {
 
     // long wait task
     int fastTasks = PREFETCH;
-    int waitingTasks = PREFETCH;
+    int waitingTasks = (PREFETCH - (PREFETCH >> 2)); // see {@link Operators#unboundedOrLimit}
     ReplayProcessor<Integer> latch = ReplayProcessor.create();
     // generates responses
     List<Mono<Void>> responses =
@@ -411,16 +407,11 @@ class AeronWriteSequencerTest {
             .publishOn(Schedulers.parallel())
             .map(i -> AeronUtils.stringToByteBuffer("test" + i));
 
-
     StepVerifier.create(aeronWriteSequencer.write(request).subscribeOn(Schedulers.parallel()))
         .expectErrorSatisfies(
             actual -> {
-              // workaround to get cause
-              assertEquals("Failed to publish signal", actual.getMessage());
-              assertNotNull(actual.getCause());
-
-              assertEquals(expected.getClass(), actual.getCause().getClass());
-              assertEquals(expected.getMessage(), actual.getCause().getMessage());
+              assertEquals(expected.getClass(), actual.getClass());
+              assertEquals(expected.getMessage(), actual.getMessage());
             })
         .verify(TIMEOUT);
   }
