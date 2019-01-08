@@ -1,139 +1,225 @@
 package reactor.aeron.server;
 
-import java.time.Duration;
+import io.aeron.Image;
+import io.aeron.logbuffer.FragmentHandler;
+import io.aeron.logbuffer.Header;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
-import java.util.stream.Collectors;
+import org.agrona.DirectBuffer;
 import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.aeron.AeronInbound;
 import reactor.aeron.AeronOptions;
-import reactor.aeron.AeronOutbound;
 import reactor.aeron.AeronResources;
-import reactor.aeron.AeronUtils;
 import reactor.aeron.Connection;
-import reactor.aeron.ControlMessageSubscriber;
+import reactor.aeron.DefaultAeronConnection;
 import reactor.aeron.DefaultAeronInbound;
 import reactor.aeron.DefaultAeronOutbound;
-import reactor.aeron.MessagePublication;
-import reactor.aeron.MessageType;
+import reactor.aeron.MessageSubscription;
 import reactor.aeron.OnDisposable;
-import reactor.aeron.Protocol;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
-final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable {
+/**
+ * Full-duplex aeron server handler. Schematically can be described as:
+ *
+ * <pre>
+ * Server
+ * serverPort->inbound->Sub(endpoint, acceptor[onImageAvailable, onImageUnavailbe])
+ * + onImageAvailable(Image)
+ * sessionId->inbound->EmitterPocessor
+ * serverControlPort->outbound->MDC(sessionId)->Pub(control-endpoint, sessionId)
+ * </pre>
+ */
+final class AeronServerHandler implements FragmentHandler, OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronServerHandler.class);
 
-  private static final AtomicInteger streamIdCounter = new AtomicInteger(1000);
-
-  private final String category;
   private final AeronOptions options;
   private final AeronResources resources;
   private final Function<? super Connection, ? extends Publisher<Void>> handler;
-  private final String serverChannel;
 
-  private final AtomicLong nextSessionId = new AtomicLong(0);
+  private volatile MessageSubscription subscription; // server acceptor subscription
 
-  private final List<SessionHandler> handlers = new CopyOnWriteArrayList<>();
+  // TODO think of more performant concurrent hashmap
+  private final Map<Integer, Connection> connections = new ConcurrentHashMap<>(32);
 
   private final MonoProcessor<Void> dispose = MonoProcessor.create();
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
-  AeronServerHandler(AeronServerSettings settings) {
-    category = settings.name();
-    options = settings.options();
-    resources = settings.aeronResources();
-    handler = settings.handler();
-    serverChannel = options.serverChannel();
+  AeronServerHandler(AeronOptions options) {
+    this.options = options;
+    this.resources = options.resources();
+    this.handler = options.handler();
 
     dispose
         .then(doDispose())
         .doFinally(s -> onDispose.onComplete())
-        .subscribe(null, th -> logger.warn("AeronServerHandler disposed with error: " + th));
+        .subscribe(
+            null,
+            th -> logger.warn("{} failed on doDispose(): {}", this, th.toString()),
+            () -> logger.debug("Disposed {}", this));
   }
 
-  @Override
-  public void onSubscription(Subscription subscription) {
-    subscription.request(Long.MAX_VALUE);
+  Mono<OnDisposable> start() {
+    return Mono.defer(
+        () -> {
+          // Sub(endpoint{address:serverPort})
+          String inboundChannel = options.inboundUri().asString();
+
+          logger.debug("Starting {} on: {}", this, inboundChannel);
+
+          return resources
+              .subscription(
+                  inboundChannel,
+                  options,
+                  this, /*fragmentHandler*/
+                  this::onImageAvailable, /*setup new session*/
+                  this::onImageUnavailable /*remove and dispose session*/)
+              .doOnSuccess(subscription -> this.subscription = subscription)
+              .thenReturn(this)
+              .doOnSuccess(handler -> logger.debug("Started {} on: {}", this, inboundChannel))
+              .doOnError(
+                  ex -> {
+                    logger.error("Failed to start {} on: {}", this, inboundChannel);
+                    dispose();
+                  });
+        });
   }
 
+  /**
+   * Inner implementation of aeron's {@link FragmentHandler}. Sits on the server inbound channel and
+   * serves all incoming sessions. By {@link Header#sessionId()} corresponding {@link Connection} is
+   * being found and message passed there.
+   */
   @Override
-  public void onConnect(
-      long connectRequestId,
-      String clientChannel,
-      int clientControlStreamId,
-      int clientSessionStreamId) {
+  public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
+    int sessionId = header.sessionId();
+    Connection connection = connections.get(sessionId);
 
-    if (logger.isDebugEnabled()) {
-      logger.debug(
-          "[{}] Received {} for connectRequestId: {}, channel={}, "
-              + "clientControlStreamId={}, clientSessionStreamId={}",
-          category,
-          MessageType.CONNECT,
-          connectRequestId,
-          AeronUtils.minifyChannel(clientChannel),
-          clientControlStreamId,
-          clientSessionStreamId);
+    if (connection == null) {
+      logger.warn(
+          "{}: received message but server connection not found (total connections: {})",
+          Integer.toHexString(sessionId),
+          connections.size());
+      return;
     }
 
-    int serverSessionStreamId = streamIdCounter.incrementAndGet();
-    long sessionId = nextSessionId.incrementAndGet();
-    SessionHandler sessionHandler =
-        new SessionHandler(
-            clientChannel,
-            clientSessionStreamId,
-            clientControlStreamId,
-            connectRequestId,
-            sessionId,
-            serverSessionStreamId);
+    DefaultAeronInbound inbound = (DefaultAeronInbound) connection.inbound();
+    inbound.onFragment(buffer, offset, length, header);
+  }
 
-    sessionHandler
-        .start()
+  /**
+   * Setting up new {@link Connection} identified by {@link Image#sessionId()}. Specifically creates
+   * message publication (aeron {@link io.aeron.Publication} underneath) with control-endpoint,
+   * control-mode and given sessionId. Essentially creates server side MDC for concrete sessionId;
+   * think of this as <i>server-side-individual-MDC</i>.
+   *
+   * @param image source image
+   */
+  private void onImageAvailable(Image image) {
+    // Pub(control-endpoint{address:serverControlPort}, sessionId)->MDC(sessionId)
+    int sessionId = image.sessionId();
+    String outboundChannel = options.outboundUri().sessionId(sessionId).asString();
+
+    // not expecting following condition be true at normal circumstances; passing it would mean
+    // aeron changed contract/semantic around sessionId
+    if (connections.containsKey(sessionId)) {
+      logger.error("{}: server connection already exists!?", Integer.toHexString(sessionId));
+      return;
+    }
+
+    logger.debug(
+        "{}: creating server connection: {}", Integer.toHexString(sessionId), outboundChannel);
+
+    resources
+        .publication(outboundChannel, options)
+        .map(
+            publication -> {
+              DefaultAeronInbound inbound = new DefaultAeronInbound();
+              DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
+              return new DefaultAeronConnection(sessionId, inbound, outbound, publication);
+            })
+        .doOnSuccess(connection -> setupConnection(sessionId, connection))
         .subscribe(
-            connection ->
-                handler
-                    .apply(connection) //
-                    .subscribe(connection.disposeSubscriber()),
-            th ->
-                logger.error(
-                    "[{}] Occurred exception on connect to {}, sessionId: {}, "
-                        + "connectRequestId: {}, clientSessionStreamId: {}, "
-                        + "clientControlStreamId: {}, serverSessionStreamId: {}, error: ",
-                    category,
-                    clientChannel,
-                    sessionId,
-                    connectRequestId,
-                    clientSessionStreamId,
-                    clientControlStreamId,
-                    serverSessionStreamId,
-                    th));
+            null,
+            ex ->
+                logger.warn(
+                    "{}: failed to create server outbound, cause: {}",
+                    Integer.toHexString(sessionId),
+                    ex.toString()),
+            () ->
+                logger.debug(
+                    "{}: created server connection: {}",
+                    Integer.toHexString(sessionId),
+                    outboundChannel));
   }
 
-  @Override
-  public void onConnectAck(long connectRequestId, long sessionId, int serverSessionStreamId) {
-    logger.error(
-        "CONNECT_ACK is not supported, connectRequestId: {}",
-        connectRequestId,
-        sessionId,
-        serverSessionStreamId);
+  /**
+   * Disposes {@link Connection} corresponding to {@link Image#sessionId()}.
+   *
+   * @param image source image
+   */
+  private void onImageUnavailable(Image image) {
+    int sessionId = image.sessionId();
+    Connection connection = connections.remove(sessionId);
+
+    if (connection != null) {
+      logger.debug("{}: server inbound became unavailable", Integer.toHexString(sessionId));
+      connection.dispose();
+      connection
+          .onDispose()
+          .doFinally(
+              s -> logger.debug("{}: server connection disposed", Integer.toHexString(sessionId)))
+          .subscribe(
+              null,
+              th -> {
+                // no-op
+              });
+    } else {
+      logger.debug(
+          "{}: attempt to remove server connection but it wasn't found (total connections: {})",
+          Integer.toHexString(sessionId),
+          connections.size());
+    }
   }
 
-  @Override
-  public void onDisconnect(long sessionId) {
-    logger.debug("Received DISCONNECT for sessionId: {}", sessionId);
-    handlers
-        .stream()
-        .filter(handler -> handler.sessionId == sessionId)
-        .findFirst()
-        .ifPresent(SessionHandler::dispose);
+  private void setupConnection(int sessionId, DefaultAeronConnection connection) {
+    // store
+    connections.put(sessionId, connection);
+
+    // register cleanup hook
+    connection
+        .onDispose()
+        .doFinally(s -> connections.remove(sessionId))
+        .subscribe(
+            null,
+            th -> {
+              // no-op
+            });
+
+    if (handler == null) {
+      logger.warn("{}: handler function is not specified", Integer.toHexString(sessionId));
+      return;
+    }
+
+    try {
+      if (!connection.isDisposed()) {
+        handler.apply(connection).subscribe(connection.disposeSubscriber());
+      }
+    } catch (Exception ex) {
+      logger.error(
+          "{}: unexpected exception occurred on handler.apply(), cause: ",
+          Integer.toHexString(sessionId),
+          ex);
+      connection.dispose();
+      throw Exceptions.propagate(ex);
+    }
   }
 
   @Override
@@ -153,179 +239,30 @@ final class AeronServerHandler implements ControlMessageSubscriber, OnDisposable
 
   private Mono<Void> doDispose() {
     return Mono.defer(
-        () ->
-            Mono.whenDelayError(
-                handlers
-                    .stream()
-                    .map(
-                        sessionHandler -> {
-                          sessionHandler.dispose();
-                          return sessionHandler.onDispose();
-                        })
-                    .collect(Collectors.toList())));
+        () -> {
+          logger.debug("Disposing {}", this);
+          List<Mono<Void>> monos = new ArrayList<>();
+
+          // dispose server acceptor subscription
+          monos.add(
+              Optional.ofNullable(subscription)
+                  .map(s -> Mono.fromRunnable(s::dispose).then(s.onDispose()))
+                  .orElse(Mono.empty()));
+
+          // dispose all existing connections
+          connections
+              .values()
+              .stream()
+              .peek(Connection::dispose)
+              .map(Connection::onDispose)
+              .forEach(monos::add);
+
+          return Mono.whenDelayError(monos).doFinally(s -> connections.clear());
+        });
   }
 
-  private class SessionHandler implements Connection {
-
-    private final Logger logger = LoggerFactory.getLogger(SessionHandler.class);
-
-    private final DefaultAeronOutbound outbound;
-    private final DefaultAeronInbound inbound;
-    private final String clientChannel;
-    private final int clientSessionStreamId;
-    private final int serverSessionStreamId;
-    private final long connectRequestId;
-    private final long sessionId;
-    private final int clientControlStreamId;
-
-    private final Mono<MessagePublication> controlPublication;
-
-    private final MonoProcessor<Void> dispose = MonoProcessor.create();
-    private final MonoProcessor<Void> onDispose = MonoProcessor.create();
-
-    private SessionHandler(
-        String clientChannel,
-        int clientSessionStreamId,
-        int clientControlStreamId,
-        long connectRequestId,
-        long sessionId,
-        int serverSessionStreamId) {
-      this.clientSessionStreamId = clientSessionStreamId;
-      this.clientChannel = clientChannel;
-      this.outbound = new DefaultAeronOutbound(category, clientChannel, resources, options);
-      this.connectRequestId = connectRequestId;
-      this.sessionId = sessionId;
-      this.serverSessionStreamId = serverSessionStreamId;
-      this.clientControlStreamId = clientControlStreamId;
-      this.inbound = new DefaultAeronInbound(category, resources);
-
-      this.controlPublication =
-          Mono.defer(() -> newControlPublication(clientChannel, clientControlStreamId)).cache();
-
-      this.dispose
-          .then(doDispose())
-          .doFinally(s -> onDispose.onComplete())
-          .subscribe(null, th -> logger.warn("SessionHandler disposed with error: " + th));
-    }
-
-    private Mono<MessagePublication> newControlPublication(
-        String clientChannel, int clientControlStreamId) {
-      return resources.messagePublication(
-          category, clientChannel, clientControlStreamId, options, resources.nextEventLoop());
-    }
-
-    private Mono<? extends Connection> start() {
-      return connect()
-          .then(outbound.start(clientSessionStreamId))
-          .then(inbound.start(serverChannel, serverSessionStreamId, this::dispose))
-          .thenReturn(this)
-          .doOnSuccess(connection -> handlers.add(this))
-          .doOnError(
-              ex -> {
-                logger.error("Exception occurred on: {}, cause: {}", this, ex.toString());
-                dispose();
-              });
-    }
-
-    @Override
-    public AeronInbound inbound() {
-      return inbound;
-    }
-
-    @Override
-    public AeronOutbound outbound() {
-      return outbound;
-    }
-
-    @Override
-    public String toString() {
-      return "ServerSession{"
-          + "category="
-          + category
-          + ", sessionId="
-          + sessionId
-          + ", clientChannel="
-          + AeronUtils.minifyChannel(clientChannel)
-          + ", serverChannel="
-          + AeronUtils.minifyChannel(serverChannel)
-          + ", clientControlStreamId="
-          + clientControlStreamId
-          + ", clientSessionStreamId="
-          + clientSessionStreamId
-          + ", serverSessionStreamId="
-          + serverSessionStreamId
-          + '}';
-    }
-
-    @Override
-    public void dispose() {
-      dispose.onComplete();
-    }
-
-    @Override
-    public boolean isDisposed() {
-      return onDispose.isDisposed();
-    }
-
-    @Override
-    public Mono<Void> onDispose() {
-      return onDispose;
-    }
-
-    private Mono<Void> doDispose() {
-      return Mono.defer(
-          () -> {
-            logger.debug("About to close {}", this);
-
-            handlers.remove(this);
-
-            Optional.ofNullable(outbound) //
-                .ifPresent(DefaultAeronOutbound::dispose);
-            Optional.ofNullable(inbound) //
-                .ifPresent(DefaultAeronInbound::dispose);
-
-            return Mono.whenDelayError(
-                    Optional.ofNullable(outbound)
-                        .map(DefaultAeronOutbound::onDispose)
-                        .orElse(Mono.empty()),
-                    Optional.ofNullable(inbound)
-                        .map(DefaultAeronInbound::onDispose)
-                        .orElse(Mono.empty()))
-                .doFinally(s -> logger.debug("Closed {}", this));
-          });
-    }
-
-    private Mono<Void> connect() {
-      return Mono.defer(
-          () -> {
-            Duration retryInterval = Duration.ofMillis(100);
-            Duration connectTimeout = options.connectTimeout().plus(options.backpressureTimeout());
-            long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
-
-            return controlPublication.flatMap(
-                publication ->
-                    sendConnectAck(publication)
-                        .retryBackoff(retryCount, retryInterval, retryInterval)
-                        .timeout(connectTimeout)
-                        .then()
-                        .doOnSuccess(
-                            avoid ->
-                                logger.debug("ServerSession sent CONNECT_ACK to: {}", publication))
-                        .onErrorResume(
-                            th -> {
-                              logger.warn(
-                                  "Failed to send CONNECT_ACK to: {}, cause: {}",
-                                  publication,
-                                  th.toString());
-                              return Mono.error(
-                                  new RuntimeException("Failed to send CONNECT_ACK", th));
-                            }));
-          });
-    }
-
-    private Mono<Void> sendConnectAck(MessagePublication publication) {
-      return publication.enqueue(
-          Protocol.createConnectAckBody(sessionId, connectRequestId, serverSessionStreamId));
-    }
+  @Override
+  public String toString() {
+    return "AeronServerHandler0x" + Integer.toHexString(System.identityHashCode(this));
   }
 }

@@ -2,48 +2,44 @@ package reactor.aeron;
 
 import io.aeron.Subscription;
 import io.aeron.logbuffer.FragmentHandler;
-import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.core.publisher.Operators;
 
-public final class MessageSubscription
-    implements org.reactivestreams.Subscription, OnDisposable, AutoCloseable {
+// TODO investigate why implementing org.reactivestreams.Subscription were needed
+public final class MessageSubscription implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(MessageSubscription.class);
 
-  private static final AtomicLongFieldUpdater<MessageSubscription> REQUESTED =
-      AtomicLongFieldUpdater.newUpdater(MessageSubscription.class, "requested");
+  private static final int PREFETCH = 32;
 
-  private final String category;
   private final AeronEventLoop eventLoop;
-  private final Subscription subscription;
+  private final Subscription subscription; // aeron subscription
   private final FragmentHandler fragmentHandler;
+  private final Duration connectTimeout;
 
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
-  @SuppressWarnings("FieldCanBeLocal")
-  private volatile long requested = 0;
-
   /**
-   * Constructor for message subscriptino.
+   * Constructor.
    *
-   * @param category category
-   * @param eventLoop event loop where this message subscription is assigned
    * @param subscription aeron subscription
+   * @param options aeron options
+   * @param eventLoop event loop where this {@code MessageSubscription} is assigned
    * @param fragmentHandler aeron fragment handler
    */
   public MessageSubscription(
-      String category,
-      AeronEventLoop eventLoop,
       Subscription subscription,
+      AeronOptions options,
+      AeronEventLoop eventLoop,
       FragmentHandler fragmentHandler) {
-    this.category = category;
-    this.eventLoop = eventLoop;
     this.subscription = subscription;
+    this.eventLoop = eventLoop;
     this.fragmentHandler = fragmentHandler;
+    this.connectTimeout = options.connectTimeout();
   }
 
   /**
@@ -51,34 +47,29 @@ public final class MessageSubscription
    *
    * @return the number of fragments received
    */
-  public int poll() {
-    int r = (int) Math.min(requested, 8);
-    int numOfPolled = 0;
-    if (r > 0) {
-      numOfPolled = subscription.poll(fragmentHandler, r);
-      if (numOfPolled > 0) {
-        Operators.produced(REQUESTED, this, numOfPolled);
-      }
-    }
-    return numOfPolled;
+  int poll() {
+    // TODO after removing reactiveStreams.Subscription removed from here:
+    //  r, numOfPolled, requested; correlates with problem around model of AeronInbound
+    return subscription.poll(fragmentHandler, PREFETCH);
   }
 
-  @Override
-  public void request(long n) {
-    Operators.addCap(REQUESTED, this, n);
-  }
-
-  @Override
-  public void cancel() {}
-
-  @Override
+  /**
+   * Closes aeron {@link Subscription}. Can only be called from within {@link AeronEventLoop} worker
+   * thred.
+   *
+   * <p><b>NOTE:</b> this method is not for public client (despite it was declared with {@code
+   * public} signifier).
+   */
   public void close() {
     if (!eventLoop.inEventLoop()) {
       throw new IllegalStateException("Can only close aeron subscription from within event loop");
     }
     try {
       subscription.close();
-      logger.debug("aeron.Subscription closed: {}", this);
+      logger.debug("Disposed {}", this);
+    } catch (Exception ex) {
+      logger.warn("{} failed on aeron.Subscription close(): {}", this, ex.toString());
+      throw Exceptions.propagate(ex);
     } finally {
       onDispose.onComplete();
     }
@@ -87,7 +78,7 @@ public final class MessageSubscription
   @Override
   public void dispose() {
     eventLoop
-        .dispose(this)
+        .disposeSubscription(this)
         .subscribe(
             null,
             th -> {
@@ -95,6 +86,11 @@ public final class MessageSubscription
             });
   }
 
+  /**
+   * Delegates to {@link Subscription#isClosed()}.
+   *
+   * @return {@code true} if aeron {@code Subscription} is closed, {@code false} otherwise
+   */
   @Override
   public boolean isDisposed() {
     return subscription.isClosed();
@@ -105,8 +101,40 @@ public final class MessageSubscription
     return onDispose;
   }
 
+  /**
+   * Spins (in async fashion) until {@link Subscription#isConnected()} would have returned {@code
+   * true} or {@code connectTimeout} elapsed. See also {@link
+   * MessageSubscription#ensureConnected0()}.
+   *
+   * @return mono result
+   */
+  public Mono<MessageSubscription> ensureConnected() {
+    return Mono.defer(
+        () -> {
+          Duration retryInterval = Duration.ofMillis(100);
+          long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
+          retryCount = Math.max(retryCount, 1);
+
+          return ensureConnected0()
+              .retryBackoff(retryCount, retryInterval, retryInterval)
+              .timeout(connectTimeout)
+              .doOnError(
+                  ex -> logger.warn("aeron.Subscription is not connected after several retries"))
+              .thenReturn(this);
+        });
+  }
+
+  private Mono<Void> ensureConnected0() {
+    return Mono.defer(
+        () ->
+            subscription.isConnected()
+                ? Mono.empty()
+                : Mono.error(
+                    AeronExceptions.failWithSubscription("aeron.Subscription is not connected")));
+  }
+
   @Override
   public String toString() {
-    return AeronUtils.format(category, "sub", subscription.channel(), subscription.streamId());
+    return "MessageSubscription{sub=" + subscription.channel() + "}";
   }
 }

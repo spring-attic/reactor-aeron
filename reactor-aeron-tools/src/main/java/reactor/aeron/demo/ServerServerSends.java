@@ -2,7 +2,6 @@ package reactor.aeron.demo;
 
 import java.time.Duration;
 import reactor.aeron.AeronResources;
-import reactor.aeron.AeronUtils;
 import reactor.aeron.server.AeronServer;
 import reactor.core.publisher.Flux;
 
@@ -16,19 +15,16 @@ public class ServerServerSends {
   public static void main(String[] args) throws Exception {
     AeronResources aeronResources = AeronResources.start();
     try {
-      AeronServer.create("server", aeronResources)
-          .options(
-              options ->
-                  options.serverChannel(
-                      channel -> channel.media("udp").reliable(true).endpoint("localhost:13000")))
+      AeronServer.create(aeronResources)
+          .options("localhost", 13000, 13001)
           .handle(
               connection ->
                   connection
                       .outbound()
-                      .send(
+                      .sendString(
                           Flux.range(1, 10000)
                               .delayElements(Duration.ofMillis(250))
-                              .map(i -> AeronUtils.stringToByteBuffer("" + i))
+                              .map(String::valueOf)
                               .log("send"))
                       .then(connection.onDispose()))
           .bind()

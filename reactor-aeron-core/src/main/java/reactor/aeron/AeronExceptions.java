@@ -22,6 +22,10 @@ public class AeronExceptions {
     return new AeronPublicationException(message);
   }
 
+  public static RuntimeException failWithSubscription(String message) {
+    return new AeronSubscriptionException(message);
+  }
+
   static class AeronCancelException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
@@ -40,7 +44,7 @@ public class AeronExceptions {
 
     private static final long serialVersionUID = 1L;
 
-    public AeronEventLoopException(String message) {
+    AeronEventLoopException(String message) {
       super(message);
     }
 
@@ -54,7 +58,7 @@ public class AeronExceptions {
 
     private static final long serialVersionUID = 1L;
 
-    public MessagePublicationException(String message) {
+    MessagePublicationException(String message) {
       super(message);
     }
 
@@ -68,7 +72,21 @@ public class AeronExceptions {
 
     private static final long serialVersionUID = 1L;
 
-    public AeronPublicationException(String message) {
+    AeronPublicationException(String message) {
+      super(message);
+    }
+
+    @Override
+    public synchronized Throwable fillInStackTrace() {
+      return this;
+    }
+  }
+
+  static class AeronSubscriptionException extends RuntimeException {
+
+    private static final long serialVersionUID = 1L;
+
+    AeronSubscriptionException(String message) {
       super(message);
     }
 

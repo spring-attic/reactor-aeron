@@ -1,13 +1,9 @@
 package reactor.aeron;
 
-import static java.lang.Boolean.TRUE;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.aeron.ChannelUriStringBuilder;
 import java.nio.ByteBuffer;
 import java.time.Duration;
-import java.util.Optional;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,28 +17,29 @@ import reactor.test.StepVerifier;
 
 class AeronServerTest extends BaseAeronTest {
 
-  private ChannelUriStringBuilder serverChannel;
-  private ChannelUriStringBuilder clientChannel;
-  private AeronResources aeronResources;
+  private int serverPort;
+  private int serverControlPort;
+  private AeronResources clientResources;
+  private AeronResources serverResources;
 
   @BeforeEach
   void beforeEach() {
-    serverChannel =
-        new ChannelUriStringBuilder()
-            .reliable(TRUE)
-            .media("udp")
-            .endpoint("localhost:" + SocketUtils.findAvailableUdpPort(13000, 14000));
-    clientChannel =
-        new ChannelUriStringBuilder()
-            .reliable(TRUE)
-            .media("udp")
-            .endpoint("localhost:" + SocketUtils.findAvailableUdpPort(14000, 15000));
-    aeronResources = AeronResources.start(AeronResourcesConfig.builder().build());
+    serverPort = SocketUtils.findAvailableUdpPort();
+    serverControlPort = SocketUtils.findAvailableUdpPort();
+    clientResources = AeronResources.start(AeronResourcesConfig.builder().numOfWorkers(1).build());
+    serverResources = AeronResources.start(AeronResourcesConfig.builder().numOfWorkers(1).build());
   }
 
   @AfterEach
   void afterEach() {
-    Optional.ofNullable(aeronResources).ifPresent(AeronResources::dispose);
+    if (clientResources != null) {
+      clientResources.dispose();
+      clientResources.onDispose().block(TIMEOUT);
+    }
+    if (serverResources != null) {
+      serverResources.dispose();
+      serverResources.onDispose().block(TIMEOUT);
+    }
   }
 
   @Test
@@ -51,13 +48,13 @@ class AeronServerTest extends BaseAeronTest {
 
     createServer(
         connection -> {
-          connection.inbound().receiveAsString().log("receive").subscribe(processor);
+          connection.inbound().receive().asString().log("receive").subscribe(processor);
           return connection.onDispose();
         });
 
     createConnection()
         .outbound()
-        .send(ByteBufferFlux.from("Hello", "world!").log("send"))
+        .send(ByteBufferFlux.fromString("Hello", "world!").log("send"))
         .then()
         .subscribe();
 
@@ -77,10 +74,10 @@ class AeronServerTest extends BaseAeronTest {
 
     createConnection()
         .outbound()
-        .send(
+        .sendString(
             Flux.range(1, 100)
                 .delayElements(Duration.ofSeconds(1))
-                .map(i -> AeronUtils.stringToByteBuffer("" + i))
+                .map(String::valueOf)
                 .log("send"))
         .then()
         .subscribe();
@@ -89,27 +86,24 @@ class AeronServerTest extends BaseAeronTest {
 
     server.dispose();
 
+    // TODO add StepVerifier here and remove ThreadWatcher class
+
     ThreadWatcher threadWatcher = new ThreadWatcher();
 
     assertTrue(threadWatcher.awaitTerminated(5000, "single-", "parallel-"));
   }
 
   private Connection createConnection() {
-    return createConnection(
-        options -> {
-          options.clientChannel(clientChannel);
-          options.serverChannel(serverChannel);
-        });
-  }
-
-  private Connection createConnection(Consumer<AeronOptions.Builder> options) {
-    return AeronClient.create(aeronResources).options(options).connect().block(TIMEOUT);
+    return AeronClient.create(clientResources)
+        .options("localhost", serverPort, serverControlPort)
+        .connect()
+        .block(TIMEOUT);
   }
 
   private OnDisposable createServer(
       Function<? super Connection, ? extends Publisher<Void>> handler) {
-    return AeronServer.create(aeronResources)
-        .options(options -> options.serverChannel(serverChannel))
+    return AeronServer.create(serverResources)
+        .options("localhost", serverPort, serverControlPort)
         .handle(handler)
         .bind()
         .block(TIMEOUT);

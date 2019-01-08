@@ -7,7 +7,6 @@ import reactor.core.publisher.Mono;
 final class AeronOutboundThen implements AeronOutbound {
 
   private final Mono<Void> thenMono;
-
   private final AeronOutbound source;
 
   AeronOutboundThen(AeronOutbound source, Publisher<Void> thenPublisher) {
@@ -23,6 +22,11 @@ final class AeronOutboundThen implements AeronOutbound {
   @Override
   public AeronOutbound send(Publisher<? extends ByteBuffer> dataStream) {
     return source.send(dataStream);
+  }
+
+  @Override
+  public AeronOutbound sendString(Publisher<String> dataStream) {
+    return source.sendString(dataStream);
   }
 
   @Override
