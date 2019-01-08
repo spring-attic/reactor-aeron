@@ -49,7 +49,7 @@ public final class MessageSubscription implements OnDisposable {
    */
   int poll() {
     // TODO after removing reactiveStreams.Subscription removed from here:
-    //  r, numOfPolled, requested; investigate why they were needed
+    //  r, numOfPolled, requested; correlates with problem around model of AeronInbound
     return subscription.poll(fragmentHandler, PREFETCH);
   }
 

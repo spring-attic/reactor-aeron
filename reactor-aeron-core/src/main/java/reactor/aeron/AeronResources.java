@@ -73,6 +73,8 @@ public class AeronResources implements OnDisposable {
    * @param config aeron config
    * @return started instance of aeron resources
    */
+  // TODO refactor to comply with approach est. at
+  // AeronServer.bind(UnaryOperator<reactor.aeron.AeronOptions>)
   public static AeronResources start(AeronResourcesConfig config) {
     AeronResources aeronResources = new AeronResources(config);
     aeronResources.start0();
