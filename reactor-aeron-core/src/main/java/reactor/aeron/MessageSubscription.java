@@ -10,7 +10,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
 // TODO investigate why implementing org.reactivestreams.Subscription were needed
-public final class MessageSubscription implements OnDisposable {
+public class MessageSubscription implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(MessageSubscription.class);
 

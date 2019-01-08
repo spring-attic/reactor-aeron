@@ -15,7 +15,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.MonoSink;
 
-public final class MessagePublication implements OnDisposable {
+public class MessagePublication implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(MessagePublication.class);
 
@@ -259,15 +259,20 @@ public final class MessagePublication implements OnDisposable {
 
     private final ByteBuffer msgBody;
     private final MonoSink<Void> sink;
+    private volatile boolean isDisposed = false;
 
     private long start;
 
     private PublishTask(ByteBuffer msgBody, MonoSink<Void> sink) {
       this.msgBody = msgBody;
-      this.sink = sink;
+      this.sink = sink.onDispose(() -> isDisposed = true);
     }
 
     private long publish() {
+      if (isDisposed) {
+        return 1;
+      }
+
       if (start == 0) {
         start = System.currentTimeMillis();
       }
@@ -300,11 +305,15 @@ public final class MessagePublication implements OnDisposable {
     }
 
     private void success() {
-      sink.success();
+      if (!isDisposed) {
+        sink.success();
+      }
     }
 
     private void error(Throwable ex) {
-      sink.error(ex);
+      if (!isDisposed) {
+        sink.error(ex);
+      }
     }
   }
 }
