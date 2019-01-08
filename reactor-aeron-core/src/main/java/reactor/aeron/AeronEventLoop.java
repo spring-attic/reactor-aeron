@@ -1,7 +1,5 @@
 package reactor.aeron;
 
-import io.aeron.Publication;
-import io.aeron.Subscription;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -9,7 +7,6 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 import org.agrona.concurrent.IdleStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,42 +79,6 @@ public final class AeronEventLoop implements OnDisposable {
    */
   public boolean inEventLoop() {
     return thread == Thread.currentThread();
-  }
-
-  /**
-   * Invokes factory function for aeron publication from event loop thread.
-   *
-   * @param supplier factory for {@link Publication} instance
-   * @return mono result
-   */
-  public Mono<Publication> publicationFromSupplier(Supplier<Publication> supplier) {
-    return worker()
-        .flatMap(
-            worker ->
-                command(
-                    sink -> {
-                      if (!cancelIfDisposed(sink)) {
-                        Mono.fromSupplier(supplier).subscribe(sink::success, sink::error);
-                      }
-                    }));
-  }
-
-  /**
-   * Invokes factory function for aeron subscription from event loop thread.
-   *
-   * @param supplier factory for {@link Subscription} instance
-   * @return mono result
-   */
-  public Mono<Subscription> subscriptionFromSupplier(Supplier<Subscription> supplier) {
-    return worker()
-        .flatMap(
-            worker ->
-                command(
-                    sink -> {
-                      if (!cancelIfDisposed(sink)) {
-                        Mono.fromSupplier(supplier).subscribe(sink::success, sink::error);
-                      }
-                    }));
   }
 
   /**
