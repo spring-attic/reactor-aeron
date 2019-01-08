@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -45,7 +46,7 @@ class AeronWriteSequencerTest {
     // long wait task
     Mockito.when(messagePublication.enqueue(Mockito.any())).thenReturn(Mono.never());
 
-    Mono<ByteBuffer> request = Mono.just(AeronUtils.stringToByteBuffer("test"));
+    Mono<ByteBuffer> request = Mono.just(toByteBuffer("test"));
 
     StepVerifier.create(aeronWriteSequencer.write(request))
         .expectErrorSatisfies(
@@ -82,7 +83,7 @@ class AeronWriteSequencerTest {
     RuntimeException expected = new RuntimeException("some reasons");
     Mockito.when(messagePublication.enqueue(Mockito.any())).thenReturn(Mono.error(expected));
 
-    Mono<ByteBuffer> request = Mono.just(AeronUtils.stringToByteBuffer("test"));
+    Mono<ByteBuffer> request = Mono.just(toByteBuffer("test"));
 
     StepVerifier.create(aeronWriteSequencer.write(request))
         .expectErrorSatisfies(
@@ -135,7 +136,8 @@ class AeronWriteSequencerTest {
     MonoProcessor<Throwable> latch = MonoProcessor.create();
     Mono<ByteBuffer> request =
         Mono.delay(TIMEOUT)
-            .map(i -> AeronUtils.stringToByteBuffer("test"))
+            .map(i -> "test" + i)
+            .map(this::toByteBuffer)
             .doOnNext(item -> latch.onError(fail("it was emitted an item")))
             .doOnError(ex -> latch.onError(fail("it was emitted ex: ", ex)))
             .doOnTerminate(() -> latch.onError(fail("it was emitted the completion signal")))
@@ -167,7 +169,7 @@ class AeronWriteSequencerTest {
                 .doOnCancel(latch::onComplete));
 
     // mono request
-    Mono<ByteBuffer> request = Mono.just(AeronUtils.stringToByteBuffer("test"));
+    Mono<ByteBuffer> request = Mono.just(toByteBuffer("test"));
 
     StepVerifier.create(aeronWriteSequencer.write(request))
         .thenAwait(TIMEOUT.dividedBy(2))
@@ -188,7 +190,7 @@ class AeronWriteSequencerTest {
         .thenReturn(Mono.delay(delayForFinishEnqueueTask).then());
 
     // mono request
-    Mono<ByteBuffer> request = Mono.just(AeronUtils.stringToByteBuffer("test"));
+    Mono<ByteBuffer> request = Mono.just(toByteBuffer("test"));
 
     long start = System.nanoTime();
     StepVerifier.create(aeronWriteSequencer.write(request)).expectComplete().verify(TIMEOUT);
@@ -250,7 +252,7 @@ class AeronWriteSequencerTest {
 
     // flux request
     Flux<ByteBuffer> request =
-        Flux.range(0, FLUX_REQUESTS).map(i -> AeronUtils.stringToByteBuffer("test" + i));
+        Flux.range(0, FLUX_REQUESTS).map(i -> "test" + i).map(this::toByteBuffer);
 
     StepVerifier.create(aeronWriteSequencer.write(request))
         .thenAwait(TIMEOUT)
@@ -272,7 +274,7 @@ class AeronWriteSequencerTest {
 
     // flux request
     Flux<ByteBuffer> request =
-        Flux.range(0, FLUX_REQUESTS).map(i -> AeronUtils.stringToByteBuffer("test" + i));
+        Flux.range(0, FLUX_REQUESTS).map(i -> "test" + i).map(this::toByteBuffer);
 
     long start = System.nanoTime();
     StepVerifier.create(aeronWriteSequencer.write(request)).expectComplete().verify(TIMEOUT);
@@ -293,7 +295,8 @@ class AeronWriteSequencerTest {
     Flux<ByteBuffer> request =
         Flux.range(0, FLUX_REQUESTS)
             .delayElements(TIMEOUT)
-            .map(i -> AeronUtils.stringToByteBuffer("test" + i))
+            .map(i -> "test" + i)
+            .map(this::toByteBuffer)
             .doOnNext(item -> latch.onError(fail("it was emitted an item")))
             .doOnError(ex -> latch.onError(fail("it was emitted ex: ", ex)))
             .doOnTerminate(() -> latch.onError(fail("it was emitted the completion signal")))
@@ -331,7 +334,8 @@ class AeronWriteSequencerTest {
     // flux request
     Flux<ByteBuffer> request =
         Flux.range(0, waitingTasks)
-            .map(i -> AeronUtils.stringToByteBuffer("test" + i))
+            .map(i -> "test" + i)
+            .map(this::toByteBuffer)
             .concatWith(Mono.error(expected));
 
     StepVerifier.create(aeronWriteSequencer.write(request))
@@ -359,7 +363,8 @@ class AeronWriteSequencerTest {
         Flux.range(0, FLUX_REQUESTS)
             .subscribeOn(Schedulers.single())
             .publishOn(Schedulers.single())
-            .map(i -> AeronUtils.stringToByteBuffer("test" + i));
+            .map(i -> "test" + i)
+            .map(this::toByteBuffer);
 
     StepVerifier.create(aeronWriteSequencer.write(request).subscribeOn(Schedulers.single()))
         .expectErrorSatisfies(
@@ -405,7 +410,8 @@ class AeronWriteSequencerTest {
         Flux.range(0, FLUX_REQUESTS)
             .subscribeOn(Schedulers.parallel())
             .publishOn(Schedulers.parallel())
-            .map(i -> AeronUtils.stringToByteBuffer("test" + i));
+            .map(i -> "test" + i)
+            .map(this::toByteBuffer);
 
     StepVerifier.create(aeronWriteSequencer.write(request).subscribeOn(Schedulers.parallel()))
         .expectErrorSatisfies(
@@ -424,5 +430,9 @@ class AeronWriteSequencerTest {
     Flux<ByteBuffer> request = Flux.empty();
 
     StepVerifier.create(aeronWriteSequencer.write(request)).expectComplete().verify(TIMEOUT);
+  }
+
+  private ByteBuffer toByteBuffer(String string) {
+    return ByteBuffer.wrap(string.getBytes(StandardCharsets.UTF_8));
   }
 }
