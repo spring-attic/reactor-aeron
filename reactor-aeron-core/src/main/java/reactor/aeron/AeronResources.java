@@ -183,7 +183,7 @@ public class AeronResources implements OnDisposable {
    *
    * @param channel aeron channel
    * @param options aeron options
-   * @param fragmentHandler fragment handler
+   * @param fragmentHandler fragment handler; optional in certain case
    * @param availableImageHandler available image handler; optional
    * @param unavailableImageHandler unavailable image handler; optional
    * @return mono result
@@ -208,13 +208,16 @@ public class AeronResources implements OnDisposable {
                 .flatMap(
                     aeronSubscription -> {
                       AeronEventLoop eventLoop = eventLoopGroup.next();
+
+                      FragmentHandler fragmentAssembler =
+                          Optional.ofNullable(fragmentHandler)
+                              .map(FragmentAssembler::new)
+                              .orElse(null);
+
                       return eventLoop
                           .registerSubscription(
                               new MessageSubscription(
-                                  aeronSubscription,
-                                  options,
-                                  eventLoop,
-                                  new FragmentAssembler(fragmentHandler)))
+                                  aeronSubscription, options, eventLoop, fragmentAssembler))
                           .doOnError(
                               ex -> {
                                 logger.error(

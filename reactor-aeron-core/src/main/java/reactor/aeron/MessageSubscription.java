@@ -18,7 +18,7 @@ public class MessageSubscription implements OnDisposable {
 
   private final AeronEventLoop eventLoop;
   private final Subscription subscription; // aeron subscription
-  private final FragmentHandler fragmentHandler;
+  private final FragmentHandler fragmentHandler; // optional
   private final Duration connectTimeout;
 
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
@@ -29,7 +29,7 @@ public class MessageSubscription implements OnDisposable {
    * @param subscription aeron subscription
    * @param options aeron options
    * @param eventLoop event loop where this {@code MessageSubscription} is assigned
-   * @param fragmentHandler aeron fragment handler
+   * @param fragmentHandler aeron fragment handler; optional in certain case
    */
   public MessageSubscription(
       Subscription subscription,
@@ -48,6 +48,9 @@ public class MessageSubscription implements OnDisposable {
    * @return the number of fragments received
    */
   int poll() {
+    if (fragmentHandler == null) {
+      return 0;
+    }
     // TODO after removing reactiveStreams.Subscription removed from here:
     //  r, numOfPolled, requested; correlates with problem around model of AeronInbound
     return subscription.poll(fragmentHandler, PREFETCH);
