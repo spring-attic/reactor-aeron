@@ -76,9 +76,10 @@ public final class AeronServer {
               AeronChannelUri inboundUri = opts.inboundUri();
               AeronChannelUri outboundUri = opts.outboundUri();
               return opts //
-                  .inboundUri(inboundUri.endpoint(address, port)) // Sub
+                  .inboundUri(inboundUri.endpoint(address + ':' + port)) // Sub
                   .outboundUri(
-                      outboundUri.controlEndpoint(address, controlPort)); // Pub->MDC(sessionId)
+                      outboundUri.controlEndpoint(
+                          address + ':' + controlPort)); // Pub->MDC(sessionId)
             });
   }
 

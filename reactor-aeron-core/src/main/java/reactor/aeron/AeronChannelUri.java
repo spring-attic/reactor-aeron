@@ -2,8 +2,6 @@ package reactor.aeron;
 
 import io.aeron.ChannelUriStringBuilder;
 import io.aeron.CommonContext;
-import java.time.Duration;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -13,24 +11,8 @@ import java.util.function.Consumer;
  */
 public final class AeronChannelUri {
 
-  private String endpoint; // endpoint right away (preferred if set)
-  private String controlEndpoint; // control endpoint right away (preferred if set)
-  private Integer mtu; // zero
-  private String controlMode;
-  private Integer sessionId;
-  private String media = CommonContext.UDP_MEDIA; // udp
-  private Boolean reliable = Boolean.TRUE; // reliable is true
-  private Integer ttl; // multicast setting
-  private Integer termOffset;
-  private Integer termLength;
-  private Integer termId;
-  private String tags;
-  private Boolean sparse;
-  private String prefix;
-  private String networkInterface;
-  private Duration linger;
-  private Boolean sessionIdTagged;
-  private Integer initialTermId;
+  private ChannelUriStringBuilder builder =
+      new ChannelUriStringBuilder().media(CommonContext.UDP_MEDIA).reliable(true);
 
   public AeronChannelUri() {}
 
@@ -40,218 +22,141 @@ public final class AeronChannelUri {
    * @param other instance to copy from
    */
   public AeronChannelUri(AeronChannelUri other) {
-    this.endpoint = other.endpoint;
-    this.controlEndpoint = other.controlEndpoint;
-    this.mtu = other.mtu;
-    this.controlMode = other.controlMode;
-    this.sessionId = other.sessionId;
-    this.media = other.media;
-    this.reliable = other.reliable;
-    this.ttl = other.ttl;
-    this.termOffset = other.termOffset;
-    this.termLength = other.termLength;
-    this.termId = other.termId;
-    this.tags = other.tags;
-    this.sparse = other.sparse;
-    this.prefix = other.prefix;
-    this.networkInterface = other.networkInterface;
-    this.linger = other.linger;
-    this.sessionIdTagged = other.sessionIdTagged;
-    this.initialTermId = other.initialTermId;
+    builder
+        .endpoint(other.builder.endpoint())
+        .controlEndpoint(other.builder.controlEndpoint())
+        .mtu(other.builder.mtu())
+        .controlMode(other.builder.controlMode())
+        .sessionId(other.builder.sessionId())
+        .media(other.builder.media())
+        .reliable(other.builder.reliable())
+        .ttl(other.builder.ttl())
+        .initialTermId(other.builder.initialTermId())
+        .termOffset(other.builder.termOffset())
+        .termLength(other.builder.termLength())
+        .termId(other.builder.termId())
+        .linger(other.builder.linger())
+        .networkInterface(other.builder.networkInterface());
   }
 
   public String endpoint() {
-    return endpoint;
+    return builder.endpoint();
   }
 
   public AeronChannelUri endpoint(String endpoint) {
-    return set(u -> u.endpoint = Objects.requireNonNull(endpoint));
-  }
-
-  /**
-   * Set endpoint with given {@code address} and {@code port}.
-   *
-   * @param address address
-   * @param port port
-   * @return new {@code AeronChannelUri}
-   */
-  public AeronChannelUri endpoint(String address, Integer port) {
-    Objects.requireNonNull(address);
-    Objects.requireNonNull(port);
-    return endpoint(address + ':' + port);
+    return set(u -> u.builder.endpoint(endpoint));
   }
 
   public String controlEndpoint() {
-    return controlEndpoint;
+    return builder.controlEndpoint();
   }
 
   public AeronChannelUri controlEndpoint(String controlEndpoint) {
-    return set(u -> u.controlEndpoint = Objects.requireNonNull(controlEndpoint));
-  }
-
-  /**
-   * Set control-endpoint with given {@code address} and {@code port}.
-   *
-   * @param address address
-   * @param port port
-   * @return new {@code AeronChannelUri}
-   */
-  public AeronChannelUri controlEndpoint(String address, Integer port) {
-    Objects.requireNonNull(address);
-    Objects.requireNonNull(port);
-    return controlEndpoint(address + ':' + port);
+    return set(u -> u.builder.controlEndpoint(controlEndpoint));
   }
 
   public Integer mtu() {
-    return mtu;
+    return builder.mtu();
   }
 
   public AeronChannelUri mtu(Integer mtu) {
-    return set(u -> u.mtu = mtu);
+    return set(u -> u.builder.mtu(mtu));
   }
 
   public String controlMode() {
-    return controlMode;
+    return builder.controlMode();
   }
 
   public AeronChannelUri controlModeDynamic() {
-    return set(u -> u.controlMode = CommonContext.MDC_CONTROL_MODE_DYNAMIC);
+    return set(u -> u.builder.controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC));
   }
 
   public AeronChannelUri controlModeManual() {
-    return set(u -> u.controlMode = CommonContext.MDC_CONTROL_MODE_MANUAL);
+    return set(u -> u.builder.controlMode(CommonContext.MDC_CONTROL_MODE_MANUAL));
   }
 
   public Integer sessionId() {
-    return sessionId;
+    return builder.sessionId();
   }
 
   public AeronChannelUri sessionId(Integer sessionId) {
-    return set(u -> u.sessionId = sessionId);
+    return set(u -> u.builder.sessionId(sessionId));
   }
 
   public String media() {
-    return media;
+    return builder.media();
   }
 
   public AeronChannelUri media(String media) {
-    return set(u -> u.media = media);
+    return set(u -> u.builder.media(media));
   }
 
   public Boolean reliable() {
-    return reliable;
+    return builder.reliable();
   }
 
   public AeronChannelUri reliable(Boolean reliable) {
-    return set(u -> u.reliable = reliable);
+    return set(u -> u.builder.reliable(reliable));
   }
 
   public Integer ttl() {
-    return ttl;
+    return builder.ttl();
   }
 
   public AeronChannelUri ttl(Integer ttl) {
-    return set(u -> u.ttl = ttl);
+    return set(u -> u.builder.ttl(ttl));
   }
 
   public Integer termOffset() {
-    return termOffset;
+    return builder.termOffset();
   }
 
   public AeronChannelUri termOffset(Integer termOffset) {
-    return set(u -> u.termOffset = termOffset);
+    return set(u -> u.builder.termOffset(termOffset));
   }
 
   public Integer termLength() {
-    return termLength;
+    return builder.termLength();
   }
 
   public AeronChannelUri termLength(Integer termLength) {
-    return set(u -> u.termLength = termLength);
+    return set(u -> u.builder.termLength(termLength));
   }
 
   public Integer termId() {
-    return termId;
+    return builder.termId();
   }
 
   public AeronChannelUri termId(Integer termId) {
-    return set(u -> u.termId = termId);
-  }
-
-  public String tags() {
-    return tags;
-  }
-
-  public AeronChannelUri tags(String tags) {
-    return set(u -> u.tags = tags);
-  }
-
-  public Boolean sparse() {
-    return sparse;
-  }
-
-  public AeronChannelUri sparse(Boolean sparse) {
-    return set(u -> u.sparse = sparse);
-  }
-
-  public String prefix() {
-    return prefix;
-  }
-
-  public AeronChannelUri prefix(String prefix) {
-    return set(u -> u.prefix = prefix);
+    return set(u -> u.builder.termId(termId));
   }
 
   public String networkInterface() {
-    return networkInterface;
+    return builder.networkInterface();
   }
 
   public AeronChannelUri networkInterface(String networkInterface) {
-    return set(u -> u.networkInterface = networkInterface);
+    return set(u -> u.builder.networkInterface(networkInterface));
   }
 
-  public Duration linger() {
-    return linger;
+  public Integer linger() {
+    return builder.linger();
   }
 
-  public AeronChannelUri linger(Duration linger) {
-    return set(u -> u.linger = linger);
-  }
-
-  public Boolean sessionIdTagged() {
-    return sessionIdTagged;
-  }
-
-  public AeronChannelUri sessionIdTagged(Boolean sessionIdTagged) {
-    return set(u -> u.sessionIdTagged = sessionIdTagged);
+  public AeronChannelUri linger(Integer linger) {
+    return set(u -> u.builder.linger(linger));
   }
 
   public Integer initialTermId() {
-    return initialTermId;
+    return builder.initialTermId();
   }
 
   public AeronChannelUri initialTermId(Integer initialTermId) {
-    return set(u -> u.initialTermId = initialTermId);
+    return set(u -> u.builder.initialTermId(initialTermId));
   }
 
-  /**
-   * Delegates to {@link ChannelUriStringBuilder#initialPosition(long, int, int)}.
-   *
-   * @param position position
-   * @param initialTermId initialTermId
-   * @param termLength termLength
-   * @return new {@code AeronChannelUri}
-   */
   public AeronChannelUri initialPosition(long position, int initialTermId, int termLength) {
-    return set(
-        u -> {
-          ChannelUriStringBuilder b =
-              new ChannelUriStringBuilder().initialPosition(position, initialTermId, termLength);
-          u.initialTermId = b.initialTermId();
-          u.termId = b.termId();
-          u.termOffset = b.termOffset();
-          u.termLength = b.termLength();
-        });
+    return set(u -> u.builder.initialPosition(position, initialTermId, termLength));
   }
 
   private AeronChannelUri set(Consumer<AeronChannelUri> c) {
@@ -275,18 +180,12 @@ public final class AeronChannelUri {
     Optional.ofNullable(media()).ifPresent(builder::media);
     Optional.ofNullable(reliable()).ifPresent(builder::reliable);
     Optional.ofNullable(ttl()).ifPresent(builder::ttl);
+    Optional.ofNullable(initialTermId()).ifPresent(builder::initialTermId);
     Optional.ofNullable(termOffset()).ifPresent(builder::termOffset);
     Optional.ofNullable(termLength()).ifPresent(builder::termLength);
     Optional.ofNullable(termId()).ifPresent(builder::termId);
-    Optional.ofNullable(tags()).ifPresent(builder::tags);
-    Optional.ofNullable(sparse()).ifPresent(builder::sparse);
-    Optional.ofNullable(prefix()).ifPresent(builder::prefix);
     Optional.ofNullable(networkInterface()).ifPresent(builder::networkInterface);
-    Optional.ofNullable(linger())
-        .map(duration -> (int) duration.toNanos())
-        .ifPresent(builder::linger);
-    Optional.ofNullable(sessionIdTagged()).ifPresent(builder::isSessionIdTagged);
-    Optional.ofNullable(initialTermId()).ifPresent(builder::initialTermId);
+    Optional.ofNullable(linger()).ifPresent(builder::linger);
     return builder.build();
   }
 
