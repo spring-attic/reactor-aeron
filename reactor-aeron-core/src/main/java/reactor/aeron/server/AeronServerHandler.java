@@ -1,15 +1,12 @@
 package reactor.aeron.server;
 
 import io.aeron.Image;
-import io.aeron.logbuffer.FragmentHandler;
-import io.aeron.logbuffer.Header;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
-import org.agrona.DirectBuffer;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +33,7 @@ import reactor.core.publisher.MonoProcessor;
  * serverControlPort->outbound->MDC(sessionId)->Pub(control-endpoint, sessionId)
  * </pre>
  */
-final class AeronServerHandler implements FragmentHandler, OnDisposable {
+final class AeronServerHandler implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronServerHandler.class);
 
@@ -44,7 +41,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
   private final AeronResources resources;
   private final Function<? super Connection, ? extends Publisher<Void>> handler;
 
-  private volatile MessageSubscription subscription; // server acceptor subscription
+  private volatile MessageSubscription acceptorSubscription; // server acceptor subscription
 
   // TODO think of more performant concurrent hashmap
   private final Map<Integer, Connection> connections = new ConcurrentHashMap<>(32);
@@ -77,11 +74,10 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
           return resources
               .subscription(
                   inboundChannel,
-                  options,
-                  this, /*fragmentHandler*/
+                  null, /*fragmentHandler*/
                   this::onImageAvailable, /*setup new session*/
                   this::onImageUnavailable /*remove and dispose session*/)
-              .doOnSuccess(subscription -> this.subscription = subscription)
+              .doOnSuccess(subscription -> this.acceptorSubscription = subscription)
               .thenReturn(this)
               .doOnSuccess(handler -> logger.debug("Started {} on: {}", this, inboundChannel))
               .doOnError(
@@ -90,28 +86,6 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
                     dispose();
                   });
         });
-  }
-
-  /**
-   * Inner implementation of aeron's {@link FragmentHandler}. Sits on the server inbound channel and
-   * serves all incoming sessions. By {@link Header#sessionId()} corresponding {@link Connection} is
-   * being found and message passed there.
-   */
-  @Override
-  public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
-    int sessionId = header.sessionId();
-    Connection connection = connections.get(sessionId);
-
-    if (connection == null) {
-      logger.warn(
-          "{}: received message but server connection not found (total connections: {})",
-          Integer.toHexString(sessionId),
-          connections.size());
-      return;
-    }
-
-    DefaultAeronInbound inbound = (DefaultAeronInbound) connection.inbound();
-    inbound.onFragment(buffer, offset, length, header);
   }
 
   /**
@@ -141,7 +115,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
         .publication(outboundChannel, options)
         .map(
             publication -> {
-              DefaultAeronInbound inbound = new DefaultAeronInbound();
+              DefaultAeronInbound inbound = new DefaultAeronInbound(image);
               DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
               return new DefaultAeronConnection(sessionId, inbound, outbound, publication);
             })
@@ -245,7 +219,7 @@ final class AeronServerHandler implements FragmentHandler, OnDisposable {
 
           // dispose server acceptor subscription
           monos.add(
-              Optional.ofNullable(subscription)
+              Optional.ofNullable(acceptorSubscription)
                   .map(s -> Mono.fromRunnable(s::dispose).then(s.onDispose()))
                   .orElse(Mono.empty()));
 

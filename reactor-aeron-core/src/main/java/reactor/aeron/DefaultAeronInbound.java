@@ -1,5 +1,6 @@
 package reactor.aeron;
 
+import io.aeron.Image;
 import io.aeron.logbuffer.FragmentHandler;
 import io.aeron.logbuffer.Header;
 import java.nio.ByteBuffer;
@@ -14,6 +15,12 @@ public final class DefaultAeronInbound implements AeronInbound, FragmentHandler,
 
   private final EmitterProcessor<ByteBuffer> processor = EmitterProcessor.create();
   private final FluxSink<ByteBuffer> sink = processor.sink();
+
+  private final Image image;
+
+  public DefaultAeronInbound(Image image) {
+    this.image = image;
+  }
 
   @Override
   public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {

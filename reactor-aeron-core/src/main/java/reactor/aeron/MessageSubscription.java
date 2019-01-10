@@ -2,7 +2,6 @@ package reactor.aeron;
 
 import io.aeron.Subscription;
 import io.aeron.logbuffer.FragmentHandler;
-import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
@@ -19,7 +18,6 @@ public class MessageSubscription implements OnDisposable {
   private final AeronEventLoop eventLoop;
   private final Subscription subscription; // aeron subscription
   private final FragmentHandler fragmentHandler;
-  private final Duration connectTimeout;
 
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
@@ -27,19 +25,14 @@ public class MessageSubscription implements OnDisposable {
    * Constructor.
    *
    * @param subscription aeron subscription
-   * @param options aeron options
    * @param eventLoop event loop where this {@code MessageSubscription} is assigned
    * @param fragmentHandler aeron fragment handler
    */
   public MessageSubscription(
-      Subscription subscription,
-      AeronOptions options,
-      AeronEventLoop eventLoop,
-      FragmentHandler fragmentHandler) {
+      Subscription subscription, AeronEventLoop eventLoop, FragmentHandler fragmentHandler) {
     this.subscription = subscription;
     this.eventLoop = eventLoop;
     this.fragmentHandler = fragmentHandler;
-    this.connectTimeout = options.connectTimeout();
   }
 
   /**
@@ -48,6 +41,10 @@ public class MessageSubscription implements OnDisposable {
    * @return the number of fragments received
    */
   int poll() {
+    if (subscription == null) {
+      return 0;
+    }
+
     // TODO after removing reactiveStreams.Subscription removed from here:
     //  r, numOfPolled, requested; correlates with problem around model of AeronInbound
     return subscription.poll(fragmentHandler, PREFETCH);
@@ -99,38 +96,6 @@ public class MessageSubscription implements OnDisposable {
   @Override
   public Mono<Void> onDispose() {
     return onDispose;
-  }
-
-  /**
-   * Spins (in async fashion) until {@link Subscription#isConnected()} would have returned {@code
-   * true} or {@code connectTimeout} elapsed. See also {@link
-   * MessageSubscription#ensureConnected0()}.
-   *
-   * @return mono result
-   */
-  public Mono<MessageSubscription> ensureConnected() {
-    return Mono.defer(
-        () -> {
-          Duration retryInterval = Duration.ofMillis(100);
-          long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
-          retryCount = Math.max(retryCount, 1);
-
-          return ensureConnected0()
-              .retryBackoff(retryCount, retryInterval, retryInterval)
-              .timeout(connectTimeout)
-              .doOnError(
-                  ex -> logger.warn("aeron.Subscription is not connected after several retries"))
-              .thenReturn(this);
-        });
-  }
-
-  private Mono<Void> ensureConnected0() {
-    return Mono.defer(
-        () ->
-            subscription.isConnected()
-                ? Mono.empty()
-                : Mono.error(
-                    AeronExceptions.failWithSubscription("aeron.Subscription is not connected")));
   }
 
   @Override

@@ -11,7 +11,6 @@ import reactor.aeron.DefaultAeronConnection;
 import reactor.aeron.DefaultAeronInbound;
 import reactor.aeron.DefaultAeronOutbound;
 import reactor.aeron.MessagePublication;
-import reactor.aeron.MessageSubscription;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
@@ -56,7 +55,7 @@ final class AeronClientConnector {
               .flatMap(MessagePublication::ensureConnected)
               .flatMap(
                   publication -> {
-                    final DefaultAeronInbound inbound = new DefaultAeronInbound();
+                    final DefaultAeronInbound inbound = new DefaultAeronInbound(null);
                     final DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
 
                     // inbound->MDC(sessionId)->Sub(control-endpoint, sessionId)
@@ -73,8 +72,7 @@ final class AeronClientConnector {
                     return resources
                         .subscription(
                             inboundChannel,
-                            options,
-                            inbound, /*fragmentHandler*/
+                            inbound,
                             image ->
                                 logger.debug(
                                     "{}: created client inbound", Integer.toHexString(sessionId)),
@@ -84,7 +82,6 @@ final class AeronClientConnector {
                                   Integer.toHexString(sessionId));
                               inboundUnavailable.onComplete();
                             })
-                        .flatMap(MessageSubscription::ensureConnected)
                         .doOnError(
                             th -> {
                               logger.warn(
