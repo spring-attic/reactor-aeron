@@ -1,6 +1,7 @@
 package reactor.aeron;
 
 import io.aeron.Image;
+import io.aeron.ImageFragmentAssembler;
 import io.aeron.logbuffer.Header;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
@@ -22,7 +23,12 @@ public final class DefaultAeronInbound implements AeronInbound {
               DefaultAeronInbound.class, CoreSubscriber.class, "destinationSubscriber");
 
   private final Image image;
-  private final FragmentHandler fragmentHandler = new FragmentHandler();
+  private final io.aeron.logbuffer.FragmentHandler fragmentHandler =
+      new ImageFragmentAssembler(new FragmentHandler());
+  private final FluxReceive inbound = new FluxReceive();
+
+  private volatile long requested;
+  private volatile CoreSubscriber<? super ByteBuffer> destinationSubscriber;
 
   public DefaultAeronInbound(Image image) {
     this.image = image;
@@ -30,24 +36,27 @@ public final class DefaultAeronInbound implements AeronInbound {
 
   @Override
   public ByteBufferFlux receive() {
-    return new ByteBufferFlux(processor.onBackpressureBuffer());
+    // todo do we need to use onBackpressureBuffer here?
+    return new ByteBufferFlux(inbound.onBackpressureBuffer());
   }
 
-  long produced;
-
   int poll() {
-    long r = requested;
-    long p = produced;
-
-    if (p < r) {
-      p += image.poll(fragmentHandler, (int) (r - p));
-      produced = p;
-      // i <= requested
+    int r = (int) Math.min(requested, 8);
+    int produced = 0;
+    if (r > 0) {
+      produced = image.poll(fragmentHandler, r);
+      if (produced > 0) {
+        Operators.produced(REQUESTED, this, produced);
+      }
     }
+    return produced;
   }
 
   void dispose() {
-    sink.complete();
+    CoreSubscriber<? super ByteBuffer> destination = DefaultAeronInbound.this.destinationSubscriber;
+    if (destination != null) {
+      destination.onComplete();
+    }
   }
 
   private class FragmentHandler implements io.aeron.logbuffer.FragmentHandler {
@@ -57,12 +66,18 @@ public final class DefaultAeronInbound implements AeronInbound {
       ByteBuffer dstBuffer = ByteBuffer.allocate(length);
       buffer.getBytes(offset, dstBuffer, length);
       dstBuffer.flip();
-      sink.next(dstBuffer);
+
+      CoreSubscriber<? super ByteBuffer> destination =
+          DefaultAeronInbound.this.destinationSubscriber;
+      // check on cancel?
+      if (destination != null) {
+        destination.onNext(dstBuffer);
+      } else {
+        // todo need to research io.aeron.ImageControlledFragmentAssembler
+        throw new RuntimeException("we have received message without any subscriber");
+      }
     }
   }
-
-  private volatile long requested;
-  private volatile CoreSubscriber<? super ByteBuffer> destinationSubscriber;
 
   private class FluxReceive extends Flux<ByteBuffer> implements org.reactivestreams.Subscription {
 
@@ -74,6 +89,8 @@ public final class DefaultAeronInbound implements AeronInbound {
     @Override
     public void cancel() {
       // TODO implement me; research what reactor netty doing in such situatino
+      REQUESTED.set(DefaultAeronInbound.this, 0);
+      DESTINATION_SUBSCRIBER.set(DefaultAeronInbound.this, null);
     }
 
     @Override
