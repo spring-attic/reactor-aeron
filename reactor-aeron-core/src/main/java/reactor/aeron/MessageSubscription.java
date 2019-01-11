@@ -1,5 +1,6 @@
 package reactor.aeron;
 
+import io.aeron.Image;
 import io.aeron.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

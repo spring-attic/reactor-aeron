@@ -1,6 +1,8 @@
 package reactor.aeron;
 
 import java.util.Optional;
+import java.util.function.Function;
+import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -30,31 +32,17 @@ public final class DefaultAeronConnection implements Connection {
    * @param sessionId session id
    * @param inbound inbound
    * @param outbound outbound
-   * @param publication publication
-   */
-  public DefaultAeronConnection(
-      int sessionId,
-      DefaultAeronInbound inbound,
-      DefaultAeronOutbound outbound,
-      MessagePublication publication) {
-    this(sessionId, inbound, outbound, null, publication);
-  }
-
-  /**
-   * Constructor.
-   *
-   * @param sessionId session id
-   * @param inbound inbound
-   * @param outbound outbound
    * @param subscription subscription
    * @param publication publication
+   * @param disposeHook shutdown hook
    */
   public DefaultAeronConnection(
       int sessionId,
       DefaultAeronInbound inbound,
       DefaultAeronOutbound outbound,
       MessageSubscription subscription,
-      MessagePublication publication) {
+      MessagePublication publication,
+      MonoProcessor<Void> disposeHook) {
 
     this.sessionId = sessionId;
     this.inbound = inbound;
@@ -63,12 +51,32 @@ public final class DefaultAeronConnection implements Connection {
     this.publication = publication;
 
     dispose
+        .or(disposeHook)
         .then(doDispose())
+        .doFinally(s -> logger.debug("{}: connection disposed", Integer.toHexString(sessionId)))
         .doFinally(s -> onDispose.onComplete())
         .subscribe(
             null,
             th -> logger.warn("{} failed on doDispose(): {}", this, th.toString()),
             () -> logger.debug("Disposed {}", this));
+  }
+
+  /**
+   * Setting up this connection by applying user provided application level handler.
+   *
+   * @param handler handler with application level code
+   */
+  public Mono<Connection> start(Function<? super Connection, ? extends Publisher<Void>> handler) {
+    return Mono.fromRunnable(() -> start0(handler)).thenReturn(this);
+  }
+
+  private void start0(Function<? super Connection, ? extends Publisher<Void>> handler) {
+    if (handler == null) {
+      logger.warn(
+          "{}: connection handler function is not specified", Integer.toHexString(sessionId));
+    } else if (!isDisposed()) {
+      handler.apply(this).subscribe(disposeSubscriber());
+    }
   }
 
   @Override
@@ -101,10 +109,10 @@ public final class DefaultAeronConnection implements Connection {
         () -> {
           logger.debug("Disposing {}", this);
           return Mono.whenDelayError(
-              Mono.fromRunnable(inbound::dispose),
               Optional.ofNullable(subscription)
                   .map(s -> Mono.fromRunnable(s::dispose).then(s.onDispose()))
                   .orElse(Mono.empty()),
+              Mono.fromRunnable(inbound::dispose),
               Mono.fromRunnable(publication::dispose).then(publication.onDispose()));
         });
   }

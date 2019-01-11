@@ -2,12 +2,10 @@ package reactor.aeron;
 
 import io.aeron.Aeron;
 import io.aeron.ExclusivePublication;
-import io.aeron.FragmentAssembler;
 import io.aeron.Image;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
-import io.aeron.logbuffer.FragmentHandler;
 import java.io.File;
 import java.time.Duration;
 import java.util.Optional;
@@ -182,16 +180,12 @@ public class AeronResources implements OnDisposable {
    * message subscription will be assigned to event loop.
    *
    * @param channel aeron channel
-   * @param fragmentHandler fragment handler
    * @param onImageAvailable available image handler; optional
    * @param onImageUnavailable unavailable image handler; optional
    * @return mono result
    */
   public Mono<MessageSubscription> subscription(
-      String channel,
-      FragmentHandler fragmentHandler,
-      Consumer<Image> onImageAvailable,
-      Consumer<Image> onImageUnavailable) {
+      String channel, Consumer<Image> onImageAvailable, Consumer<Image> onImageUnavailable) {
     return Mono.defer(
         () ->
             aeronSubscription(channel, onImageAvailable, onImageUnavailable)
@@ -206,14 +200,9 @@ public class AeronResources implements OnDisposable {
                 .flatMap(
                     aeronSubscription -> {
                       AeronEventLoop eventLoop = eventLoopGroup.next();
-                      FragmentAssembler fragmentAssembler =
-                          Optional.ofNullable(fragmentHandler)
-                              .map(FragmentAssembler::new)
-                              .orElse(null);
                       return eventLoop
                           .registerSubscription(
-                              new MessageSubscription(
-                                  aeronSubscription, eventLoop))
+                              new MessageSubscription(aeronSubscription, eventLoop))
                           .doOnError(
                               ex -> {
                                 logger.error(
