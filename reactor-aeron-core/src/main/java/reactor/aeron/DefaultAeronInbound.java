@@ -53,10 +53,7 @@ public final class DefaultAeronInbound implements AeronInbound {
   }
 
   void dispose() {
-    CoreSubscriber<? super ByteBuffer> destination = DefaultAeronInbound.this.destinationSubscriber;
-    if (destination != null) {
-      destination.onComplete();
-    }
+    inbound.cancel();
   }
 
   private class FragmentHandler implements io.aeron.logbuffer.FragmentHandler {
@@ -90,7 +87,10 @@ public final class DefaultAeronInbound implements AeronInbound {
     public void cancel() {
       // TODO implement me; research what reactor netty doing in such situatino
       REQUESTED.set(DefaultAeronInbound.this, 0);
-      DESTINATION_SUBSCRIBER.set(DefaultAeronInbound.this, null);
+      CoreSubscriber destination = DESTINATION_SUBSCRIBER.getAndSet(DefaultAeronInbound.this, null);
+      if (destination != null) {
+        destination.onComplete();
+      }
     }
 
     @Override
