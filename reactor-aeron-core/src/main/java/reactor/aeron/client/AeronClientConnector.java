@@ -74,7 +74,7 @@ final class AeronClientConnector {
                             image -> {
                               logger.debug(
                                   "{}: created client inbound", Integer.toHexString(sessionId));
-                              inboundAvailable.onComplete();
+                              inboundAvailable.onNext(image);
                             },
                             image -> {
                               logger.debug(

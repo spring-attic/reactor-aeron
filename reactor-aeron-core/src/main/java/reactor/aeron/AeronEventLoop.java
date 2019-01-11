@@ -282,18 +282,18 @@ public final class AeronEventLoop implements OnDisposable {
         }
 
         //noinspection ForLoopReplaceableByForEach
-        for (int i = 0, n = subscriptions.size(); i < n; i++) {
+        for (int i = 0, n = inbounds.size(); i < n; i++) {
           try {
-            result += subscriptions.get(i).poll();
+            result += inbounds.get(i).poll();
           } catch (Exception ex) {
-            logger.error("Unexpected exception occurred on subscription.poll(): ", ex);
+            logger.error("Unexpected exception occurred on inbound.poll(): ", ex);
           }
         }
 
         idleStrategy.idle(result);
       }
 
-      // Dispose publications, subscriptions and commands
+      // Dispose publications, subscriptions, inbounds and commands
       try {
         processCommands();
         disposeInbounds();

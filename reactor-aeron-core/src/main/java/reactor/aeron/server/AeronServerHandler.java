@@ -16,9 +16,9 @@ import reactor.aeron.Connection;
 import reactor.aeron.DefaultAeronConnection;
 import reactor.aeron.DefaultAeronInbound;
 import reactor.aeron.DefaultAeronOutbound;
+import reactor.aeron.MessagePublication;
 import reactor.aeron.MessageSubscription;
 import reactor.aeron.OnDisposable;
-import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
@@ -43,8 +43,7 @@ final class AeronServerHandler implements OnDisposable {
 
   private volatile MessageSubscription acceptorSubscription; // server acceptor subscription
 
-  // TODO think of more performant concurrent hashmap
-  private final Map<Integer, Connection> connections = new ConcurrentHashMap<>(32);
+  private final Map<Integer, MonoProcessor<Void>> disposeHooks = new ConcurrentHashMap<>();
 
   private final MonoProcessor<Void> dispose = MonoProcessor.create();
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
@@ -67,22 +66,18 @@ final class AeronServerHandler implements OnDisposable {
     return Mono.defer(
         () -> {
           // Sub(endpoint{address:serverPort})
-          String inboundChannel = options.inboundUri().asString();
+          String acceptorChannel = options.inboundUri().asString();
 
-          logger.debug("Starting {} on: {}", this, inboundChannel);
+          logger.debug("Starting {} on: {}", this, acceptorChannel);
 
           return resources
-              .subscription(
-                  inboundChannel,
-                  /*fragmentHandler*/
-                  this::onImageAvailable, /*setup new session*/
-                  this::onImageUnavailable /*remove and dispose session*/)
-              .doOnSuccess(subscription -> this.acceptorSubscription = subscription)
+              .subscription(acceptorChannel, this::onImageAvailable, this::onImageUnavailable)
+              .doOnSuccess(s -> this.acceptorSubscription = s)
               .thenReturn(this)
-              .doOnSuccess(handler -> logger.debug("Started {} on: {}", this, inboundChannel))
+              .doOnSuccess(handler -> logger.debug("Started {} on: {}", this, acceptorChannel))
               .doOnError(
                   ex -> {
-                    logger.error("Failed to start {} on: {}", this, inboundChannel);
+                    logger.error("Failed to start {} on: {}", this, acceptorChannel);
                     dispose();
                   });
         });
@@ -101,37 +96,51 @@ final class AeronServerHandler implements OnDisposable {
     int sessionId = image.sessionId();
     String outboundChannel = options.outboundUri().sessionId(sessionId).asString();
 
-    // not expecting following condition be true at normal circumstances; passing it would mean
-    // aeron changed contract/semantic around sessionId
-    if (connections.containsKey(sessionId)) {
-      logger.error("{}: server connection already exists!?", Integer.toHexString(sessionId));
-      return;
-    }
-
     logger.debug(
         "{}: creating server connection: {}", Integer.toHexString(sessionId), outboundChannel);
 
     resources
         .publication(outboundChannel, options)
-        .map(
-            publication -> {
-              DefaultAeronInbound inbound = new DefaultAeronInbound(image);
-              DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
-              return new DefaultAeronConnection(sessionId, inbound, outbound, publication);
-            })
-        .doOnSuccess(connection -> setupConnection(sessionId, connection))
+        .flatMap(
+            publication ->
+                resources
+                    .inbound(image, null)
+                    .doOnError(ex -> publication.dispose())
+                    .flatMap(inbound -> newConnection(sessionId, publication, inbound)))
+        .doOnSuccess(
+            connection ->
+                logger.debug(
+                    "{}: created server connection: {}",
+                    Integer.toHexString(sessionId),
+                    outboundChannel))
         .subscribe(
             null,
             ex ->
                 logger.warn(
                     "{}: failed to create server outbound, cause: {}",
                     Integer.toHexString(sessionId),
-                    ex.toString()),
-            () ->
-                logger.debug(
-                    "{}: created server connection: {}",
-                    Integer.toHexString(sessionId),
-                    outboundChannel));
+                    ex.toString()));
+  }
+
+  private Mono<? extends Connection> newConnection(
+      int sessionId, MessagePublication publication, DefaultAeronInbound inbound) {
+    // setup cleanup hook to use it onwards
+    MonoProcessor<Void> disposeHook = MonoProcessor.create();
+
+    disposeHooks.put(sessionId, disposeHook);
+
+    DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
+
+    DefaultAeronConnection connection =
+        new DefaultAeronConnection(sessionId, inbound, outbound, disposeHook);
+
+    return connection
+        .start(handler)
+        .doOnError(
+            ex -> {
+              connection.dispose();
+              disposeHooks.remove(sessionId);
+            });
   }
 
   /**
@@ -141,58 +150,10 @@ final class AeronServerHandler implements OnDisposable {
    */
   private void onImageUnavailable(Image image) {
     int sessionId = image.sessionId();
-    Connection connection = connections.remove(sessionId);
-
-    if (connection != null) {
+    MonoProcessor<Void> disposeHook = disposeHooks.remove(sessionId);
+    if (disposeHook != null) {
       logger.debug("{}: server inbound became unavailable", Integer.toHexString(sessionId));
-      connection.dispose();
-      connection
-          .onDispose()
-          .doFinally(
-              s -> logger.debug("{}: server connection disposed", Integer.toHexString(sessionId)))
-          .subscribe(
-              null,
-              th -> {
-                // no-op
-              });
-    } else {
-      logger.debug(
-          "{}: attempt to remove server connection but it wasn't found (total connections: {})",
-          Integer.toHexString(sessionId),
-          connections.size());
-    }
-  }
-
-  private void setupConnection(int sessionId, DefaultAeronConnection connection) {
-    // store
-    connections.put(sessionId, connection);
-
-    // register cleanup hook
-    connection
-        .onDispose()
-        .doFinally(s -> connections.remove(sessionId))
-        .subscribe(
-            null,
-            th -> {
-              // no-op
-            });
-
-    if (handler == null) {
-      logger.warn("{}: handler function is not specified", Integer.toHexString(sessionId));
-      return;
-    }
-
-    try {
-      if (!connection.isDisposed()) {
-        handler.apply(connection).subscribe(connection.disposeSubscriber());
-      }
-    } catch (Exception ex) {
-      logger.error(
-          "{}: unexpected exception occurred on handler.apply(), cause: ",
-          Integer.toHexString(sessionId),
-          ex);
-      connection.dispose();
-      throw Exceptions.propagate(ex);
+      disposeHook.onComplete();
     }
   }
 
@@ -224,14 +185,9 @@ final class AeronServerHandler implements OnDisposable {
                   .orElse(Mono.empty()));
 
           // dispose all existing connections
-          connections
-              .values()
-              .stream()
-              .peek(Connection::dispose)
-              .map(Connection::onDispose)
-              .forEach(monos::add);
+          disposeHooks.values().stream().peek(MonoProcessor::onComplete).forEach(monos::add);
 
-          return Mono.whenDelayError(monos).doFinally(s -> connections.clear());
+          return Mono.whenDelayError(monos).doFinally(s -> disposeHooks.clear());
         });
   }
 
