@@ -1,6 +1,5 @@
 package reactor.aeron;
 
-import io.aeron.Image;
 import io.aeron.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,14 +27,7 @@ public class MessageSubscription implements OnDisposable {
     this.eventLoop = eventLoop;
   }
 
-  /**
-   * Closes aeron {@link Subscription}. Can only be called from within {@link AeronEventLoop} worker
-   * thred.
-   *
-   * <p><b>NOTE:</b> this method is not for public client (despite it was declared with {@code
-   * public} signifier).
-   */
-  public void close() {
+  void close() {
     if (!eventLoop.inEventLoop()) {
       throw new IllegalStateException("Can only close aeron subscription from within event loop");
     }

@@ -116,6 +116,27 @@ public class AeronResources implements OnDisposable {
   }
 
   /**
+   * Creates and registers {@link DefaultAeronInbound}.
+   *
+   * @param image aeron image
+   * @param subscription subscription
+   * @return mono result
+   */
+  public Mono<DefaultAeronInbound> inbound(Image image, MessageSubscription subscription) {
+    return Mono.defer(
+        () -> {
+          AeronEventLoop eventLoop = eventLoopGroup.next();
+          DefaultAeronInbound inbound = new DefaultAeronInbound(image, eventLoop, subscription);
+          return eventLoop
+              .registerInbound(inbound)
+              .doOnError(
+                  ex ->
+                      logger.error(
+                          "{} failed on registerInbound(), cause: {}", this, ex.toString()));
+        });
+  }
+
+  /**
    * Creates aeron {@link ExclusivePublication} then wraps it into {@link MessagePublication}.
    * Result message publication will be assigned to event loop.
    *

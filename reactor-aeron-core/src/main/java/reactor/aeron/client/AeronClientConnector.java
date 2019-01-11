@@ -9,9 +9,9 @@ import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
 import reactor.aeron.DefaultAeronConnection;
-import reactor.aeron.DefaultAeronInbound;
 import reactor.aeron.DefaultAeronOutbound;
 import reactor.aeron.MessagePublication;
+import reactor.aeron.MessageSubscription;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
@@ -94,18 +94,13 @@ final class AeronClientConnector {
                         .flatMap(
                             subscription ->
                                 inboundAvailable.flatMap(
-                                    image -> {
-                                      DefaultAeronConnection connection =
-                                          new DefaultAeronConnection(
-                                              sessionId,
-                                              new DefaultAeronInbound(image, subscription),
-                                              new DefaultAeronOutbound(publication),
-                                              disposeHook);
-
-                                      return connection
-                                          .start(handler)
-                                          .doOnError(ex -> connection.dispose());
-                                    }))
+                                    image ->
+                                        newConnection(
+                                            sessionId,
+                                            image,
+                                            publication,
+                                            subscription,
+                                            disposeHook)))
                         .doOnSuccess(
                             connection ->
                                 logger.debug(
@@ -114,5 +109,30 @@ final class AeronClientConnector {
                                     inboundChannel));
                   });
         });
+  }
+
+  private Mono<Connection> newConnection(
+      int sessionId,
+      Image image,
+      MessagePublication publication,
+      MessageSubscription subscription,
+      MonoProcessor<Void> disposeHook) {
+
+    return resources
+        .inbound(image, subscription)
+        .doOnError(
+            ex -> {
+              subscription.dispose();
+              publication.dispose();
+            })
+        .flatMap(
+            inbound -> {
+              DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
+
+              DefaultAeronConnection connection =
+                  new DefaultAeronConnection(sessionId, inbound, outbound, disposeHook);
+
+              return connection.start(handler).doOnError(ex -> connection.dispose());
+            });
   }
 }

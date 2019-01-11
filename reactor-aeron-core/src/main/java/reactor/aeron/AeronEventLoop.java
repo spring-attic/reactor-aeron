@@ -27,6 +27,7 @@ public final class AeronEventLoop implements OnDisposable {
   private final Queue<CommandTask> commands = new ConcurrentLinkedQueue<>();
   private final List<MessagePublication> publications = new ArrayList<>();
   private final List<MessageSubscription> subscriptions = new ArrayList<>();
+  private final List<DefaultAeronInbound> inbounds = new ArrayList<>();
 
   private final MonoProcessor<Void> dispose = MonoProcessor.create();
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
@@ -122,11 +123,30 @@ public final class AeronEventLoop implements OnDisposable {
   }
 
   /**
-   * Disposes {@link MessagePublication} (which by turn would close aeron {@link
-   * io.aeron.Publication}) and remove it from event loop.
+   * Registers {@link DefaultAeronInbound} in event loop.
+   *
+   * @param inbound aeron inbound
+   * @return mono result of registration
+   */
+  public Mono<DefaultAeronInbound> registerInbound(DefaultAeronInbound inbound) {
+    return worker()
+        .flatMap(
+            worker ->
+                command(
+                    sink -> {
+                      if (!cancelIfDisposed(sink)) {
+                        inbounds.add(inbound);
+                        logger.debug("Registered {}", inbound);
+                        sink.success(inbound);
+                      }
+                    }));
+  }
+
+  /**
+   * Disposes {@link MessagePublication} and remove it from event loop.
    *
    * @param p message publication
-   * @return mono result of dispose of message publication
+   * @return mono result
    */
   public Mono<Void> disposePublication(MessagePublication p) {
     return worker()
@@ -140,11 +160,10 @@ public final class AeronEventLoop implements OnDisposable {
   }
 
   /**
-   * Diposes {@link MessageSubscription} ((which by turn would close aeron {@link
-   * io.aeron.Subscription})) and remove it event loop.
+   * Disposes {@link MessageSubscription} and remove it from event loop.
    *
    * @param s message subscription
-   * @return mono result of dispose of message subscription
+   * @return mono result
    */
   public Mono<Void> disposeSubscription(MessageSubscription s) {
     return worker()
@@ -154,6 +173,22 @@ public final class AeronEventLoop implements OnDisposable {
                     sink -> {
                       subscriptions.remove(s);
                       Mono.fromRunnable(s::close).subscribe(null, sink::error, sink::success);
+                    }));
+  }
+  /**
+   * Disposes {@link DefaultAeronInbound} and remove it from event loop.
+   *
+   * @param inbound aeron inbound
+   * @return mono result
+   */
+  public Mono<Void> disposeInbound(DefaultAeronInbound inbound) {
+    return worker()
+        .flatMap(
+            worker ->
+                command(
+                    sink -> {
+                      inbounds.remove(inbound);
+                      Mono.fromRunnable(inbound::close).subscribe(null, sink::error, sink::success);
                     }));
   }
 
@@ -261,6 +296,7 @@ public final class AeronEventLoop implements OnDisposable {
       // Dispose publications, subscriptions and commands
       try {
         processCommands();
+        disposeInbounds();
         disposeSubscriptions();
         disposePublications();
       } finally {
@@ -282,12 +318,11 @@ public final class AeronEventLoop implements OnDisposable {
       for (Iterator<MessagePublication> it = publications.iterator(); it.hasNext(); ) {
         MessagePublication p = it.next();
         it.remove();
-        Mono.fromRunnable(p::close)
-            .subscribe(
-                null,
-                th -> {
-                  // no-op
-                });
+        try {
+          p.close();
+        } catch (Exception ex) {
+          // no-op
+        }
       }
     }
 
@@ -295,12 +330,23 @@ public final class AeronEventLoop implements OnDisposable {
       for (Iterator<MessageSubscription> it = subscriptions.iterator(); it.hasNext(); ) {
         MessageSubscription s = it.next();
         it.remove();
-        Mono.fromRunnable(s::close)
-            .subscribe(
-                null,
-                th -> {
-                  // no-op
-                });
+        try {
+          s.close();
+        } catch (Exception ex) {
+          // no-op
+        }
+      }
+    }
+  }
+
+  private void disposeInbounds() {
+    for (Iterator<DefaultAeronInbound> it = inbounds.iterator(); it.hasNext(); ) {
+      DefaultAeronInbound inbound = it.next();
+      it.remove();
+      try {
+        inbound.close();
+      } catch (Exception ex) {
+        // no-op
       }
     }
   }

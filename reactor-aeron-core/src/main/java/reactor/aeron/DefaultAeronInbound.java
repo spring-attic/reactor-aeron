@@ -26,6 +26,7 @@ public final class DefaultAeronInbound implements AeronInbound {
               DefaultAeronInbound.class, CoreSubscriber.class, "destinationSubscriber");
 
   private final Image image;
+  private final AeronEventLoop eventLoop;
   private final FluxReceive inbound = new FluxReceive();
   private final FragmentAssembler fragmentHandler =
       new FragmentAssembler(new InnerFragmentHandler());
@@ -34,12 +35,14 @@ public final class DefaultAeronInbound implements AeronInbound {
   private volatile long requested;
   private volatile CoreSubscriber<? super ByteBuffer> destinationSubscriber;
 
-  public DefaultAeronInbound(Image image) {
-    this(image, null);
+  public DefaultAeronInbound(Image image, AeronEventLoop eventLoop) {
+    this(image, eventLoop, null);
   }
 
-  public DefaultAeronInbound(Image image, MessageSubscription subscription) {
+  public DefaultAeronInbound(
+      Image image, AeronEventLoop eventLoop, MessageSubscription subscription) {
     this.image = image;
+    this.eventLoop = eventLoop;
     this.subscription = subscription;
   }
 
@@ -60,11 +63,24 @@ public final class DefaultAeronInbound implements AeronInbound {
     return produced;
   }
 
-  void dispose() {
+  void close() {
+    if (!eventLoop.inEventLoop()) {
+      throw new IllegalStateException("Can only close aeron inbound from within event loop");
+    }
     inbound.cancel();
+  }
+
+  void dispose() {
     if (subscription != null) {
       subscription.dispose();
     }
+    eventLoop
+        .disposeInbound(this)
+        .subscribe(
+            null,
+            th -> {
+              // no-op
+            });
   }
 
   private class InnerFragmentHandler implements FragmentHandler {
