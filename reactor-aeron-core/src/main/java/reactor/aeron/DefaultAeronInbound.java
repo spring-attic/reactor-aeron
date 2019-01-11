@@ -1,7 +1,8 @@
 package reactor.aeron;
 
+import io.aeron.FragmentAssembler;
 import io.aeron.Image;
-import io.aeron.ImageFragmentAssembler;
+import io.aeron.logbuffer.FragmentHandler;
 import io.aeron.logbuffer.Header;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
@@ -14,6 +15,8 @@ import reactor.core.publisher.Operators;
 
 public final class DefaultAeronInbound implements AeronInbound {
 
+  private static final int PREFETCH = 4096;
+
   private static final AtomicLongFieldUpdater<DefaultAeronInbound> REQUESTED =
       AtomicLongFieldUpdater.newUpdater(DefaultAeronInbound.class, "requested");
 
@@ -23,9 +26,9 @@ public final class DefaultAeronInbound implements AeronInbound {
               DefaultAeronInbound.class, CoreSubscriber.class, "destinationSubscriber");
 
   private final Image image;
-  private final io.aeron.logbuffer.FragmentHandler fragmentHandler =
-      new ImageFragmentAssembler(new FragmentHandler());
   private final FluxReceive inbound = new FluxReceive();
+  private final FragmentAssembler fragmentHandler =
+      new FragmentAssembler(new InnerFragmentHandler());
 
   private volatile long requested;
   private volatile CoreSubscriber<? super ByteBuffer> destinationSubscriber;
@@ -36,12 +39,11 @@ public final class DefaultAeronInbound implements AeronInbound {
 
   @Override
   public ByteBufferFlux receive() {
-    // todo do we need to use onBackpressureBuffer here?
-    return new ByteBufferFlux(inbound.onBackpressureBuffer());
+    return new ByteBufferFlux(inbound);
   }
 
   int poll() {
-    int r = (int) Math.min(requested, 8);
+    int r = (int) Math.min(requested, PREFETCH);
     int produced = 0;
     if (r > 0) {
       produced = image.poll(fragmentHandler, r);
@@ -56,7 +58,7 @@ public final class DefaultAeronInbound implements AeronInbound {
     inbound.cancel();
   }
 
-  private class FragmentHandler implements io.aeron.logbuffer.FragmentHandler {
+  private class InnerFragmentHandler implements FragmentHandler {
 
     @Override
     public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
@@ -66,13 +68,9 @@ public final class DefaultAeronInbound implements AeronInbound {
 
       CoreSubscriber<? super ByteBuffer> destination =
           DefaultAeronInbound.this.destinationSubscriber;
-      // check on cancel?
-      if (destination != null) {
-        destination.onNext(dstBuffer);
-      } else {
-        // todo need to research io.aeron.ImageControlledFragmentAssembler
-        throw new RuntimeException("we have received message without any subscriber");
-      }
+
+      // TODO check on cancel?
+      destination.onNext(dstBuffer);
     }
   }
 
@@ -85,8 +83,9 @@ public final class DefaultAeronInbound implements AeronInbound {
 
     @Override
     public void cancel() {
-      // TODO implement me; research what reactor netty doing in such situatino
       REQUESTED.set(DefaultAeronInbound.this, 0);
+      // TODO think again whether re-subscribtion is allowed; or we have to should emit cancel
+      // signal upper to some conneciton shutdown hook
       CoreSubscriber destination = DESTINATION_SUBSCRIBER.getAndSet(DefaultAeronInbound.this, null);
       if (destination != null) {
         destination.onComplete();
