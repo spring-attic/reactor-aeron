@@ -35,10 +35,13 @@ public final class DefaultAeronInbound implements AeronInbound {
   private volatile long requested;
   private volatile CoreSubscriber<? super ByteBuffer> destinationSubscriber;
 
-  public DefaultAeronInbound(Image image, AeronEventLoop eventLoop) {
-    this(image, eventLoop, null);
-  }
-
+  /**
+   * Constructor.
+   *
+   * @param image image
+   * @param eventLoop event loop
+   * @param subscription subscription
+   */
   public DefaultAeronInbound(
       Image image, AeronEventLoop eventLoop, MessageSubscription subscription) {
     this.image = image;

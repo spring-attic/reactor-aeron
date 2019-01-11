@@ -175,6 +175,7 @@ public final class AeronEventLoop implements OnDisposable {
                       Mono.fromRunnable(s::close).subscribe(null, sink::error, sink::success);
                     }));
   }
+
   /**
    * Disposes {@link DefaultAeronInbound} and remove it from event loop.
    *
