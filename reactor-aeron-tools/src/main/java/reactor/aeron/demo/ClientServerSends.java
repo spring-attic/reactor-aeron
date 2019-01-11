@@ -13,19 +13,14 @@ public class ClientServerSends {
   public static void main(String[] args) throws Exception {
     AeronResources aeronResources = AeronResources.start();
     try {
-      AeronClient.create("client", aeronResources)
-          .options(
-              options -> {
-                options.serverChannel(
-                    channel -> channel.media("udp").reliable(true).endpoint("localhost:13000"));
-                options.clientChannel(
-                    channel -> channel.media("udp").reliable(true).endpoint("localhost:12001"));
-              })
+      AeronClient.create(aeronResources)
+          .options("localhost", 13000, 13001)
           .handle(
               connection ->
                   connection
                       .inbound()
-                      .receiveAsString()
+                      .receive()
+                      .asString()
                       .log("receive")
                       .then(connection.onDispose()))
           .connect()

@@ -1,153 +1,101 @@
 package reactor.aeron;
 
-import io.aeron.ChannelUriStringBuilder;
 import java.time.Duration;
-import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import org.reactivestreams.Publisher;
 
+/**
+ * Immutable wrapper around options for full-duplex aeron <i>connection</i> between client and
+ * server. Note, it's mandatory to set {@code resources}, {@code inboundUri} and {@code
+ * outboundUri}, everything rest may come with defaults.
+ */
 public final class AeronOptions {
 
-  public static final Duration ACK_TIMEOUT = Duration.ofSeconds(10);
-  public static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
-  public static final Duration BACKPRESSURE_TIMEOUT = Duration.ofSeconds(5);
+  private AeronResources resources;
+  private Function<? super Connection, ? extends Publisher<Void>> handler;
+  private AeronChannelUri inboundUri = new AeronChannelUri();
+  private AeronChannelUri outboundUri = new AeronChannelUri();
+  private Duration connectTimeout = Duration.ofSeconds(5);
+  private Duration backpressureTimeout = Duration.ofSeconds(5);
+  private Duration adminActionTimeout = Duration.ofSeconds(5);
 
-  private final ChannelUriStringBuilder serverChannel;
-  private final ChannelUriStringBuilder clientChannel;
-  private final Duration ackTimeout;
-  private final Duration connectTimeout;
-  private final Duration backpressureTimeout;
+  public AeronOptions() {}
 
-  private AeronOptions(Builder builder) {
-    this.serverChannel = builder.serverChannel.validate();
-    this.clientChannel = builder.clientChannel.validate();
-    this.ackTimeout = validate(builder.ackTimeout, "ackTimeout");
-    this.connectTimeout = validate(builder.connectTimeout, "connectTimeout");
-    this.backpressureTimeout = validate(builder.backpressureTimeout, "backpressureTimeout");
+  /**
+   * Copy constructor.
+   *
+   * @param other instance to copy from
+   */
+  public AeronOptions(AeronOptions other) {
+    this.resources = other.resources;
+    this.handler = other.handler;
+    this.inboundUri = other.inboundUri;
+    this.outboundUri = other.outboundUri;
+    this.connectTimeout = other.connectTimeout;
+    this.backpressureTimeout = other.backpressureTimeout;
+    this.adminActionTimeout = other.adminActionTimeout;
   }
 
-  public static Builder builder() {
-    return new Builder();
+  public AeronResources resources() {
+    return resources;
   }
 
-  public String serverChannel() {
-    return serverChannel.build();
+  public AeronOptions resources(AeronResources resources) {
+    return set(s -> s.resources = resources);
   }
 
-  public String clientChannel() {
-    return clientChannel.build();
+  public Function<? super Connection, ? extends Publisher<Void>> handler() {
+    return handler;
   }
 
-  public Duration ackTimeout() {
-    return ackTimeout;
+  public AeronOptions handler(Function<? super Connection, ? extends Publisher<Void>> handler) {
+    return set(s -> s.handler = handler);
+  }
+
+  public AeronChannelUri inboundUri() {
+    return inboundUri;
+  }
+
+  public AeronOptions inboundUri(AeronChannelUri inboundUri) {
+    return set(s -> s.inboundUri = inboundUri);
+  }
+
+  public AeronChannelUri outboundUri() {
+    return outboundUri;
+  }
+
+  public AeronOptions outboundUri(AeronChannelUri outboundUri) {
+    return set(s -> s.outboundUri = outboundUri);
   }
 
   public Duration connectTimeout() {
     return connectTimeout;
   }
 
+  public AeronOptions connectTimeout(Duration connectTimeout) {
+    return set(s -> s.connectTimeout = connectTimeout);
+  }
+
   public Duration backpressureTimeout() {
     return backpressureTimeout;
   }
 
-  @Override
-  public String toString() {
-    final StringBuilder sb = new StringBuilder("AeronOptions{");
-    sb.append("serverChannel=").append(serverChannel);
-    sb.append(", clientChannel=").append(clientChannel);
-    sb.append(", ackTimeout=").append(ackTimeout);
-    sb.append(", connectTimeout=").append(connectTimeout);
-    sb.append(", backpressureTimeout=").append(backpressureTimeout);
-    sb.append('}');
-    return sb.toString();
+  public AeronOptions backpressureTimeout(Duration backpressureTimeout) {
+    return set(s -> s.backpressureTimeout = backpressureTimeout);
   }
 
-  private Duration validate(Duration value, String message) {
-    Objects.requireNonNull(value, message);
-    if (value.compareTo(Duration.ZERO) <= 0) {
-      throw new IllegalArgumentException(message + " > 0 expected, but got: " + value);
-    }
-    return value;
+  public Duration adminActionTimeout() {
+    return adminActionTimeout;
   }
 
-  private int validate(Integer value, String message) {
-    Objects.requireNonNull(value, message);
-    if (value <= 0) {
-      throw new IllegalArgumentException(message + " > 0 expected, but got: " + value);
-    }
-    return value;
+  public AeronOptions adminActionTimeout(Duration adminActionTimeout) {
+    return set(s -> s.adminActionTimeout = adminActionTimeout);
   }
 
-  public static class Builder {
-
-    private ChannelUriStringBuilder serverChannel = serverChannelBuilder();
-    private ChannelUriStringBuilder clientChannel = clientChannelBuilder();
-    private Duration ackTimeout = ACK_TIMEOUT;
-    private Duration connectTimeout = CONNECT_TIMEOUT;
-    private Duration backpressureTimeout = BACKPRESSURE_TIMEOUT;
-
-    private Builder() {}
-
-    public Builder serverChannel(ChannelUriStringBuilder serverChannel) {
-      this.serverChannel = serverChannel;
-      return this;
-    }
-
-    /**
-     * Sets server uri via consumer.
-     *
-     * @param consumer consumer
-     * @return this builder
-     */
-    public Builder serverChannel(Consumer<ChannelUriStringBuilder> consumer) {
-      ChannelUriStringBuilder channelBuilder = serverChannelBuilder();
-      consumer.accept(channelBuilder);
-      this.serverChannel = channelBuilder;
-      return this;
-    }
-
-    public Builder connectTimeout(Duration connectTimeout) {
-      this.connectTimeout = connectTimeout;
-      return this;
-    }
-
-    public Builder backpressureTimeout(Duration backpressureTimeout) {
-      this.backpressureTimeout = backpressureTimeout;
-      return this;
-    }
-
-    public Builder clientChannel(ChannelUriStringBuilder clientChannel) {
-      this.clientChannel = clientChannel;
-      return this;
-    }
-
-    /**
-     * Sets client uri via consumer.
-     *
-     * @param consumer consumer
-     * @return this builder
-     */
-    public Builder clientChannel(Consumer<ChannelUriStringBuilder> consumer) {
-      ChannelUriStringBuilder builder = clientChannelBuilder();
-      consumer.accept(builder);
-      this.clientChannel = builder;
-      return this;
-    }
-
-    public Builder ackTimeout(Duration ackTimeout) {
-      this.ackTimeout = ackTimeout;
-      return this;
-    }
-
-    private ChannelUriStringBuilder serverChannelBuilder() {
-      return new ChannelUriStringBuilder().reliable(true).media("udp");
-    }
-
-    private ChannelUriStringBuilder clientChannelBuilder() {
-      return new ChannelUriStringBuilder().reliable(true).media("udp").endpoint("localhost:0");
-    }
-
-    public AeronOptions build() {
-      return new AeronOptions(this);
-    }
+  private AeronOptions set(Consumer<AeronOptions> c) {
+    AeronOptions s = new AeronOptions(this);
+    c.accept(s);
+    return s;
   }
 }

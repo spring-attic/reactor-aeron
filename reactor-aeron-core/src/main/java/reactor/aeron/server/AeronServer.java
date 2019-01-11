@@ -1,9 +1,9 @@
 package reactor.aeron.server;
 
-import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import org.reactivestreams.Publisher;
-import reactor.aeron.AeronEventLoop;
+import reactor.aeron.AeronChannelUri;
 import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
@@ -12,100 +12,85 @@ import reactor.core.publisher.Mono;
 
 public final class AeronServer {
 
-  private static final int CONTROL_STREAM_ID = 1;
+  private final AeronOptions options;
 
-  private final AeronServerSettings settings;
-
-  private AeronServer(AeronServerSettings settings) {
-    this.settings = settings;
+  private AeronServer(AeronOptions options) {
+    this.options = options;
   }
 
   /**
-   * Create aeron server.
+   * Creates {@link AeronServer}.
    *
-   * @param aeronResources aeronResources
-   * @return aeron server
+   * @param resources aeron resources
+   * @return new {@code AeronServer}
    */
-  public static AeronServer create(AeronResources aeronResources) {
-    return create("server", aeronResources);
+  public static AeronServer create(AeronResources resources) {
+    return new AeronServer(new AeronOptions().resources(resources));
   }
 
   /**
-   * Create aeron server.
+   * Binds {@link AeronServer}.
    *
-   * @param name name
-   * @param aeronResources aeronResources
-   * @return aeron server
-   */
-  public static AeronServer create(String name, AeronResources aeronResources) {
-    return new AeronServer(
-        AeronServerSettings.builder().name(name).aeronResources(aeronResources).build());
-  }
-
-  public Mono<? extends OnDisposable> bind() {
-    return bind(settings.options());
-  }
-
-  /**
-   * Binds server with given options.
-   *
-   * @param options server options
    * @return mono handle of result
    */
-  public Mono<? extends OnDisposable> bind(AeronOptions options) {
-    return Mono.defer(
-        () -> {
-          AeronServerSettings settings = this.settings.options(options);
-          AeronServerHandler serverHandler = new AeronServerHandler(settings);
-
-          AeronResources resources = settings.aeronResources();
-          String category = settings.name();
-          String serverChannel = settings.options().serverChannel();
-          AeronEventLoop eventLoop = resources.nextEventLoop();
-
-          return resources
-              .controlSubscription(
-                  category,
-                  serverChannel,
-                  CONTROL_STREAM_ID,
-                  serverHandler,
-                  eventLoop,
-                  null,
-                  null /**/)
-              .map(
-                  controlSubscription -> {
-                    serverHandler.onSubscription(controlSubscription);
-                    serverHandler
-                        .onDispose()
-                        .doFinally(s -> controlSubscription.dispose())
-                        .subscribe(
-                            null,
-                            ex -> {
-                              // no-op
-                            });
-                    return serverHandler;
-                  });
-        });
+  public Mono<? extends OnDisposable> bind() {
+    return bind(s -> s);
   }
 
   /**
-   * Apply {@link AeronOptions} on the given options consumer.
+   * Binds {@link AeronServer} with options.
    *
-   * @param options a consumer aeron server options
-   * @return a new {@link AeronServer}
+   * @param op unary opearator for performing setup of options
+   * @return mono handle of result
    */
-  public AeronServer options(Consumer<AeronOptions.Builder> options) {
-    return new AeronServer(settings.options(options));
+  public Mono<? extends OnDisposable> bind(UnaryOperator<AeronOptions> op) {
+    return Mono.defer(() -> new AeronServerHandler(op.apply(options)).start());
   }
 
   /**
-   * Attach an IO handler to react on connected client.
+   * Setting up {@link AeronServer} options.
    *
-   * @param handler an IO handler that can dispose underlying connection when {@link Publisher}
+   * @param op unary opearator for performing setup of options
+   * @return new {@code AeronServer} with applied options
+   */
+  public AeronServer options(UnaryOperator<AeronOptions> op) {
+    return new AeronServer(op.apply(options));
+  }
+
+  /**
+   * Shortcut server settings.
+   *
+   * <p>Combination {@code address} + {@code port} shall create {@code inbound} server side entity,
+   * by turn combination {@code address} + {@code controlPort} will result in {@code outbound}
+   * server side component.
+   *
+   * @param address server address
+   * @param port server port
+   * @param controlPort server control port
+   * @return new {@code AeronServer} with applied options
+   */
+  public AeronServer options(String address, int port, int controlPort) {
+    return new AeronServer(options)
+        .options(
+            opts -> {
+              AeronChannelUri inboundUri = opts.inboundUri();
+              AeronChannelUri outboundUri = opts.outboundUri();
+              return opts //
+                  .inboundUri(inboundUri.endpoint(address + ':' + port)) // Sub
+                  .outboundUri(
+                      outboundUri.controlEndpoint(
+                          address + ':' + controlPort)); // Pub->MDC(sessionId)
+            });
+  }
+
+  /**
+   * Attach IO handler to react on connected client.
+   *
+   * @param handler IO handler that can dispose underlying connection when {@link Publisher}
    *     terminates.
-   * @return a new {@link AeronServer}
+   * @return new {@code AeronServer} with handler
    */
   public AeronServer handle(Function<? super Connection, ? extends Publisher<Void>> handler) {
-    return new AeronServer(settings.handler(handler));
+    return new AeronServer(options.handler(handler));
   }
 }

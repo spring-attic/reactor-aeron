@@ -11,8 +11,6 @@ import reactor.core.scheduler.Schedulers;
 
 public class ServerThroughput {
 
-  static final String HOST = "localhost";
-
   static final int SLIDING_AVG_DURATION_SEC = 5;
 
   static class Data {
@@ -64,11 +62,8 @@ public class ServerThroughput {
               1,
               TimeUnit.SECONDS);
 
-      AeronServer.create("server", aeronResources)
-          .options(
-              options ->
-                  options.serverChannel(
-                      channel -> channel.media("udp").reliable(true).endpoint(HOST + ":13000")))
+      AeronServer.create(aeronResources)
+          .options("localhost", 13000, 13001)
           .handle(
               connection ->
                   connection

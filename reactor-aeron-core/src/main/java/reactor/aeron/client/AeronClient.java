@@ -1,12 +1,9 @@
 package reactor.aeron.client;
 
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import org.reactivestreams.Publisher;
-import reactor.aeron.AeronEventLoop;
+import reactor.aeron.AeronChannelUri;
 import reactor.aeron.AeronOptions;
 import reactor.aeron.AeronResources;
 import reactor.aeron.Connection;
@@ -14,121 +11,82 @@ import reactor.core.publisher.Mono;
 
 public final class AeronClient {
 
-  private static final AtomicInteger STREAM_ID_COUNTER = new AtomicInteger();
+  private final AeronOptions options;
 
-  private final AeronClientSettings settings;
-
-  private AeronClient(AeronClientSettings settings) {
-    this.settings = settings;
+  private AeronClient(AeronOptions options) {
+    this.options = options;
   }
 
   /**
-   * Create aeron client.
+   * Creates {@link AeronClient}.
    *
-   * @param aeronResources aeronResources
-   * @return aeron client
+   * @param resources aeron resources
+   * @return new {@code AeronClient}
    */
-  public static AeronClient create(AeronResources aeronResources) {
-    return create("client", aeronResources);
+  public static AeronClient create(AeronResources resources) {
+    return new AeronClient(new AeronOptions().resources(resources));
   }
 
   /**
-   * Create aeron client.
+   * Connects {@link AeronClient}.
    *
-   * @param name name
-   * @param aeronResources aeronResources
-   * @return aeron client
+   * @return mono handle of result
    */
-  public static AeronClient create(String name, AeronResources aeronResources) {
-    return new AeronClient(
-        AeronClientSettings.builder().name(name).aeronResources(aeronResources).build());
-  }
-
   public Mono<? extends Connection> connect() {
-    return connect(settings.options());
-  }
-
-  public Mono<? extends Connection> connect(AeronOptions options) {
-    return Mono.defer(() -> connect0(options));
-  }
-
-  private Mono<? extends Connection> connect0(AeronOptions options) {
-    return Mono.defer(
-        () -> {
-          AeronClientSettings settings = this.settings.options(options);
-
-          int clientControlStreamId = STREAM_ID_COUNTER.incrementAndGet();
-          Supplier<Integer> clientSessionStreamIdCounter = STREAM_ID_COUNTER::incrementAndGet;
-
-          AeronClientConnector clientConnector =
-              new AeronClientConnector(
-                  settings, clientControlStreamId, clientSessionStreamIdCounter);
-
-          String category = Optional.ofNullable(settings.name()).orElse("client");
-          AeronResources resources = settings.aeronResources();
-          String clientChannel = settings.options().clientChannel();
-          AeronEventLoop eventLoop = resources.nextEventLoop();
-
-          return resources
-              .controlSubscription(
-                  category,
-                  clientChannel,
-                  clientControlStreamId,
-                  clientConnector,
-                  eventLoop,
-                  null,
-                  image -> clientConnector.dispose())
-              .flatMap(
-                  controlSubscription -> {
-                    clientConnector.onSubscription(controlSubscription);
-                    return clientConnector
-                        .start()
-                        .doOnError(
-                            ex -> {
-                              controlSubscription.dispose();
-                              clientConnector.dispose();
-                            })
-                        .doOnSuccess(
-                            connection -> {
-                              settings
-                                  .handler() //
-                                  .apply(connection)
-                                  .subscribe(connection.disposeSubscriber());
-                              connection
-                                  .onDispose()
-                                  .doFinally(
-                                      s -> {
-                                        controlSubscription.dispose();
-                                        clientConnector.dispose();
-                                      })
-                                  .subscribe(
-                                      null,
-                                      th -> {
-                                        // no-op
-                                      });
-                            });
-                  });
-        });
+    return connect(s -> s);
   }
 
   /**
-   * Apply {@link AeronOptions} on the given options consumer.
+   * Connects {@link AeronClient} with options.
    *
-   * @param options a consumer aeron client options
-   * @return a new {@link AeronClient}
+   * @param op unary opearator for performing setup of options
+   * @return mono handle of result
    */
-  public AeronClient options(Consumer<AeronOptions.Builder> options) {
-    return new AeronClient(settings.options(options));
+  public Mono<? extends Connection> connect(UnaryOperator<AeronOptions> op) {
+    return Mono.defer(() -> new AeronClientConnector(op.apply(options)).start());
   }
 
   /**
-   * Attach an IO handler to react on connected client.
+   * Setting up {@link AeronClient} options.
    *
-   * @param handler an IO handler that can dispose underlying connection when {@link Publisher}
+   * @param op unary opearator for performing setup of options
+   * @return new {@code AeronClient} with applied options
+   */
+  public AeronClient options(UnaryOperator<AeronOptions> op) {
+    return new AeronClient(op.apply(options));
+  }
+
+  /**
+   * Shortcut client settings.
+   *
+   * @param address server address
+   * @param port server port
+   * @param controlPort server control port
+   * @return new {@code AeronClient} with applied options
+   */
+  public AeronClient options(String address, int port, int controlPort) {
+    return new AeronClient(options)
+        .options(
+            opts -> {
+              AeronChannelUri inboundUri = opts.inboundUri();
+              AeronChannelUri outboundUri = opts.outboundUri();
+              return opts //
+                  .outboundUri(outboundUri.endpoint(address + ':' + port)) // Pub
+                  .inboundUri(
+                      inboundUri
+                          .controlEndpoint(address + ':' + controlPort)
+                          .controlModeDynamic()); // Sub->MDC(sessionId)
+            });
+  }
+
+  /**
+   * Attach IO handler to react on connected client.
+   *
+   * @param handler IO handler that can dispose underlying connection when {@link Publisher}
    *     terminates.
-   * @return a new {@link AeronClient}
+   * @return new {@code AeronClient} with handler
    */
   public AeronClient handle(Function<? super Connection, ? extends Publisher<Void>> handler) {
-    return new AeronClient(settings.handler(handler));
+    return new AeronClient(options.handler(handler));
   }
 }

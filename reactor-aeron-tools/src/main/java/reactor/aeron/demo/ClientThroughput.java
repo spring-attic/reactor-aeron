@@ -19,14 +19,8 @@ public class ClientThroughput {
     try {
       ByteBuffer buffer = ByteBuffer.allocate(1024);
 
-      AeronClient.create("client", aeronResources)
-          .options(
-              options -> {
-                options.serverChannel(
-                    channel -> channel.media("udp").reliable(true).endpoint(HOST + ":13000"));
-                options.clientChannel(
-                    channel -> channel.media("udp").reliable(true).endpoint(HOST + ":12001"));
-              })
+      AeronClient.create(aeronResources)
+          .options("localhost", 13000, 13001)
           .handle(
               connection ->
                   connection

@@ -4,43 +4,46 @@ import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.Queue;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.MonoSink;
 
-public final class MessagePublication implements OnDisposable, AutoCloseable {
+public class MessagePublication implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(MessagePublication.class);
 
   private final ThreadLocal<BufferClaim> bufferClaims = ThreadLocal.withInitial(BufferClaim::new);
 
-  private final String category;
   private final Publication publication;
-  private final AeronOptions options;
   private final AeronEventLoop eventLoop;
+  private final Duration connectTimeout;
+  private final Duration backpressureTimeout;
+  private final Duration adminActionTimeout;
 
-  private final ManyToOneConcurrentLinkedQueue<PublishTask> publishTasks =
-      new ManyToOneConcurrentLinkedQueue<>();
+  private final Queue<PublishTask> publishTasks = new ManyToOneConcurrentLinkedQueue<>();
 
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
   /**
    * Constructor.
    *
-   * @param category category
-   * @param publication publication
+   * @param publication aeron publication
+   * @param options aeron options
+   * @param eventLoop aeron event loop where this {@code MessagePublication} is assigned
    */
-  MessagePublication(
-      String category, Publication publication, AeronOptions options, AeronEventLoop eventLoop) {
-    this.category = category;
+  MessagePublication(Publication publication, AeronOptions options, AeronEventLoop eventLoop) {
     this.publication = publication;
-    this.options = options;
     this.eventLoop = eventLoop;
+    this.connectTimeout = options.connectTimeout();
+    this.backpressureTimeout = options.backpressureTimeout();
+    this.adminActionTimeout = options.adminActionTimeout();
   }
 
   /**
@@ -73,7 +76,7 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
       return 0;
     }
 
-    long result = task.run();
+    long result = task.publish();
     if (result > 0) {
       publishTasks.poll();
       task.success();
@@ -98,10 +101,10 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
     // Handle failed connection
     if (result == Publication.NOT_CONNECTED) {
-      if (task.isTimeoutElapsed(options.connectTimeout())) {
+      if (task.isTimeoutElapsed(connectTimeout)) {
         logger.warn(
             "aeron.Publication failed to resolve NOT_CONNECTED within {} ms, {}",
-            options.connectTimeout().toMillis(),
+            connectTimeout.toMillis(),
             this);
         ex = AeronExceptions.failWithPublication("Failed to resolve NOT_CONNECTED within timeout");
       }
@@ -109,10 +112,10 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
     // Handle backpressure
     if (result == Publication.BACK_PRESSURED) {
-      if (task.isTimeoutElapsed(options.backpressureTimeout())) {
+      if (task.isTimeoutElapsed(backpressureTimeout)) {
         logger.warn(
             "aeron.Publication failed to resolve BACK_PRESSURED within {} ms, {}",
-            options.backpressureTimeout().toMillis(),
+            backpressureTimeout.toMillis(),
             this);
         ex = AeronExceptions.failWithPublication("Failed to resolve BACK_PRESSURED within timeout");
       }
@@ -120,10 +123,10 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
     // Handle admin action
     if (result == Publication.ADMIN_ACTION) {
-      if (task.isTimeoutElapsed(options.connectTimeout())) {
+      if (task.isTimeoutElapsed(adminActionTimeout)) {
         logger.warn(
             "aeron.Publication failed to resolve ADMIN_ACTION within {} ms, {}",
-            options.connectTimeout().toMillis(),
+            adminActionTimeout.toMillis(),
             this);
         ex = AeronExceptions.failWithPublication("Failed to resolve ADMIN_ACTION within timeout");
       }
@@ -138,24 +141,52 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     return 0;
   }
 
-  @Override
+  /**
+   * Closes aeron {@link Publication}. Can only be called from within {@link AeronEventLoop} worker
+   * thred.
+   *
+   * <p><b>NOTE:</b> this method is not for public client (despite it was declared with {@code
+   * public} signifier).
+   */
   public void close() {
     if (!eventLoop.inEventLoop()) {
       throw new IllegalStateException("Can only close aeron publication from within event loop");
     }
     try {
       publication.close();
-      logger.debug("aeron.Publication closed: {}", this);
+      logger.debug("Disposed {}", this);
+    } catch (Exception ex) {
+      logger.warn("{} failed on aeron.Publication close(): {}", this, ex.toString());
+      throw Exceptions.propagate(ex);
     } finally {
       disposePublishTasks();
       onDispose.onComplete();
     }
   }
 
+  /**
+   * Delegates to {@link Publication#sessionId()}.
+   *
+   * @return aeron {@code Publication} sessionId.
+   */
+  public int sessionId() {
+    return publication.sessionId();
+  }
+
+  /**
+   * Delegates to {@link Publication#isClosed()}.
+   *
+   * @return {@code true} if aeron {@code Publication} is closed, {@code false} otherwise
+   */
+  @Override
+  public boolean isDisposed() {
+    return publication.isClosed();
+  }
+
   @Override
   public void dispose() {
     eventLoop
-        .dispose(this)
+        .disposePublication(this)
         .subscribe(
             null,
             th -> {
@@ -164,17 +195,40 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
   }
 
   @Override
-  public boolean isDisposed() {
-    return publication.isClosed();
-  }
-
-  @Override
   public Mono<Void> onDispose() {
     return onDispose;
   }
 
-  public boolean isConnected() {
-    return publication.isConnected();
+  /**
+   * Spins (in async fashion) until {@link Publication#isConnected()} would have returned {@code
+   * true} or {@code connectTimeout} elapsed. See also {@link
+   * MessagePublication#ensureConnected0()}.
+   *
+   * @return mono result
+   */
+  public Mono<MessagePublication> ensureConnected() {
+    return Mono.defer(
+        () -> {
+          Duration retryInterval = Duration.ofMillis(100);
+          long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
+          retryCount = Math.max(retryCount, 1);
+
+          return ensureConnected0()
+              .retryBackoff(retryCount, retryInterval, retryInterval)
+              .timeout(connectTimeout)
+              .doOnError(
+                  ex -> logger.warn("aeron.Publication is not connected after several retries"))
+              .thenReturn(this);
+        });
+  }
+
+  private Mono<Void> ensureConnected0() {
+    return Mono.defer(
+        () ->
+            publication.isConnected()
+                ? Mono.empty()
+                : Mono.error(
+                    AeronExceptions.failWithPublication("aeron.Publication is not connected")));
   }
 
   private void disposePublishTasks() {
@@ -183,13 +237,17 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
       if (task == null) {
         break;
       }
-      task.error(AeronExceptions.failWithCancel("PublishTask has cancelled"));
+      try {
+        task.error(AeronExceptions.failWithCancel("PublishTask has cancelled"));
+      } catch (Exception ex) {
+        // no-op
+      }
     }
   }
 
   @Override
   public String toString() {
-    return AeronUtils.format(category, "pub", publication.channel(), publication.streamId());
+    return "MessagePublication{pub=" + publication.channel() + "}";
   }
 
   /**
@@ -201,15 +259,20 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
 
     private final ByteBuffer msgBody;
     private final MonoSink<Void> sink;
+    private volatile boolean isDisposed = false;
 
     private long start;
 
     private PublishTask(ByteBuffer msgBody, MonoSink<Void> sink) {
       this.msgBody = msgBody;
-      this.sink = sink;
+      this.sink = sink.onDispose(() -> isDisposed = true);
     }
 
-    private long run() {
+    private long publish() {
+      if (isDisposed) {
+        return 1;
+      }
+
       if (start == 0) {
         start = System.currentTimeMillis();
       }
@@ -242,11 +305,15 @@ public final class MessagePublication implements OnDisposable, AutoCloseable {
     }
 
     private void success() {
-      sink.success();
+      if (!isDisposed) {
+        sink.success();
+      }
     }
 
     private void error(Throwable ex) {
-      sink.error(ex);
+      if (!isDisposed) {
+        sink.error(ex);
+      }
     }
   }
 }
