@@ -29,12 +29,18 @@ public final class DefaultAeronInbound implements AeronInbound {
   private final FluxReceive inbound = new FluxReceive();
   private final FragmentAssembler fragmentHandler =
       new FragmentAssembler(new InnerFragmentHandler());
+  private final MessageSubscription subscription;
 
   private volatile long requested;
   private volatile CoreSubscriber<? super ByteBuffer> destinationSubscriber;
 
   public DefaultAeronInbound(Image image) {
+    this(image, null);
+  }
+
+  public DefaultAeronInbound(Image image, MessageSubscription subscription) {
     this.image = image;
+    this.subscription = subscription;
   }
 
   @Override
@@ -56,6 +62,9 @@ public final class DefaultAeronInbound implements AeronInbound {
 
   void dispose() {
     inbound.cancel();
+    if (subscription != null) {
+      subscription.dispose();
+    }
   }
 
   private class InnerFragmentHandler implements FragmentHandler {

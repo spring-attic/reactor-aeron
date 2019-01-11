@@ -98,10 +98,8 @@ final class AeronClientConnector {
                                       DefaultAeronConnection connection =
                                           new DefaultAeronConnection(
                                               sessionId,
-                                              new DefaultAeronInbound(image),
+                                              new DefaultAeronInbound(image, subscription),
                                               new DefaultAeronOutbound(publication),
-                                              subscription,
-                                              publication,
                                               disposeHook);
 
                                       return connection
