@@ -213,7 +213,7 @@ public class AeronResources implements OnDisposable {
                       return eventLoop
                           .registerSubscription(
                               new MessageSubscription(
-                                  aeronSubscription, eventLoop, fragmentAssembler))
+                                  aeronSubscription, eventLoop))
                           .doOnError(
                               ex -> {
                                 logger.error(

@@ -1,23 +1,18 @@
 package reactor.aeron;
 
 import io.aeron.Subscription;
-import io.aeron.logbuffer.FragmentHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
-// TODO investigate why implementing org.reactivestreams.Subscription were needed
 public class MessageSubscription implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(MessageSubscription.class);
 
-  private static final int PREFETCH = 32;
-
   private final AeronEventLoop eventLoop;
   private final Subscription subscription; // aeron subscription
-  private final FragmentHandler fragmentHandler;
 
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
@@ -26,28 +21,10 @@ public class MessageSubscription implements OnDisposable {
    *
    * @param subscription aeron subscription
    * @param eventLoop event loop where this {@code MessageSubscription} is assigned
-   * @param fragmentHandler aeron fragment handler
    */
-  public MessageSubscription(
-      Subscription subscription, AeronEventLoop eventLoop, FragmentHandler fragmentHandler) {
+  public MessageSubscription(Subscription subscription, AeronEventLoop eventLoop) {
     this.subscription = subscription;
     this.eventLoop = eventLoop;
-    this.fragmentHandler = fragmentHandler;
-  }
-
-  /**
-   * Subscrptions poll method.
-   *
-   * @return the number of fragments received
-   */
-  int poll() {
-    if (subscription == null) {
-      return 0;
-    }
-
-    // TODO after removing reactiveStreams.Subscription removed from here:
-    //  r, numOfPolled, requested; correlates with problem around model of AeronInbound
-    return subscription.poll(fragmentHandler, PREFETCH);
   }
 
   /**
