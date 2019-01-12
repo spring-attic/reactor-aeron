@@ -74,9 +74,6 @@ public final class DefaultAeronInbound implements AeronInbound {
   }
 
   void dispose() {
-    if (subscription != null) {
-      subscription.dispose();
-    }
     eventLoop
         .disposeInbound(this)
         .subscribe(
@@ -84,6 +81,9 @@ public final class DefaultAeronInbound implements AeronInbound {
             th -> {
               // no-op
             });
+    if (subscription != null) {
+      subscription.dispose();
+    }
   }
 
   private class InnerFragmentHandler implements FragmentHandler {
