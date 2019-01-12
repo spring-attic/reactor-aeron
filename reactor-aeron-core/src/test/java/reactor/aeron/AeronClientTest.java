@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
@@ -396,6 +397,66 @@ class AeronClientTest extends BaseAeronTest {
         .inbound()
         .receive()
         .asString()
+        .take(overall)
+        .doOnNext(processor::onNext)
+        .subscribe(subscriber);
+
+    StepVerifier.create(processor.buffer(smallInterval).map(List::size))
+        .expectNext(request1)
+        .expectNext(request2)
+        .expectNext(request3)
+        .expectNoEvent(smallInterval)
+        .thenCancel()
+        .verify(timeout);
+  }
+
+  @Test
+  @Disabled("doesn't work, see produced in the inbound")
+  public void testCustomClientInboundSubscriberWithLongMessage() {
+    int count = 10;
+    Duration timeout = Duration.ofSeconds(5);
+
+    char[] chars = new char[Configuration.MTU_LENGTH * 4];
+    Arrays.fill(chars, 'a');
+    String msg = new String(chars);
+
+    Duration smallInterval = timeout.multipliedBy(10).dividedBy(100); // 10%
+    int request1 = count * 10 / 100; // 10%
+    long requestDelay1 = smallInterval.toMillis(); // 10%
+    int request2 = request1 * 2; // 20%
+    long requestDelay2 = smallInterval.toMillis() * 2; // 20%
+    int request3 = request1 * 7; // 70%
+    long requestDelay3 = smallInterval.toMillis() * 7; // 70%
+    int overall = request1 + request2 + request3; // 100%
+
+    Scheduler scheduler = Schedulers.single();
+
+    createServer(
+        connection -> {
+          connection.outbound().sendString(Flux.range(0, overall).map(i -> msg)).then().subscribe();
+          return connection.onDispose();
+        });
+
+    Connection connection1 = createConnection();
+
+    BaseSubscriber<String> subscriber =
+        new BaseSubscriber<String>() {
+          @Override
+          protected void hookOnSubscribe(Subscription subscription) {
+            // no-op
+          }
+        };
+
+    scheduler.schedule(() -> subscriber.request(request1), requestDelay1, TimeUnit.MILLISECONDS);
+    scheduler.schedule(() -> subscriber.request(request2), requestDelay2, TimeUnit.MILLISECONDS);
+    scheduler.schedule(() -> subscriber.request(request3), requestDelay3, TimeUnit.MILLISECONDS);
+
+    DirectProcessor<String> processor = DirectProcessor.create();
+    connection1
+        .inbound()
+        .receive()
+        .asString()
+        .log("receive ")
         .take(overall)
         .doOnNext(processor::onNext)
         .subscribe(subscriber);
