@@ -221,6 +221,49 @@ class AeronClientTest extends BaseAeronTest {
   }
 
   @Test
+  public void testTwoClientsRequestResponseWithDelaySubscriptionToInbound200000() {
+    int count = 200_000;
+    createServer(
+        connection ->
+            connection
+                .inbound()
+                .receive()
+                .flatMap(byteBuffer -> connection.outbound().send(Mono.just(byteBuffer)).then())
+                .then(connection.onDispose()));
+
+    Connection connection1 = createConnection();
+    Flux.range(0, count)
+        .flatMap(i -> connection1.outbound().sendString(Mono.just("client-1 send:" + i)).then())
+        .then()
+        .subscribe();
+
+    Connection connection2 = createConnection();
+    Flux.range(0, count)
+        .flatMap(i -> connection2.outbound().sendString(Mono.just("client-2 send:" + i)).then())
+        .then()
+        .subscribe();
+
+    StepVerifier.create(
+            Mono.delay(Duration.ofSeconds(1))
+                .thenMany(
+                    Flux.merge(
+                        connection1
+                            .inbound()
+                            .receive()
+                            .asString()
+                            .take(count)
+                            .filter(response -> !response.startsWith("client-1 ")),
+                        connection2
+                            .inbound()
+                            .receive()
+                            .asString()
+                            .take(count)
+                            .filter(response -> !response.startsWith("client-2 ")))))
+        .expectComplete()
+        .verify(Duration.ofSeconds(20));
+  }
+
+  @Test
   public void testClientWith2HandlersReceiveData() {
     createServer(
         connection ->
