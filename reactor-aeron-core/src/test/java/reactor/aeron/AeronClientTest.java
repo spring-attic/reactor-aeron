@@ -418,13 +418,9 @@ class AeronClientTest extends BaseAeronTest {
     Arrays.fill(chars, 'a');
     String msg = new String(chars);
 
-    Duration smallInterval = timeout.multipliedBy(10).dividedBy(100); // 10%
     int request1 = count * 10 / 100; // 10%
-    long requestDelay1 = smallInterval.toMillis(); // 10%
     int request2 = request1 * 2; // 20%
-    long requestDelay2 = smallInterval.toMillis() * 2; // 20%
     int request3 = request1 * 7; // 70%
-    long requestDelay3 = smallInterval.toMillis() * 7; // 70%
     int overall = request1 + request2 + request3; // 100%
 
     Scheduler scheduler = Schedulers.single();
@@ -448,6 +444,11 @@ class AeronClientTest extends BaseAeronTest {
             // no-op
           }
         };
+
+    Duration smallInterval = timeout.multipliedBy(30).dividedBy(100); // 30%
+    long requestDelay1 = smallInterval.dividedBy(3).toMillis(); // 10%
+    long requestDelay2 = requestDelay1 + smallInterval.toMillis(); // 40%
+    long requestDelay3 = requestDelay2 + smallInterval.toMillis(); // 70%
 
     scheduler.schedule(() -> subscriber.request(request1), requestDelay1, TimeUnit.MILLISECONDS);
     scheduler.schedule(() -> subscriber.request(request2), requestDelay2, TimeUnit.MILLISECONDS);
