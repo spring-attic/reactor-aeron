@@ -1,7 +1,7 @@
 package reactor.aeron;
 
-import io.aeron.FragmentAssembler;
 import io.aeron.Image;
+import io.aeron.ImageFragmentAssembler;
 import io.aeron.logbuffer.FragmentHandler;
 import io.aeron.logbuffer.Header;
 import java.nio.ByteBuffer;
@@ -28,8 +28,8 @@ public final class DefaultAeronInbound implements AeronInbound {
   private final Image image;
   private final AeronEventLoop eventLoop;
   private final FluxReceive inbound = new FluxReceive();
-  private final FragmentAssembler fragmentHandler =
-      new FragmentAssembler(new InnerFragmentHandler());
+  private final FragmentHandler fragmentHandler =
+      new ImageFragmentAssembler(new InnerFragmentHandler());
   private final MessageSubscription subscription;
 
   private volatile long requested;
