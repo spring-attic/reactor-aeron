@@ -8,6 +8,7 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import org.agrona.DirectBuffer;
+import org.reactivestreams.Subscription;
 import reactor.core.CoreSubscriber;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
@@ -15,7 +16,7 @@ import reactor.core.publisher.Operators;
 
 public final class DefaultAeronInbound implements AeronInbound {
 
-  private static final int PREFETCH = 4096;
+  private static final int MAX_FRAGMENT_LIMIT = 4096;
 
   private static final AtomicLongFieldUpdater<DefaultAeronInbound> REQUESTED =
       AtomicLongFieldUpdater.newUpdater(DefaultAeronInbound.class, "requested");
@@ -56,7 +57,7 @@ public final class DefaultAeronInbound implements AeronInbound {
   }
 
   int poll() {
-    int r = (int) Math.min(requested, PREFETCH);
+    int r = (int) Math.min(requested, MAX_FRAGMENT_LIMIT);
     int fragments = 0;
     if (r > 0) {
       fragments = image.poll(fragmentHandler, r);
@@ -105,7 +106,7 @@ public final class DefaultAeronInbound implements AeronInbound {
     }
   }
 
-  private class FluxReceive extends Flux<ByteBuffer> implements org.reactivestreams.Subscription {
+  private class FluxReceive extends Flux<ByteBuffer> implements Subscription {
 
     @Override
     public void request(long n) {
