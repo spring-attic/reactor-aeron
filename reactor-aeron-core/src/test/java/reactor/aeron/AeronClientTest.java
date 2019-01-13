@@ -12,7 +12,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
@@ -411,12 +410,11 @@ class AeronClientTest extends BaseAeronTest {
   }
 
   @Test
-  @Disabled("doesn't work, see produced in the inbound")
   public void testCustomClientInboundSubscriberWithLongMessage() {
-    int count = 10;
-    Duration timeout = Duration.ofSeconds(5);
+    int count = 100;
+    Duration timeout = Duration.ofSeconds(2);
 
-    char[] chars = new char[Configuration.MTU_LENGTH * 4];
+    char[] chars = new char[Configuration.MTU_LENGTH * 15 / 10]; // 1.5 MTU
     Arrays.fill(chars, 'a');
     String msg = new String(chars);
 
@@ -433,7 +431,11 @@ class AeronClientTest extends BaseAeronTest {
 
     createServer(
         connection -> {
-          connection.outbound().sendString(Flux.range(0, overall).map(i -> msg)).then().subscribe();
+          connection
+              .outbound()
+              .sendString(Flux.range(0, overall).map(i -> i + msg))
+              .then()
+              .subscribe();
           return connection.onDispose();
         });
 
@@ -456,7 +458,6 @@ class AeronClientTest extends BaseAeronTest {
         .inbound()
         .receive()
         .asString()
-        .log("receive ")
         .take(overall)
         .doOnNext(processor::onNext)
         .subscribe(subscriber);

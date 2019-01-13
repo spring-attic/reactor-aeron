@@ -33,6 +33,7 @@ public final class DefaultAeronInbound implements AeronInbound {
   private final MessageSubscription subscription;
 
   private volatile long requested;
+  private long produced;
   private volatile CoreSubscriber<? super ByteBuffer> destinationSubscriber;
 
   /**
@@ -56,14 +57,15 @@ public final class DefaultAeronInbound implements AeronInbound {
 
   int poll() {
     int r = (int) Math.min(requested, PREFETCH);
-    int produced = 0;
+    int fragments = 0;
     if (r > 0) {
-      produced = image.poll(fragmentHandler, r);
+      fragments = image.poll(fragmentHandler, r);
       if (produced > 0) {
         Operators.produced(REQUESTED, this, produced);
+        produced = 0;
       }
     }
-    return produced;
+    return fragments;
   }
 
   void close() {
@@ -99,6 +101,7 @@ public final class DefaultAeronInbound implements AeronInbound {
 
       // TODO check on cancel?
       destination.onNext(dstBuffer);
+      produced++;
     }
   }
 
