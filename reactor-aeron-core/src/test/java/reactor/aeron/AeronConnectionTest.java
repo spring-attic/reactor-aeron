@@ -13,8 +13,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
-import reactor.aeron.client.AeronClient;
-import reactor.aeron.server.AeronServer;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.ReplayProcessor;
@@ -76,7 +74,7 @@ public class AeronConnectionTest extends BaseAeronTest {
           return connection.onDispose();
         });
 
-    Connection connection = createConnection();
+    AeronConnection connection = createConnection();
     connection
         .outbound()
         .sendString(
@@ -111,7 +109,7 @@ public class AeronConnectionTest extends BaseAeronTest {
 
     ReplayProcessor<String> processor = ReplayProcessor.create();
 
-    Connection connection = createConnection();
+    AeronConnection connection = createConnection();
 
     CountDownLatch latch = new CountDownLatch(1);
     connection.onDispose().doOnSuccess(aVoid -> latch.countDown()).subscribe();
@@ -133,7 +131,7 @@ public class AeronConnectionTest extends BaseAeronTest {
 
     CountDownLatch clientConnectionLatch = new CountDownLatch(1);
 
-    Connection client = createConnection();
+    AeronConnection client = createConnection();
 
     client.onDispose().doFinally(s -> clientConnectionLatch.countDown()).subscribe();
 
@@ -152,7 +150,7 @@ public class AeronConnectionTest extends BaseAeronTest {
 
     CountDownLatch clientConnectionLatch = new CountDownLatch(2);
 
-    Connection client = createConnection();
+    AeronConnection client = createConnection();
 
     client
         .inbound() //
@@ -186,7 +184,7 @@ public class AeronConnectionTest extends BaseAeronTest {
 
     createServer(c -> c.onDispose().doFinally(s -> serverConnectionLatch.countDown()));
 
-    Connection client = createConnection();
+    AeronConnection client = createConnection();
 
     Mono //
         .delay(Duration.ofSeconds(1))
@@ -220,7 +218,7 @@ public class AeronConnectionTest extends BaseAeronTest {
           return c.onDispose();
         });
 
-    Connection client = createConnection();
+    AeronConnection client = createConnection();
 
     Mono //
         .delay(Duration.ofSeconds(1))
@@ -231,7 +229,7 @@ public class AeronConnectionTest extends BaseAeronTest {
     assertTrue(await, "serverConnectionLatch: " + serverConnectionLatch.getCount());
   }
 
-  private Connection createConnection() {
+  private AeronConnection createConnection() {
     return AeronClient.create(clientResources)
         .options("localhost", serverPort, serverControlPort)
         .connect()
@@ -239,7 +237,7 @@ public class AeronConnectionTest extends BaseAeronTest {
   }
 
   private OnDisposable createServer(
-      Function<? super Connection, ? extends Publisher<Void>> handler) {
+      Function<? super AeronConnection, ? extends Publisher<Void>> handler) {
     return AeronServer.create(serverResources)
         .options("localhost", serverPort, serverControlPort)
         .handle(handler)

@@ -13,7 +13,7 @@ import reactor.core.publisher.MonoProcessor;
  * Wrapper around the {@link AeronEventLoop} where the actual logic is performed. Manages grouping
  * of multiple instances of {@link AeronEventLoop}: round-robin iteration and grouped disposal.
  */
-public class AeronEventLoopGroup implements OnDisposable {
+class AeronEventLoopGroup implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronEventLoopGroup.class);
 
@@ -31,8 +31,7 @@ public class AeronEventLoopGroup implements OnDisposable {
    * @param numOfWorkers number of {@link AeronEventLoop} instances in the group
    * @param idleStrategySupplier factory for {@link IdleStrategy} instances
    */
-  public AeronEventLoopGroup(
-      String name, int numOfWorkers, Supplier<IdleStrategy> idleStrategySupplier) {
+  AeronEventLoopGroup(String name, int numOfWorkers, Supplier<IdleStrategy> idleStrategySupplier) {
     this.eventLoops = new AeronEventLoop[numOfWorkers];
     for (int i = 0; i < numOfWorkers; i++) {
       eventLoops[i] = new AeronEventLoop(name, i, id, idleStrategySupplier.get());
@@ -52,7 +51,7 @@ public class AeronEventLoopGroup implements OnDisposable {
    *
    * @return instance of worker in the group
    */
-  public AeronEventLoop next() {
+  AeronEventLoop next() {
     return eventLoops[Math.abs(idx.getAndIncrement() % eventLoops.length)];
   }
 

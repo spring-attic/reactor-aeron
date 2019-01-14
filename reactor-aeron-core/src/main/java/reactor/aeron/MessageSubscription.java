@@ -7,7 +7,7 @@ import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
-public class MessageSubscription implements OnDisposable {
+class MessageSubscription implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(MessageSubscription.class);
 
@@ -22,7 +22,7 @@ public class MessageSubscription implements OnDisposable {
    * @param subscription aeron subscription
    * @param eventLoop event loop where this {@code MessageSubscription} is assigned
    */
-  public MessageSubscription(Subscription subscription, AeronEventLoop eventLoop) {
+  MessageSubscription(Subscription subscription, AeronEventLoop eventLoop) {
     this.subscription = subscription;
     this.eventLoop = eventLoop;
   }

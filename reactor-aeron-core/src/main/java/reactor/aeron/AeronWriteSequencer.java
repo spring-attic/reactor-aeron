@@ -20,7 +20,7 @@ final class AeronWriteSequencer {
    * @param publisher data publisher
    * @return mono handle
    */
-  public Mono<Void> write(Publisher<? extends ByteBuffer> publisher) {
+  Mono<Void> write(Publisher<? extends ByteBuffer> publisher) {
     Objects.requireNonNull(publisher, "publisher must be not null");
 
     return Mono.defer(
@@ -30,12 +30,12 @@ final class AeronWriteSequencer {
           }
           if (publisher instanceof Flux) {
             return Flux.from(publisher)
-                .flatMap(publication::enqueue)
+                .flatMap(publication::publish)
                 .takeUntilOther(onPublicationDispose())
                 .then();
           }
           return Mono.from(publisher)
-              .flatMap(publication::enqueue)
+              .flatMap(publication::publish)
               .takeUntilOther(onPublicationDispose())
               .then();
         });
@@ -44,7 +44,6 @@ final class AeronWriteSequencer {
   private Mono<Void> onPublicationDispose() {
     return publication
         .onDispose()
-        .then(
-            Mono.defer(() -> Mono.error(AeronExceptions.failWithPublicationUnavailable())));
+        .then(Mono.defer(() -> Mono.error(AeronExceptions.failWithPublicationUnavailable())));
   }
 }

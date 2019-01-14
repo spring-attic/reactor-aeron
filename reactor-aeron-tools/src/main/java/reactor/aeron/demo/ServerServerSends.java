@@ -2,7 +2,7 @@ package reactor.aeron.demo;
 
 import java.time.Duration;
 import reactor.aeron.AeronResources;
-import reactor.aeron.server.AeronServer;
+import reactor.aeron.AeronServer;
 import reactor.core.publisher.Flux;
 
 public class ServerServerSends {

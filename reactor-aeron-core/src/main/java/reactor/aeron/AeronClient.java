@@ -1,12 +1,8 @@
-package reactor.aeron.client;
+package reactor.aeron;
 
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import org.reactivestreams.Publisher;
-import reactor.aeron.AeronChannelUri;
-import reactor.aeron.AeronOptions;
-import reactor.aeron.AeronResources;
-import reactor.aeron.Connection;
 import reactor.core.publisher.Mono;
 
 public final class AeronClient {
@@ -32,7 +28,7 @@ public final class AeronClient {
    *
    * @return mono handle of result
    */
-  public Mono<? extends Connection> connect() {
+  public Mono<? extends AeronConnection> connect() {
     return connect(s -> s);
   }
 
@@ -42,7 +38,7 @@ public final class AeronClient {
    * @param op unary opearator for performing setup of options
    * @return mono handle of result
    */
-  public Mono<? extends Connection> connect(UnaryOperator<AeronOptions> op) {
+  public Mono<? extends AeronConnection> connect(UnaryOperator<AeronOptions> op) {
     return Mono.defer(() -> new AeronClientConnector(op.apply(options)).start());
   }
 
@@ -86,7 +82,7 @@ public final class AeronClient {
    *     terminates.
    * @return new {@code AeronClient} with handler
    */
-  public AeronClient handle(Function<? super Connection, ? extends Publisher<Void>> handler) {
+  public AeronClient handle(Function<? super AeronConnection, ? extends Publisher<Void>> handler) {
     return new AeronClient(options.handler(handler));
   }
 }

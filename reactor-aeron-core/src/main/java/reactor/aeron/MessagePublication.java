@@ -15,7 +15,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.MonoSink;
 
-public class MessagePublication implements OnDisposable {
+class MessagePublication implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(MessagePublication.class);
 
@@ -52,7 +52,7 @@ public class MessagePublication implements OnDisposable {
    * @param buffer buffer
    * @return mono handle
    */
-  public Mono<Void> enqueue(ByteBuffer buffer) {
+  Mono<Void> publish(ByteBuffer buffer) {
     return Mono.create(
         sink -> {
           boolean result = false;
@@ -70,7 +70,7 @@ public class MessagePublication implements OnDisposable {
    *
    * @return 1 - some progress was done; 0 - denotes no progress was done
    */
-  public int proceed() {
+  int proceed() {
     PublishTask task = publishTasks.peek();
     if (task == null) {
       return 0;
@@ -162,7 +162,7 @@ public class MessagePublication implements OnDisposable {
    *
    * @return aeron {@code Publication} sessionId.
    */
-  public int sessionId() {
+  int sessionId() {
     return publication.sessionId();
   }
 
@@ -199,7 +199,7 @@ public class MessagePublication implements OnDisposable {
    *
    * @return mono result
    */
-  public Mono<MessagePublication> ensureConnected() {
+  Mono<MessagePublication> ensureConnected() {
     return Mono.defer(
         () -> {
           Duration retryInterval = Duration.ofMillis(100);
