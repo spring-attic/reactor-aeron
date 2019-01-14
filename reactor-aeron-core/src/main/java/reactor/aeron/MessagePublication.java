@@ -52,7 +52,7 @@ class MessagePublication implements OnDisposable {
    * @param buffer buffer
    * @return mono handle
    */
-  Mono<Void> enqueue(ByteBuffer buffer) {
+  Mono<Void> publish(ByteBuffer buffer) {
     return Mono.create(
         sink -> {
           boolean result = false;

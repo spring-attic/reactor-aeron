@@ -30,12 +30,12 @@ final class AeronWriteSequencer {
           }
           if (publisher instanceof Flux) {
             return Flux.from(publisher)
-                .flatMap(publication::enqueue)
+                .flatMap(publication::publish)
                 .takeUntilOther(onPublicationDispose())
                 .then();
           }
           return Mono.from(publisher)
-              .flatMap(publication::enqueue)
+              .flatMap(publication::publish)
               .takeUntilOther(onPublicationDispose())
               .then();
         });
