@@ -141,14 +141,7 @@ public class MessagePublication implements OnDisposable {
     return 0;
   }
 
-  /**
-   * Closes aeron {@link Publication}. Can only be called from within {@link AeronEventLoop} worker
-   * thred.
-   *
-   * <p><b>NOTE:</b> this method is not for public client (despite it was declared with {@code
-   * public} signifier).
-   */
-  public void close() {
+  void close() {
     if (!eventLoop.inEventLoop()) {
       throw new IllegalStateException("Can only close aeron publication from within event loop");
     }
@@ -232,11 +225,8 @@ public class MessagePublication implements OnDisposable {
   }
 
   private void disposePublishTasks() {
-    for (; ; ) {
-      PublishTask task = publishTasks.poll();
-      if (task == null) {
-        break;
-      }
+    PublishTask task;
+    while ((task = publishTasks.poll()) != null) {
       try {
         task.error(AeronExceptions.failWithCancel("PublishTask has cancelled"));
       } catch (Exception ex) {

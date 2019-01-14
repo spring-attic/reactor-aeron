@@ -8,6 +8,7 @@ import reactor.core.publisher.Flux;
 public final class DefaultAeronOutbound implements AeronOutbound {
 
   private final AeronWriteSequencer sequencer;
+  private final MessagePublication publication;
 
   /**
    * Constructor.
@@ -15,6 +16,7 @@ public final class DefaultAeronOutbound implements AeronOutbound {
    * @param publication message publication
    */
   public DefaultAeronOutbound(MessagePublication publication) {
+    this.publication = publication;
     this.sequencer = new AeronWriteSequencer(publication);
   }
 
@@ -27,5 +29,9 @@ public final class DefaultAeronOutbound implements AeronOutbound {
   public AeronOutbound sendString(Publisher<String> dataStream) {
     return send(
         Flux.from(dataStream).map(s -> s.getBytes(StandardCharsets.UTF_8)).map(ByteBuffer::wrap));
+  }
+
+  void dispose() {
+    publication.dispose();
   }
 }

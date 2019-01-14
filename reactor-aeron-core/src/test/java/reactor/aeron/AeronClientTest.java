@@ -8,16 +8,22 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscription;
 import reactor.aeron.client.AeronClient;
 import reactor.aeron.server.AeronServer;
+import reactor.core.publisher.BaseSubscriber;
+import reactor.core.publisher.DirectProcessor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.ReplayProcessor;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 import reactor.util.concurrent.Queues;
 
@@ -221,6 +227,49 @@ class AeronClientTest extends BaseAeronTest {
   }
 
   @Test
+  public void testTwoClientsRequestResponseWithDelaySubscriptionToInbound200000() {
+    int count = 200_000;
+    createServer(
+        connection ->
+            connection
+                .inbound()
+                .receive()
+                .flatMap(byteBuffer -> connection.outbound().send(Mono.just(byteBuffer)).then())
+                .then(connection.onDispose()));
+
+    Connection connection1 = createConnection();
+    Flux.range(0, count)
+        .flatMap(i -> connection1.outbound().sendString(Mono.just("client-1 send:" + i)).then())
+        .then()
+        .subscribe();
+
+    Connection connection2 = createConnection();
+    Flux.range(0, count)
+        .flatMap(i -> connection2.outbound().sendString(Mono.just("client-2 send:" + i)).then())
+        .then()
+        .subscribe();
+
+    StepVerifier.create(
+            Mono.delay(Duration.ofSeconds(1))
+                .thenMany(
+                    Flux.merge(
+                        connection1
+                            .inbound()
+                            .receive()
+                            .asString()
+                            .take(count)
+                            .filter(response -> !response.startsWith("client-1 ")),
+                        connection2
+                            .inbound()
+                            .receive()
+                            .asString()
+                            .take(count)
+                            .filter(response -> !response.startsWith("client-2 ")))))
+        .expectComplete()
+        .verify(Duration.ofSeconds(20));
+  }
+
+  @Test
   public void testClientWith2HandlersReceiveData() {
     createServer(
         connection ->
@@ -300,6 +349,128 @@ class AeronClientTest extends BaseAeronTest {
     ArrayList<Integer> sortedRequests = new ArrayList<>(requests);
     Collections.sort(sortedRequests);
     assertNotEquals(requests, sortedRequests);
+  }
+
+  @Test
+  public void testCustomClientInboundSubscriber() {
+    int count = 1000;
+    Duration timeout = Duration.ofSeconds(5);
+
+    int request1 = count * 10 / 100; // 10%
+    int request2 = request1 * 2; // 20%
+    int request3 = request1 * 7; // 70%
+    int overall = request1 + request2 + request3; // 100%
+
+    Scheduler scheduler = Schedulers.single();
+
+    createServer(
+        connection -> {
+          connection
+              .outbound()
+              .sendString(Flux.range(0, overall).map(i -> "server send:" + i))
+              .then()
+              .subscribe();
+          return connection.onDispose();
+        });
+
+    Connection connection1 = createConnection();
+
+    BaseSubscriber<String> subscriber =
+        new BaseSubscriber<String>() {
+          @Override
+          protected void hookOnSubscribe(Subscription subscription) {
+            // no-op
+          }
+        };
+
+    Duration smallInterval = timeout.multipliedBy(30).dividedBy(100); // 30%
+    long requestDelay1 = smallInterval.dividedBy(3).toMillis(); // 10%
+    long requestDelay2 = requestDelay1 + smallInterval.toMillis(); // 40%
+    long requestDelay3 = requestDelay2 + smallInterval.toMillis(); // 70%
+
+    scheduler.schedule(() -> subscriber.request(request1), requestDelay1, TimeUnit.MILLISECONDS);
+    scheduler.schedule(() -> subscriber.request(request2), requestDelay2, TimeUnit.MILLISECONDS);
+    scheduler.schedule(() -> subscriber.request(request3), requestDelay3, TimeUnit.MILLISECONDS);
+
+    DirectProcessor<String> processor = DirectProcessor.create();
+    connection1
+        .inbound()
+        .receive()
+        .asString()
+        .take(overall)
+        .doOnNext(processor::onNext)
+        .subscribe(subscriber);
+
+    StepVerifier.create(processor.buffer(smallInterval).map(List::size))
+        .expectNext(request1)
+        .expectNext(request2)
+        .expectNext(request3)
+        .expectNoEvent(smallInterval)
+        .thenCancel()
+        .verify(timeout);
+  }
+
+  @Test
+  public void testCustomClientInboundSubscriberWithLongMessage() {
+    int count = 100;
+    Duration timeout = Duration.ofSeconds(2);
+
+    char[] chars = new char[Configuration.MTU_LENGTH * 15 / 10]; // 1.5 MTU
+    Arrays.fill(chars, 'a');
+    String msg = new String(chars);
+
+    int request1 = count * 10 / 100; // 10%
+    int request2 = request1 * 2; // 20%
+    int request3 = request1 * 7; // 70%
+    int overall = request1 + request2 + request3; // 100%
+
+    Scheduler scheduler = Schedulers.single();
+
+    createServer(
+        connection -> {
+          connection
+              .outbound()
+              .sendString(Flux.range(0, overall).map(i -> i + msg))
+              .then()
+              .subscribe();
+          return connection.onDispose();
+        });
+
+    Connection connection1 = createConnection();
+
+    BaseSubscriber<String> subscriber =
+        new BaseSubscriber<String>() {
+          @Override
+          protected void hookOnSubscribe(Subscription subscription) {
+            // no-op
+          }
+        };
+
+    Duration smallInterval = timeout.multipliedBy(30).dividedBy(100); // 30%
+    long requestDelay1 = smallInterval.dividedBy(3).toMillis(); // 10%
+    long requestDelay2 = requestDelay1 + smallInterval.toMillis(); // 40%
+    long requestDelay3 = requestDelay2 + smallInterval.toMillis(); // 70%
+
+    scheduler.schedule(() -> subscriber.request(request1), requestDelay1, TimeUnit.MILLISECONDS);
+    scheduler.schedule(() -> subscriber.request(request2), requestDelay2, TimeUnit.MILLISECONDS);
+    scheduler.schedule(() -> subscriber.request(request3), requestDelay3, TimeUnit.MILLISECONDS);
+
+    DirectProcessor<String> processor = DirectProcessor.create();
+    connection1
+        .inbound()
+        .receive()
+        .asString()
+        .take(overall)
+        .doOnNext(processor::onNext)
+        .subscribe(subscriber);
+
+    StepVerifier.create(processor.buffer(smallInterval).map(List::size))
+        .expectNext(request1)
+        .expectNext(request2)
+        .expectNext(request3)
+        .expectNoEvent(smallInterval)
+        .thenCancel()
+        .verify(timeout);
   }
 
   private Connection createConnection() {
