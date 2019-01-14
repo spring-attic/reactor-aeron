@@ -28,6 +28,9 @@ final class AeronServerHandler implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronServerHandler.class);
 
+  /** The stream ID that the server and client use for messages. */
+  private static final int STREAM_ID = 0xcafe0000;
+
   private final AeronOptions options;
   private final AeronResources resources;
   private final Function<? super AeronConnection, ? extends Publisher<Void>> handler;
@@ -62,7 +65,8 @@ final class AeronServerHandler implements OnDisposable {
           logger.debug("Starting {} on: {}", this, acceptorChannel);
 
           return resources
-              .subscription(acceptorChannel, this::onImageAvailable, this::onImageUnavailable)
+              .subscription(
+                  acceptorChannel, STREAM_ID, this::onImageAvailable, this::onImageUnavailable)
               .doOnSuccess(s -> this.acceptorSubscription = s)
               .thenReturn(this)
               .doOnSuccess(handler -> logger.debug("Started {} on: {}", this, acceptorChannel))
@@ -75,10 +79,10 @@ final class AeronServerHandler implements OnDisposable {
   }
 
   /**
-   * Setting up new {@link AeronConnection} identified by {@link Image#sessionId()}. Specifically creates
-   * message publication (aeron {@link io.aeron.Publication} underneath) with control-endpoint,
-   * control-mode and given sessionId. Essentially creates server side MDC for concrete sessionId;
-   * think of this as <i>server-side-individual-MDC</i>.
+   * Setting up new {@link AeronConnection} identified by {@link Image#sessionId()}. Specifically
+   * creates message publication (aeron {@link io.aeron.Publication} underneath) with
+   * control-endpoint, control-mode and given sessionId. Essentially creates server side MDC for
+   * concrete sessionId; think of this as <i>server-side-individual-MDC</i>.
    *
    * @param image source image
    */
@@ -91,7 +95,7 @@ final class AeronServerHandler implements OnDisposable {
         "{}: creating server connection: {}", Integer.toHexString(sessionId), outboundChannel);
 
     resources
-        .publication(outboundChannel, options)
+        .publication(outboundChannel, STREAM_ID, options)
         .flatMap(
             publication ->
                 resources

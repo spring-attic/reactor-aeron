@@ -242,9 +242,7 @@ class AeronWriteSequencerTest {
                                         latch.onError(fail("it was emitted the completion signal")))
                                 .doOnCancel(() -> latch.onNext(1))))
             .collect(Collectors.toList());
-    // Shuffle is not important here, because it's not real MessagePublication, which supports order
-    // sending tasks and blocks sending other tasks unless it completes previous.
-    // Collections.shuffle(responses);
+
     Mono<Void> first = responses.get(0);
     Mono<Void>[] next = responses.stream().skip(1).toArray(Mono[]::new);
 

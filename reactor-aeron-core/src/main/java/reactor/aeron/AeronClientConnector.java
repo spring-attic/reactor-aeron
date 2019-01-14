@@ -20,6 +20,9 @@ final class AeronClientConnector {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronClientConnector.class);
 
+  /** The stream ID that the server and client use for messages. */
+  private static final int STREAM_ID = 0xcafe0000;
+
   private final AeronOptions options;
   private final AeronResources resources;
   private final Function<? super AeronConnection, ? extends Publisher<Void>> handler;
@@ -42,7 +45,7 @@ final class AeronClientConnector {
           String outboundChannel = options.outboundUri().asString();
 
           return resources
-              .publication(outboundChannel, options)
+              .publication(outboundChannel, STREAM_ID, options)
               // TODO here problem possible since sessionId is not globally unique; need to
               //  retry few times if connection wasn't succeeeded
               .flatMap(MessagePublication::ensureConnected)
@@ -64,6 +67,7 @@ final class AeronClientConnector {
                     return resources
                         .subscription(
                             inboundChannel,
+                            STREAM_ID,
                             image -> {
                               logger.debug(
                                   "{}: created client inbound", Integer.toHexString(sessionId));
