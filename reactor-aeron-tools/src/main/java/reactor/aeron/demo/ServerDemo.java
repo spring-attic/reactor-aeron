@@ -1,7 +1,7 @@
 package reactor.aeron.demo;
 
 import reactor.aeron.AeronResources;
-import reactor.aeron.server.AeronServer;
+import reactor.aeron.AeronServer;
 
 public class ServerDemo {
 

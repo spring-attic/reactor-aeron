@@ -1,17 +1,10 @@
-package reactor.aeron.client;
+package reactor.aeron;
 
 import io.aeron.Image;
 import java.util.function.Function;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.aeron.AeronOptions;
-import reactor.aeron.AeronResources;
-import reactor.aeron.Connection;
-import reactor.aeron.DefaultAeronConnection;
-import reactor.aeron.DefaultAeronOutbound;
-import reactor.aeron.MessagePublication;
-import reactor.aeron.MessageSubscription;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
@@ -27,9 +20,12 @@ final class AeronClientConnector {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronClientConnector.class);
 
+  /** The stream ID that the server and client use for messages. */
+  private static final int STREAM_ID = 0xcafe0000;
+
   private final AeronOptions options;
   private final AeronResources resources;
-  private final Function<? super Connection, ? extends Publisher<Void>> handler;
+  private final Function<? super AeronConnection, ? extends Publisher<Void>> handler;
 
   AeronClientConnector(AeronOptions options) {
     this.options = options;
@@ -38,18 +34,18 @@ final class AeronClientConnector {
   }
 
   /**
-   * Creates and setting up {@link Connection} object and everyting around it.
+   * Creates and setting up {@link AeronConnection} object and everyting around it.
    *
    * @return mono result
    */
-  Mono<Connection> start() {
+  Mono<AeronConnection> start() {
     return Mono.defer(
         () -> {
           // outbound->Pub(endpoint, sessionId)
           String outboundChannel = options.outboundUri().asString();
 
           return resources
-              .publication(outboundChannel, options)
+              .publication(outboundChannel, STREAM_ID, options)
               // TODO here problem possible since sessionId is not globally unique; need to
               //  retry few times if connection wasn't succeeeded
               .flatMap(MessagePublication::ensureConnected)
@@ -71,6 +67,7 @@ final class AeronClientConnector {
                     return resources
                         .subscription(
                             inboundChannel,
+                            STREAM_ID,
                             image -> {
                               logger.debug(
                                   "{}: created client inbound", Integer.toHexString(sessionId));
@@ -111,7 +108,7 @@ final class AeronClientConnector {
         });
   }
 
-  private Mono<Connection> newConnection(
+  private Mono<AeronConnection> newConnection(
       int sessionId,
       Image image,
       MessagePublication publication,
@@ -129,8 +126,8 @@ final class AeronClientConnector {
             inbound -> {
               DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
 
-              DefaultAeronConnection connection =
-                  new DefaultAeronConnection(sessionId, inbound, outbound, disposeHook);
+              DuplexAeronConnection connection =
+                  new DuplexAeronConnection(sessionId, inbound, outbound, disposeHook);
 
               return connection.start(handler).doOnError(ex -> connection.dispose());
             });

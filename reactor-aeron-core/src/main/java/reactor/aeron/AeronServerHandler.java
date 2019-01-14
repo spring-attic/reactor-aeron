@@ -1,4 +1,4 @@
-package reactor.aeron.server;
+package reactor.aeron;
 
 import io.aeron.Image;
 import java.util.ArrayList;
@@ -10,15 +10,6 @@ import java.util.function.Function;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.aeron.AeronOptions;
-import reactor.aeron.AeronResources;
-import reactor.aeron.Connection;
-import reactor.aeron.DefaultAeronConnection;
-import reactor.aeron.DefaultAeronInbound;
-import reactor.aeron.DefaultAeronOutbound;
-import reactor.aeron.MessagePublication;
-import reactor.aeron.MessageSubscription;
-import reactor.aeron.OnDisposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
@@ -37,9 +28,12 @@ final class AeronServerHandler implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronServerHandler.class);
 
+  /** The stream ID that the server and client use for messages. */
+  private static final int STREAM_ID = 0xcafe0000;
+
   private final AeronOptions options;
   private final AeronResources resources;
-  private final Function<? super Connection, ? extends Publisher<Void>> handler;
+  private final Function<? super AeronConnection, ? extends Publisher<Void>> handler;
 
   private volatile MessageSubscription acceptorSubscription; // server acceptor subscription
 
@@ -71,7 +65,8 @@ final class AeronServerHandler implements OnDisposable {
           logger.debug("Starting {} on: {}", this, acceptorChannel);
 
           return resources
-              .subscription(acceptorChannel, this::onImageAvailable, this::onImageUnavailable)
+              .subscription(
+                  acceptorChannel, STREAM_ID, this::onImageAvailable, this::onImageUnavailable)
               .doOnSuccess(s -> this.acceptorSubscription = s)
               .thenReturn(this)
               .doOnSuccess(handler -> logger.debug("Started {} on: {}", this, acceptorChannel))
@@ -84,10 +79,10 @@ final class AeronServerHandler implements OnDisposable {
   }
 
   /**
-   * Setting up new {@link Connection} identified by {@link Image#sessionId()}. Specifically creates
-   * message publication (aeron {@link io.aeron.Publication} underneath) with control-endpoint,
-   * control-mode and given sessionId. Essentially creates server side MDC for concrete sessionId;
-   * think of this as <i>server-side-individual-MDC</i>.
+   * Setting up new {@link AeronConnection} identified by {@link Image#sessionId()}. Specifically
+   * creates message publication (aeron {@link io.aeron.Publication} underneath) with
+   * control-endpoint, control-mode and given sessionId. Essentially creates server side MDC for
+   * concrete sessionId; think of this as <i>server-side-individual-MDC</i>.
    *
    * @param image source image
    */
@@ -100,7 +95,7 @@ final class AeronServerHandler implements OnDisposable {
         "{}: creating server connection: {}", Integer.toHexString(sessionId), outboundChannel);
 
     resources
-        .publication(outboundChannel, options)
+        .publication(outboundChannel, STREAM_ID, options)
         .flatMap(
             publication ->
                 resources
@@ -122,7 +117,7 @@ final class AeronServerHandler implements OnDisposable {
                     ex.toString()));
   }
 
-  private Mono<? extends Connection> newConnection(
+  private Mono<? extends AeronConnection> newConnection(
       int sessionId, MessagePublication publication, DefaultAeronInbound inbound) {
     // setup cleanup hook to use it onwards
     MonoProcessor<Void> disposeHook = MonoProcessor.create();
@@ -131,8 +126,8 @@ final class AeronServerHandler implements OnDisposable {
 
     DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
 
-    DefaultAeronConnection connection =
-        new DefaultAeronConnection(sessionId, inbound, outbound, disposeHook);
+    DuplexAeronConnection connection =
+        new DuplexAeronConnection(sessionId, inbound, outbound, disposeHook);
 
     return connection
         .start(handler)
@@ -144,7 +139,7 @@ final class AeronServerHandler implements OnDisposable {
   }
 
   /**
-   * Disposes {@link Connection} corresponding to {@link Image#sessionId()}.
+   * Disposes {@link AeronConnection} corresponding to {@link Image#sessionId()}.
    *
    * @param image source image
    */

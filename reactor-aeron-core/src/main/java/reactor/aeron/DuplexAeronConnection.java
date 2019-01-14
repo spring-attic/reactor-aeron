@@ -11,9 +11,9 @@ import reactor.core.publisher.MonoProcessor;
  * Full-duplex aeron <i>connection</i>. Bound to certain {@code sessionId}. Implements {@link
  * OnDisposable} for convenient resource cleanup.
  */
-public final class DefaultAeronConnection implements Connection {
+final class DuplexAeronConnection implements AeronConnection {
 
-  private final Logger logger = LoggerFactory.getLogger(DefaultAeronConnection.class);
+  private final Logger logger = LoggerFactory.getLogger(DuplexAeronConnection.class);
 
   private final int sessionId;
 
@@ -31,7 +31,7 @@ public final class DefaultAeronConnection implements Connection {
    * @param outbound outbound
    * @param disposeHook shutdown hook
    */
-  public DefaultAeronConnection(
+  DuplexAeronConnection(
       int sessionId,
       DefaultAeronInbound inbound,
       DefaultAeronOutbound outbound,
@@ -57,11 +57,12 @@ public final class DefaultAeronConnection implements Connection {
    *
    * @param handler handler with application level code
    */
-  public Mono<Connection> start(Function<? super Connection, ? extends Publisher<Void>> handler) {
+  Mono<AeronConnection> start(
+      Function<? super AeronConnection, ? extends Publisher<Void>> handler) {
     return Mono.fromRunnable(() -> start0(handler)).thenReturn(this);
   }
 
-  private void start0(Function<? super Connection, ? extends Publisher<Void>> handler) {
+  private void start0(Function<? super AeronConnection, ? extends Publisher<Void>> handler) {
     if (handler == null) {
       logger.warn(
           "{}: connection handler function is not specified", Integer.toHexString(sessionId));

@@ -1,28 +1,28 @@
 package reactor.aeron;
 
-public class AeronExceptions {
+class AeronExceptions {
 
   private AeronExceptions() {
     // Do not instantiate
   }
 
-  public static RuntimeException failWithCancel(String message) {
+  static RuntimeException failWithCancel(String message) {
     return new AeronCancelException(message);
   }
 
-  public static RuntimeException failWithEventLoopUnavailable() {
+  static RuntimeException failWithEventLoopUnavailable() {
     return new AeronEventLoopException("AeronEventLoop is unavailable");
   }
 
-  public static RuntimeException failWithPublicationUnavailable() {
+  static RuntimeException failWithPublicationUnavailable() {
     return new AeronPublicationException("MessagePublication or aeron.Publication is unavailable");
   }
 
-  public static RuntimeException failWithPublication(String message) {
+  static RuntimeException failWithPublication(String message) {
     return new AeronPublicationException(message);
   }
 
-  public static RuntimeException failWithResourceDisposal(String resourceName) {
+  static RuntimeException failWithResourceDisposal(String resourceName) {
     return new AeronResourceDisposalException(
         "Can only close resource (" + resourceName + ") from within event loop");
   }

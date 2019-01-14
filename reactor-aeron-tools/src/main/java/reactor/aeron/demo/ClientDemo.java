@@ -1,10 +1,10 @@
 package reactor.aeron.demo;
 
 import java.util.Objects;
+import reactor.aeron.AeronClient;
+import reactor.aeron.AeronConnection;
 import reactor.aeron.AeronResources;
 import reactor.aeron.ByteBufferFlux;
-import reactor.aeron.Connection;
-import reactor.aeron.client.AeronClient;
 
 public class ClientDemo {
 
@@ -14,7 +14,7 @@ public class ClientDemo {
    * @param args program arguments.
    */
   public static void main(String[] args) {
-    Connection connection = null;
+    AeronConnection connection = null;
     AeronResources aeronResources = AeronResources.start();
     try {
       connection =

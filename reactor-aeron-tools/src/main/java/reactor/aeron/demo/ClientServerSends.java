@@ -1,7 +1,7 @@
 package reactor.aeron.demo;
 
+import reactor.aeron.AeronClient;
 import reactor.aeron.AeronResources;
-import reactor.aeron.client.AeronClient;
 
 public class ClientServerSends {
 

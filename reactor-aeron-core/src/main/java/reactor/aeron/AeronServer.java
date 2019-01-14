@@ -1,13 +1,8 @@
-package reactor.aeron.server;
+package reactor.aeron;
 
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import org.reactivestreams.Publisher;
-import reactor.aeron.AeronChannelUri;
-import reactor.aeron.AeronOptions;
-import reactor.aeron.AeronResources;
-import reactor.aeron.Connection;
-import reactor.aeron.OnDisposable;
 import reactor.core.publisher.Mono;
 
 public final class AeronServer {
@@ -90,7 +85,7 @@ public final class AeronServer {
    *     terminates.
    * @return new {@code AeronServer} with handler
    */
-  public AeronServer handle(Function<? super Connection, ? extends Publisher<Void>> handler) {
+  public AeronServer handle(Function<? super AeronConnection, ? extends Publisher<Void>> handler) {
     return new AeronServer(options.handler(handler));
   }
 }
