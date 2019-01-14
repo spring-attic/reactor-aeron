@@ -225,11 +225,8 @@ public class MessagePublication implements OnDisposable {
   }
 
   private void disposePublishTasks() {
-    for (; ; ) {
-      PublishTask task = publishTasks.poll();
-      if (task == null) {
-        break;
-      }
+    PublishTask task;
+    while ((task = publishTasks.poll()) != null) {
       try {
         task.error(AeronExceptions.failWithCancel("PublishTask has cancelled"));
       } catch (Exception ex) {

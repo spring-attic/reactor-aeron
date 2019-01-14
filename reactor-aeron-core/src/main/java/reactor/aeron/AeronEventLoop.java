@@ -306,11 +306,8 @@ public final class AeronEventLoop implements OnDisposable {
     }
 
     private void processCommands() {
-      for (; ; ) {
-        CommandTask task = commands.poll();
-        if (task == null) {
-          break;
-        }
+      CommandTask task;
+      while ((task = commands.poll()) != null) {
         task.run();
       }
     }

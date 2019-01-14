@@ -93,6 +93,8 @@ public final class DefaultAeronInbound implements AeronInbound {
 
     @Override
     public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
+      produced++;
+
       ByteBuffer dstBuffer = ByteBuffer.allocate(length);
       buffer.getBytes(offset, dstBuffer, length);
       dstBuffer.flip();
@@ -102,7 +104,6 @@ public final class DefaultAeronInbound implements AeronInbound {
 
       // TODO check on cancel?
       destination.onNext(dstBuffer);
-      produced++;
     }
   }
 
