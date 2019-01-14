@@ -1,4 +1,4 @@
-package reactor.aeron.server;
+package reactor.aeron;
 
 import io.aeron.Image;
 import java.util.ArrayList;
@@ -10,15 +10,6 @@ import java.util.function.Function;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.aeron.AeronOptions;
-import reactor.aeron.AeronResources;
-import reactor.aeron.Connection;
-import reactor.aeron.DefaultAeronConnection;
-import reactor.aeron.DefaultAeronInbound;
-import reactor.aeron.DefaultAeronOutbound;
-import reactor.aeron.MessagePublication;
-import reactor.aeron.MessageSubscription;
-import reactor.aeron.OnDisposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 

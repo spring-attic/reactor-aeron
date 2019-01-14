@@ -122,7 +122,7 @@ public class AeronResources implements OnDisposable {
    * @param subscription subscription
    * @return mono result
    */
-  public Mono<DefaultAeronInbound> inbound(Image image, MessageSubscription subscription) {
+  Mono<DefaultAeronInbound> inbound(Image image, MessageSubscription subscription) {
     return Mono.defer(
         () -> {
           AeronEventLoop eventLoop = eventLoopGroup.next();
@@ -144,7 +144,7 @@ public class AeronResources implements OnDisposable {
    * @param options aeorn options
    * @return mono result
    */
-  public Mono<MessagePublication> publication(String channel, AeronOptions options) {
+  Mono<MessagePublication> publication(String channel, AeronOptions options) {
     return Mono.defer(
         () ->
             aeronPublication(channel)
@@ -205,7 +205,7 @@ public class AeronResources implements OnDisposable {
    * @param onImageUnavailable unavailable image handler; optional
    * @return mono result
    */
-  public Mono<MessageSubscription> subscription(
+  Mono<MessageSubscription> subscription(
       String channel, Consumer<Image> onImageAvailable, Consumer<Image> onImageUnavailable) {
     return Mono.defer(
         () ->

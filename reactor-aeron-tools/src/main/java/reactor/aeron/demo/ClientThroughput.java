@@ -1,8 +1,8 @@
 package reactor.aeron.demo;
 
 import java.nio.ByteBuffer;
+import reactor.aeron.AeronClient;
 import reactor.aeron.AeronResources;
-import reactor.aeron.client.AeronClient;
 import reactor.core.publisher.Flux;
 
 public class ClientThroughput {

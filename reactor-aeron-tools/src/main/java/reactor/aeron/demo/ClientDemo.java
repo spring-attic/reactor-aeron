@@ -1,10 +1,10 @@
 package reactor.aeron.demo;
 
 import java.util.Objects;
+import reactor.aeron.AeronClient;
 import reactor.aeron.AeronResources;
 import reactor.aeron.ByteBufferFlux;
 import reactor.aeron.Connection;
-import reactor.aeron.client.AeronClient;
 
 public class ClientDemo {
 

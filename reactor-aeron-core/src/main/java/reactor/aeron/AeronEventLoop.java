@@ -14,7 +14,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.MonoSink;
 
-public final class AeronEventLoop implements OnDisposable {
+final class AeronEventLoop implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronEventLoop.class);
 
@@ -78,7 +78,7 @@ public final class AeronEventLoop implements OnDisposable {
    * @return {@code true} if current thread is worker thread from event loop, and {@code false}
    *     otherwise
    */
-  public boolean inEventLoop() {
+  boolean inEventLoop() {
     return thread == Thread.currentThread();
   }
 
@@ -88,7 +88,7 @@ public final class AeronEventLoop implements OnDisposable {
    * @param p message publication
    * @return mono result of registration
    */
-  public Mono<MessagePublication> registerPublication(MessagePublication p) {
+  Mono<MessagePublication> registerPublication(MessagePublication p) {
     return worker()
         .flatMap(
             worker ->
@@ -108,7 +108,7 @@ public final class AeronEventLoop implements OnDisposable {
    * @param s message subscription
    * @return mono result of registration
    */
-  public Mono<MessageSubscription> registerSubscription(MessageSubscription s) {
+  Mono<MessageSubscription> registerSubscription(MessageSubscription s) {
     return worker()
         .flatMap(
             worker ->
@@ -128,7 +128,7 @@ public final class AeronEventLoop implements OnDisposable {
    * @param inbound aeron inbound
    * @return mono result of registration
    */
-  public Mono<DefaultAeronInbound> registerInbound(DefaultAeronInbound inbound) {
+  Mono<DefaultAeronInbound> registerInbound(DefaultAeronInbound inbound) {
     return worker()
         .flatMap(
             worker ->
@@ -148,7 +148,7 @@ public final class AeronEventLoop implements OnDisposable {
    * @param p message publication
    * @return mono result
    */
-  public Mono<Void> disposePublication(MessagePublication p) {
+  Mono<Void> disposePublication(MessagePublication p) {
     return worker()
         .flatMap(
             worker ->
@@ -165,7 +165,7 @@ public final class AeronEventLoop implements OnDisposable {
    * @param s message subscription
    * @return mono result
    */
-  public Mono<Void> disposeSubscription(MessageSubscription s) {
+  Mono<Void> disposeSubscription(MessageSubscription s) {
     return worker()
         .flatMap(
             worker ->
@@ -182,7 +182,7 @@ public final class AeronEventLoop implements OnDisposable {
    * @param inbound aeron inbound
    * @return mono result
    */
-  public Mono<Void> disposeInbound(DefaultAeronInbound inbound) {
+  Mono<Void> disposeInbound(DefaultAeronInbound inbound) {
     return worker()
         .flatMap(
             worker ->

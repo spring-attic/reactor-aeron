@@ -14,7 +14,7 @@ import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Operators;
 
-public final class DefaultAeronInbound implements AeronInbound {
+final class DefaultAeronInbound implements AeronInbound {
 
   private static final int MAX_FRAGMENT_LIMIT = 8192;
 
@@ -44,7 +44,7 @@ public final class DefaultAeronInbound implements AeronInbound {
    * @param eventLoop event loop
    * @param subscription subscription
    */
-  public DefaultAeronInbound(
+  DefaultAeronInbound(
       Image image, AeronEventLoop eventLoop, MessageSubscription subscription) {
     this.image = image;
     this.eventLoop = eventLoop;

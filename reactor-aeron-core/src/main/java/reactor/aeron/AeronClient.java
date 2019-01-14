@@ -1,12 +1,8 @@
-package reactor.aeron.client;
+package reactor.aeron;
 
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import org.reactivestreams.Publisher;
-import reactor.aeron.AeronChannelUri;
-import reactor.aeron.AeronOptions;
-import reactor.aeron.AeronResources;
-import reactor.aeron.Connection;
 import reactor.core.publisher.Mono;
 
 public final class AeronClient {
