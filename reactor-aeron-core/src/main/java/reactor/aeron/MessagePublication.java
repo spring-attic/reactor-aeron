@@ -60,7 +60,7 @@ public class MessagePublication implements OnDisposable {
             result = publishTasks.offer(new PublishTask(buffer, sink));
           }
           if (!result) {
-            sink.error(AeronExceptions.failWithMessagePublicationUnavailable());
+            sink.error(AeronExceptions.failWithPublicationUnavailable());
           }
         });
   }
@@ -143,7 +143,7 @@ public class MessagePublication implements OnDisposable {
 
   void close() {
     if (!eventLoop.inEventLoop()) {
-      throw new IllegalStateException("Can only close aeron publication from within event loop");
+      throw AeronExceptions.failWithResourceDisposal("aeron publication");
     }
     try {
       publication.close();
