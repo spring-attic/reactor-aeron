@@ -44,7 +44,6 @@ final class AeronWriteSequencer {
   private Mono<Void> onPublicationDispose() {
     return publication
         .onDispose()
-        .then(
-            Mono.defer(() -> Mono.error(AeronExceptions.failWithPublicationUnavailable())));
+        .then(Mono.defer(() -> Mono.error(AeronExceptions.failWithPublicationUnavailable())));
   }
 }

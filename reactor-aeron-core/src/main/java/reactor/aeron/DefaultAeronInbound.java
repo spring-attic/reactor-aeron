@@ -44,8 +44,7 @@ final class DefaultAeronInbound implements AeronInbound {
    * @param eventLoop event loop
    * @param subscription subscription
    */
-  DefaultAeronInbound(
-      Image image, AeronEventLoop eventLoop, MessageSubscription subscription) {
+  DefaultAeronInbound(Image image, AeronEventLoop eventLoop, MessageSubscription subscription) {
     this.image = image;
     this.eventLoop = eventLoop;
     this.subscription = subscription;

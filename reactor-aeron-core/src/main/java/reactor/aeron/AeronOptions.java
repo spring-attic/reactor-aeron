@@ -49,7 +49,8 @@ public final class AeronOptions {
     return handler;
   }
 
-  public AeronOptions handler(Function<? super AeronConnection, ? extends Publisher<Void>> handler) {
+  public AeronOptions handler(
+      Function<? super AeronConnection, ? extends Publisher<Void>> handler) {
     return set(s -> s.handler = handler);
   }
 

@@ -16,16 +16,16 @@ import reactor.core.publisher.SignalType;
 public interface AeronConnection extends OnDisposable {
 
   /**
-   * Return the {@link AeronInbound} read API from this connection. If {@link AeronConnection} has not
-   * been configured, receive operations will be unavailable.
+   * Return the {@link AeronInbound} read API from this connection. If {@link AeronConnection} has
+   * not been configured, receive operations will be unavailable.
    *
    * @return {@code AeronInbound} instance
    */
   AeronInbound inbound();
 
   /**
-   * Return the {@link AeronOutbound} write API from this connection. If {@link AeronConnection} has not
-   * been configured, send operations will be unavailable.
+   * Return the {@link AeronOutbound} write API from this connection. If {@link AeronConnection} has
+   * not been configured, send operations will be unavailable.
    *
    * @return {@code AeronOutbound} instance
    */
