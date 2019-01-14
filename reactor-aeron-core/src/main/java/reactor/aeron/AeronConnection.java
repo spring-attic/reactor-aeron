@@ -10,13 +10,13 @@ import reactor.core.publisher.SignalType;
  * Aeron <i>connection</i> interface.
  *
  * <p>Configured and established connection makes available operations such as {@link #inbound()}
- * for reading and {@link #outbound()} for writing data. Connection interface comes with {@link
+ * for reading and {@link #outbound()} for writing data. AeronConnection interface comes with {@link
  * OnDisposable} and {@link #disposeSubscriber()} function for convenient resource cleanup.
  */
-public interface Connection extends OnDisposable {
+public interface AeronConnection extends OnDisposable {
 
   /**
-   * Return the {@link AeronInbound} read API from this connection. If {@link Connection} has not
+   * Return the {@link AeronInbound} read API from this connection. If {@link AeronConnection} has not
    * been configured, receive operations will be unavailable.
    *
    * @return {@code AeronInbound} instance
@@ -24,7 +24,7 @@ public interface Connection extends OnDisposable {
   AeronInbound inbound();
 
   /**
-   * Return the {@link AeronOutbound} write API from this connection. If {@link Connection} has not
+   * Return the {@link AeronOutbound} write API from this connection. If {@link AeronConnection} has not
    * been configured, send operations will be unavailable.
    *
    * @return {@code AeronOutbound} instance
@@ -37,7 +37,7 @@ public interface Connection extends OnDisposable {
    * @param onDispose the close event handler
    * @return {@code this} instance
    */
-  default Connection onDispose(Disposable onDispose) {
+  default AeronConnection onDispose(Disposable onDispose) {
     onDispose().doOnTerminate(onDispose::dispose).subscribe();
     return this;
   }

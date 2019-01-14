@@ -61,7 +61,7 @@ class AeronClientTest extends BaseAeronTest {
                 .send(ByteBufferFlux.fromString("hello1", "2", "3").log("server"))
                 .then(connection.onDispose()));
 
-    Connection connection = createConnection();
+    AeronConnection connection = createConnection();
     StepVerifier.create(connection.inbound().receive().asString().log("client"))
         .expectNext("hello1", "2", "3")
         .expectNoEvent(Duration.ofMillis(10))
@@ -82,7 +82,7 @@ class AeronClientTest extends BaseAeronTest {
                 .send(ByteBufferFlux.fromString(str, str, str).log("server"))
                 .then(connection.onDispose()));
 
-    Connection connection = createConnection();
+    AeronConnection connection = createConnection();
 
     StepVerifier.create(connection.inbound().receive().asString().log("client"))
         .expectNext(str, str, str)
@@ -100,8 +100,8 @@ class AeronClientTest extends BaseAeronTest {
                 .send(ByteBufferFlux.fromString("1", "2", "3").log("server"))
                 .then(connection.onDispose()));
 
-    Connection connection1 = createConnection();
-    Connection connection2 = createConnection();
+    AeronConnection connection1 = createConnection();
+    AeronConnection connection2 = createConnection();
 
     StepVerifier.create(connection1.inbound().receive().asString().log("client-1"))
         .expectNext("1", "2", "3")
@@ -124,7 +124,7 @@ class AeronClientTest extends BaseAeronTest {
     createServer(
         connection -> connection.outbound().sendString(payloads).then(connection.onDispose()));
 
-    Connection connection1 = createConnection();
+    AeronConnection connection1 = createConnection();
 
     StepVerifier.create(connection1.inbound().receive().asString())
         .expectNextCount(count)
@@ -143,7 +143,7 @@ class AeronClientTest extends BaseAeronTest {
                 .send(connection.inbound().receive())
                 .then(connection.onDispose()));
 
-    Connection connection1 = createConnection();
+    AeronConnection connection1 = createConnection();
 
     connection1.outbound().sendString(Flux.range(0, count).map(String::valueOf)).then().subscribe();
 
@@ -165,7 +165,7 @@ class AeronClientTest extends BaseAeronTest {
                 .flatMap(byteBuffer -> connection.outbound().send(Mono.just(byteBuffer)).then())
                 .then(connection.onDispose()));
 
-    Connection connection1 = createConnection();
+    AeronConnection connection1 = createConnection();
 
     Flux.range(0, count)
         .flatMap(
@@ -235,13 +235,13 @@ class AeronClientTest extends BaseAeronTest {
                 .flatMap(byteBuffer -> connection.outbound().send(Mono.just(byteBuffer)).then())
                 .then(connection.onDispose()));
 
-    Connection connection1 = createConnection();
+    AeronConnection connection1 = createConnection();
     Flux.range(0, count)
         .flatMap(i -> connection1.outbound().sendString(Mono.just("client-1 send:" + i)).then())
         .then()
         .subscribe();
 
-    Connection connection2 = createConnection();
+    AeronConnection connection2 = createConnection();
     Flux.range(0, count)
         .flatMap(i -> connection2.outbound().sendString(Mono.just("client-2 send:" + i)).then())
         .then()
@@ -371,7 +371,7 @@ class AeronClientTest extends BaseAeronTest {
           return connection.onDispose();
         });
 
-    Connection connection1 = createConnection();
+    AeronConnection connection1 = createConnection();
 
     BaseSubscriber<String> subscriber =
         new BaseSubscriber<String>() {
@@ -434,7 +434,7 @@ class AeronClientTest extends BaseAeronTest {
           return connection.onDispose();
         });
 
-    Connection connection1 = createConnection();
+    AeronConnection connection1 = createConnection();
 
     BaseSubscriber<String> subscriber =
         new BaseSubscriber<String>() {
@@ -471,12 +471,12 @@ class AeronClientTest extends BaseAeronTest {
         .verify(timeout);
   }
 
-  private Connection createConnection() {
+  private AeronConnection createConnection() {
     return createConnection(null /*handler*/);
   }
 
-  private Connection createConnection(
-      Function<? super Connection, ? extends Publisher<Void>> handler) {
+  private AeronConnection createConnection(
+      Function<? super AeronConnection, ? extends Publisher<Void>> handler) {
     return AeronClient.create(clientResources)
         .options("localhost", serverPort, serverControlPort)
         .handle(handler)
@@ -485,7 +485,7 @@ class AeronClientTest extends BaseAeronTest {
   }
 
   private OnDisposable createServer(
-      Function<? super Connection, ? extends Publisher<Void>> handler) {
+      Function<? super AeronConnection, ? extends Publisher<Void>> handler) {
     return AeronServer.create(serverResources)
         .options("localhost", serverPort, serverControlPort)
         .handle(handler)

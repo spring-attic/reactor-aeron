@@ -22,7 +22,7 @@ final class AeronClientConnector {
 
   private final AeronOptions options;
   private final AeronResources resources;
-  private final Function<? super Connection, ? extends Publisher<Void>> handler;
+  private final Function<? super AeronConnection, ? extends Publisher<Void>> handler;
 
   AeronClientConnector(AeronOptions options) {
     this.options = options;
@@ -31,11 +31,11 @@ final class AeronClientConnector {
   }
 
   /**
-   * Creates and setting up {@link Connection} object and everyting around it.
+   * Creates and setting up {@link AeronConnection} object and everyting around it.
    *
    * @return mono result
    */
-  Mono<Connection> start() {
+  Mono<AeronConnection> start() {
     return Mono.defer(
         () -> {
           // outbound->Pub(endpoint, sessionId)
@@ -104,7 +104,7 @@ final class AeronClientConnector {
         });
   }
 
-  private Mono<Connection> newConnection(
+  private Mono<AeronConnection> newConnection(
       int sessionId,
       Image image,
       MessagePublication publication,
@@ -122,8 +122,8 @@ final class AeronClientConnector {
             inbound -> {
               DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
 
-              DefaultAeronConnection connection =
-                  new DefaultAeronConnection(sessionId, inbound, outbound, disposeHook);
+              DuplexAeronConnection connection =
+                  new DuplexAeronConnection(sessionId, inbound, outbound, disposeHook);
 
               return connection.start(handler).doOnError(ex -> connection.dispose());
             });

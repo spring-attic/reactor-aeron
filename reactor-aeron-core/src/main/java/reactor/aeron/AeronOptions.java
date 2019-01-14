@@ -13,7 +13,7 @@ import org.reactivestreams.Publisher;
 public final class AeronOptions {
 
   private AeronResources resources;
-  private Function<? super Connection, ? extends Publisher<Void>> handler;
+  private Function<? super AeronConnection, ? extends Publisher<Void>> handler;
   private AeronChannelUri inboundUri = new AeronChannelUri();
   private AeronChannelUri outboundUri = new AeronChannelUri();
   private Duration connectTimeout = Duration.ofSeconds(5);
@@ -45,11 +45,11 @@ public final class AeronOptions {
     return set(s -> s.resources = resources);
   }
 
-  public Function<? super Connection, ? extends Publisher<Void>> handler() {
+  public Function<? super AeronConnection, ? extends Publisher<Void>> handler() {
     return handler;
   }
 
-  public AeronOptions handler(Function<? super Connection, ? extends Publisher<Void>> handler) {
+  public AeronOptions handler(Function<? super AeronConnection, ? extends Publisher<Void>> handler) {
     return set(s -> s.handler = handler);
   }
 

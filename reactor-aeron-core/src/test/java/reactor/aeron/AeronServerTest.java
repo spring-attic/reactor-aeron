@@ -91,7 +91,7 @@ class AeronServerTest extends BaseAeronTest {
     assertTrue(threadWatcher.awaitTerminated(5000, "single-", "parallel-"));
   }
 
-  private Connection createConnection() {
+  private AeronConnection createConnection() {
     return AeronClient.create(clientResources)
         .options("localhost", serverPort, serverControlPort)
         .connect()
@@ -99,7 +99,7 @@ class AeronServerTest extends BaseAeronTest {
   }
 
   private OnDisposable createServer(
-      Function<? super Connection, ? extends Publisher<Void>> handler) {
+      Function<? super AeronConnection, ? extends Publisher<Void>> handler) {
     return AeronServer.create(serverResources)
         .options("localhost", serverPort, serverControlPort)
         .handle(handler)

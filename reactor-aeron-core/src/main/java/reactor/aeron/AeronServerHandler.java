@@ -30,7 +30,7 @@ final class AeronServerHandler implements OnDisposable {
 
   private final AeronOptions options;
   private final AeronResources resources;
-  private final Function<? super Connection, ? extends Publisher<Void>> handler;
+  private final Function<? super AeronConnection, ? extends Publisher<Void>> handler;
 
   private volatile MessageSubscription acceptorSubscription; // server acceptor subscription
 
@@ -75,7 +75,7 @@ final class AeronServerHandler implements OnDisposable {
   }
 
   /**
-   * Setting up new {@link Connection} identified by {@link Image#sessionId()}. Specifically creates
+   * Setting up new {@link AeronConnection} identified by {@link Image#sessionId()}. Specifically creates
    * message publication (aeron {@link io.aeron.Publication} underneath) with control-endpoint,
    * control-mode and given sessionId. Essentially creates server side MDC for concrete sessionId;
    * think of this as <i>server-side-individual-MDC</i>.
@@ -113,7 +113,7 @@ final class AeronServerHandler implements OnDisposable {
                     ex.toString()));
   }
 
-  private Mono<? extends Connection> newConnection(
+  private Mono<? extends AeronConnection> newConnection(
       int sessionId, MessagePublication publication, DefaultAeronInbound inbound) {
     // setup cleanup hook to use it onwards
     MonoProcessor<Void> disposeHook = MonoProcessor.create();
@@ -122,8 +122,8 @@ final class AeronServerHandler implements OnDisposable {
 
     DefaultAeronOutbound outbound = new DefaultAeronOutbound(publication);
 
-    DefaultAeronConnection connection =
-        new DefaultAeronConnection(sessionId, inbound, outbound, disposeHook);
+    DuplexAeronConnection connection =
+        new DuplexAeronConnection(sessionId, inbound, outbound, disposeHook);
 
     return connection
         .start(handler)
@@ -135,7 +135,7 @@ final class AeronServerHandler implements OnDisposable {
   }
 
   /**
-   * Disposes {@link Connection} corresponding to {@link Image#sessionId()}.
+   * Disposes {@link AeronConnection} corresponding to {@link Image#sessionId()}.
    *
    * @param image source image
    */

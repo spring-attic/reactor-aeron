@@ -85,7 +85,7 @@ public final class AeronServer {
    *     terminates.
    * @return new {@code AeronServer} with handler
    */
-  public AeronServer handle(Function<? super Connection, ? extends Publisher<Void>> handler) {
+  public AeronServer handle(Function<? super AeronConnection, ? extends Publisher<Void>> handler) {
     return new AeronServer(options.handler(handler));
   }
 }
