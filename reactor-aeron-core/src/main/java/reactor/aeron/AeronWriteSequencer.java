@@ -26,7 +26,7 @@ final class AeronWriteSequencer {
     return Mono.defer(
         () -> {
           if (publication.isDisposed()) {
-            return Mono.error(AeronExceptions.failWithMessagePublicationUnavailable());
+            return Mono.error(AeronExceptions.failWithPublicationUnavailable());
           }
           if (publisher instanceof Flux) {
             return Flux.from(publisher)
@@ -45,6 +45,6 @@ final class AeronWriteSequencer {
     return publication
         .onDispose()
         .then(
-            Mono.defer(() -> Mono.error(AeronExceptions.failWithMessagePublicationUnavailable())));
+            Mono.defer(() -> Mono.error(AeronExceptions.failWithPublicationUnavailable())));
   }
 }

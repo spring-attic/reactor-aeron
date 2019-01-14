@@ -16,7 +16,7 @@ import reactor.core.publisher.Operators;
 
 public final class DefaultAeronInbound implements AeronInbound {
 
-  private static final int MAX_FRAGMENT_LIMIT = 4096;
+  private static final int MAX_FRAGMENT_LIMIT = 8192;
 
   private static final AtomicLongFieldUpdater<DefaultAeronInbound> REQUESTED =
       AtomicLongFieldUpdater.newUpdater(DefaultAeronInbound.class, "requested");
@@ -71,7 +71,7 @@ public final class DefaultAeronInbound implements AeronInbound {
 
   void close() {
     if (!eventLoop.inEventLoop()) {
-      throw new IllegalStateException("Can only close aeron inbound from within event loop");
+      throw AeronExceptions.failWithResourceDisposal("aeron inbound");
     }
     inbound.cancel();
   }

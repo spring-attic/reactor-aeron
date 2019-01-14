@@ -29,7 +29,7 @@ public class MessageSubscription implements OnDisposable {
 
   void close() {
     if (!eventLoop.inEventLoop()) {
-      throw new IllegalStateException("Can only close aeron subscription from within event loop");
+      throw AeronExceptions.failWithResourceDisposal("aeron subscription");
     }
     try {
       subscription.close();

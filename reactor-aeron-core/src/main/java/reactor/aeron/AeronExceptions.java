@@ -11,19 +11,20 @@ public class AeronExceptions {
   }
 
   public static RuntimeException failWithEventLoopUnavailable() {
-    return new AeronEventLoopException("AeronEventLoop unavailable");
+    return new AeronEventLoopException("AeronEventLoop is unavailable");
   }
 
-  public static RuntimeException failWithMessagePublicationUnavailable() {
-    return new MessagePublicationException("MessagePublication unavailable");
+  public static RuntimeException failWithPublicationUnavailable() {
+    return new AeronPublicationException("MessagePublication or aeron.Publication is unavailable");
   }
 
   public static RuntimeException failWithPublication(String message) {
     return new AeronPublicationException(message);
   }
 
-  public static RuntimeException failWithSubscription(String message) {
-    return new AeronSubscriptionException(message);
+  public static RuntimeException failWithResourceDisposal(String resourceName) {
+    return new AeronResourceDisposalException(
+        "Can only close resource (" + resourceName + ") from within event loop");
   }
 
   static class AeronCancelException extends RuntimeException {
@@ -54,20 +55,6 @@ public class AeronExceptions {
     }
   }
 
-  static class MessagePublicationException extends RuntimeException {
-
-    private static final long serialVersionUID = 1L;
-
-    MessagePublicationException(String message) {
-      super(message);
-    }
-
-    @Override
-    public synchronized Throwable fillInStackTrace() {
-      return this;
-    }
-  }
-
   static class AeronPublicationException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
@@ -82,11 +69,11 @@ public class AeronExceptions {
     }
   }
 
-  static class AeronSubscriptionException extends RuntimeException {
+  static class AeronResourceDisposalException extends IllegalStateException {
 
     private static final long serialVersionUID = 1L;
 
-    AeronSubscriptionException(String message) {
+    AeronResourceDisposalException(String message) {
       super(message);
     }
 

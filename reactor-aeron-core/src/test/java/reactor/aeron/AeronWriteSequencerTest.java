@@ -51,7 +51,7 @@ class AeronWriteSequencerTest {
     StepVerifier.create(aeronWriteSequencer.write(request))
         .expectErrorSatisfies(
             actual -> {
-              RuntimeException expected = AeronExceptions.failWithMessagePublicationUnavailable();
+              RuntimeException expected = AeronExceptions.failWithPublicationUnavailable();
               assertEquals(expected.getClass(), actual.getClass());
               assertEquals(expected.getMessage(), actual.getMessage());
             })
@@ -68,7 +68,7 @@ class AeronWriteSequencerTest {
     StepVerifier.create(aeronWriteSequencer.write(request))
         .expectErrorSatisfies(
             actual -> {
-              RuntimeException expected = AeronExceptions.failWithMessagePublicationUnavailable();
+              RuntimeException expected = AeronExceptions.failWithPublicationUnavailable();
               assertEquals(expected.getClass(), actual.getClass());
               assertEquals(expected.getMessage(), actual.getMessage());
             })
@@ -356,7 +356,7 @@ class AeronWriteSequencerTest {
     Mockito.when(messagePublication.isDisposed()).thenReturn(false);
     // long wait task
     Mockito.when(messagePublication.enqueue(Mockito.any())).thenReturn(Mono.never());
-    RuntimeException expected = AeronExceptions.failWithMessagePublicationUnavailable();
+    RuntimeException expected = AeronExceptions.failWithPublicationUnavailable();
 
     // flux request
     Flux<ByteBuffer> request =
@@ -380,7 +380,7 @@ class AeronWriteSequencerTest {
     // the Publication is already disposed
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.empty());
 
-    RuntimeException expected = AeronExceptions.failWithMessagePublicationUnavailable();
+    RuntimeException expected = AeronExceptions.failWithPublicationUnavailable();
 
     // flux empty request
     Flux<ByteBuffer> request = Flux.empty();
