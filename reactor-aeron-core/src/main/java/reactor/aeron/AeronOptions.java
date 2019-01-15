@@ -22,12 +22,7 @@ public final class AeronOptions {
 
   public AeronOptions() {}
 
-  /**
-   * Copy constructor.
-   *
-   * @param other instance to copy from
-   */
-  public AeronOptions(AeronOptions other) {
+  AeronOptions(AeronOptions other) {
     this.resources = other.resources;
     this.handler = other.handler;
     this.inboundUri = other.inboundUri;

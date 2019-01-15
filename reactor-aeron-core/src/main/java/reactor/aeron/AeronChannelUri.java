@@ -16,12 +16,7 @@ public final class AeronChannelUri {
 
   public AeronChannelUri() {}
 
-  /**
-   * Copy constructor.
-   *
-   * @param other instance to copy from
-   */
-  public AeronChannelUri(AeronChannelUri other) {
+  AeronChannelUri(AeronChannelUri other) {
     builder
         .endpoint(other.builder.endpoint())
         .controlEndpoint(other.builder.controlEndpoint())

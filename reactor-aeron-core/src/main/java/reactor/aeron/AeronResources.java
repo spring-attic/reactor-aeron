@@ -1,16 +1,19 @@
 package reactor.aeron;
 
 import io.aeron.Aeron;
+import io.aeron.AvailableImageHandler;
 import io.aeron.ExclusivePublication;
 import io.aeron.Image;
 import io.aeron.Publication;
 import io.aeron.Subscription;
+import io.aeron.UnavailableImageHandler;
 import io.aeron.driver.MediaDriver;
 import java.io.File;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.function.Consumer;
 import org.agrona.CloseHelper;
+import org.agrona.ErrorHandler;
 import org.agrona.IoUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,7 +21,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.scheduler.Schedulers;
 
-public class AeronResources implements OnDisposable {
+public final class AeronResources implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronResources.class);
 
@@ -321,5 +324,56 @@ public class AeronResources implements OnDisposable {
   @Override
   public String toString() {
     return "AeronResources0x" + Integer.toHexString(System.identityHashCode(this));
+  }
+
+  public static final class Config {
+
+    private final Aeron.Context context = new Aeron.Context();
+
+    public Config() {}
+
+    Config(Config other) {
+      context.aeronDirectoryName(other.context.aeronDirectoryName());
+      context.availableImageHandler(other.context.availableImageHandler());
+      context.unavailableImageHandler(other.context.unavailableImageHandler());
+      context.driverTimeoutMs(other.context.driverTimeoutMs());
+      context.errorHandler(other.context.errorHandler());
+      context.keepAliveInterval(other.context.keepAliveInterval());
+      context.resourceLingerDurationNs(other.context.resourceLingerDurationNs());
+    }
+
+    public Config aeronDirectoryName(String aeronDirectoryName) {
+      return set(c -> c.context.aeronDirectoryName(aeronDirectoryName));
+    }
+
+    public Config availableImageHandler(AvailableImageHandler imageHandler) {
+      return set(c -> c.context.availableImageHandler(imageHandler));
+    }
+
+    public Config unavailableImageHandler(UnavailableImageHandler imageHandler) {
+      return set(c -> c.context.unavailableImageHandler(imageHandler));
+    }
+
+    public Config driverTimeout(Duration timeout) {
+      return set(c -> c.context.driverTimeoutMs(timeout.toMillis()));
+    }
+
+    public Config errorHandler(ErrorHandler errorHandler) {
+      return set(c -> c.context.errorHandler(errorHandler));
+    }
+
+    public Config keepAliveInterval(Duration interval) {
+      return set(c -> c.context.keepAliveInterval(interval.toNanos()));
+    }
+
+    public Config resourceLinger(Duration duration) {
+      return set(c -> c.context.resourceLingerDurationNs(duration.toNanos()));
+    }
+
+    private Config set(Consumer<Config> c) {
+      Config cfg = new Config(this);
+      c.accept(cfg);
+      return cfg;
+    }
   }
 }
