@@ -6,7 +6,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import reactor.aeron.AeronResources;
-import reactor.aeron.server.AeronServer;
+import reactor.aeron.AeronServer;
 import reactor.core.scheduler.Schedulers;
 
 public class ServerThroughput {

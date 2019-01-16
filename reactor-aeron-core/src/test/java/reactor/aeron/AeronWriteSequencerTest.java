@@ -44,14 +44,14 @@ class AeronWriteSequencerTest {
     // the Publication is already disposed
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.empty());
     // long wait task
-    Mockito.when(messagePublication.enqueue(Mockito.any())).thenReturn(Mono.never());
+    Mockito.when(messagePublication.publish(Mockito.any())).thenReturn(Mono.never());
 
     Mono<ByteBuffer> request = Mono.just(toByteBuffer("test"));
 
     StepVerifier.create(aeronWriteSequencer.write(request))
         .expectErrorSatisfies(
             actual -> {
-              RuntimeException expected = AeronExceptions.failWithMessagePublicationUnavailable();
+              RuntimeException expected = AeronExceptions.failWithPublicationUnavailable();
               assertEquals(expected.getClass(), actual.getClass());
               assertEquals(expected.getMessage(), actual.getMessage());
             })
@@ -68,7 +68,7 @@ class AeronWriteSequencerTest {
     StepVerifier.create(aeronWriteSequencer.write(request))
         .expectErrorSatisfies(
             actual -> {
-              RuntimeException expected = AeronExceptions.failWithMessagePublicationUnavailable();
+              RuntimeException expected = AeronExceptions.failWithPublicationUnavailable();
               assertEquals(expected.getClass(), actual.getClass());
               assertEquals(expected.getMessage(), actual.getMessage());
             })
@@ -81,7 +81,7 @@ class AeronWriteSequencerTest {
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.never());
     // publication rejects incoming requests
     RuntimeException expected = new RuntimeException("some reasons");
-    Mockito.when(messagePublication.enqueue(Mockito.any())).thenReturn(Mono.error(expected));
+    Mockito.when(messagePublication.publish(Mockito.any())).thenReturn(Mono.error(expected));
 
     Mono<ByteBuffer> request = Mono.just(toByteBuffer("test"));
 
@@ -159,7 +159,7 @@ class AeronWriteSequencerTest {
 
     // long wait task
     MonoProcessor<Throwable> latch = MonoProcessor.create();
-    Mockito.when(messagePublication.enqueue(Mockito.any()))
+    Mockito.when(messagePublication.publish(Mockito.any()))
         .thenReturn(
             Mono.<Void>never()
                 .log("response")
@@ -186,7 +186,7 @@ class AeronWriteSequencerTest {
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.never());
     // long wait task
     Duration delayForFinishEnqueueTask = TIMEOUT.dividedBy(2);
-    Mockito.when(messagePublication.enqueue(Mockito.any()))
+    Mockito.when(messagePublication.publish(Mockito.any()))
         .thenReturn(Mono.delay(delayForFinishEnqueueTask).then());
 
     // mono request
@@ -242,13 +242,11 @@ class AeronWriteSequencerTest {
                                         latch.onError(fail("it was emitted the completion signal")))
                                 .doOnCancel(() -> latch.onNext(1))))
             .collect(Collectors.toList());
-    // Shuffle is not important here, because it's not real MessagePublication, which supports order
-    // sending tasks and blocks sending other tasks unless it completes previous.
-    // Collections.shuffle(responses);
+
     Mono<Void> first = responses.get(0);
     Mono<Void>[] next = responses.stream().skip(1).toArray(Mono[]::new);
 
-    Mockito.when(messagePublication.enqueue(Mockito.any())).thenReturn(first, next);
+    Mockito.when(messagePublication.publish(Mockito.any())).thenReturn(first, next);
 
     // flux request
     Flux<ByteBuffer> request =
@@ -269,7 +267,7 @@ class AeronWriteSequencerTest {
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.never());
     // long wait task
     Duration delayForFinishEnqueueTasks = TIMEOUT.dividedBy(2).dividedBy(FLUX_REQUESTS);
-    Mockito.when(messagePublication.enqueue(Mockito.any()))
+    Mockito.when(messagePublication.publish(Mockito.any()))
         .thenReturn(Mono.delay(delayForFinishEnqueueTasks).then());
 
     // flux request
@@ -323,7 +321,7 @@ class AeronWriteSequencerTest {
     ReplayProcessor<Integer> latch = ReplayProcessor.create();
 
     // generates responses
-    Mockito.when(messagePublication.enqueue(Mockito.any()))
+    Mockito.when(messagePublication.publish(Mockito.any()))
         .thenReturn(
             Mono.<Void>never()
                 .doOnNext(item -> latch.onError(fail("it was emitted an item")))
@@ -355,8 +353,8 @@ class AeronWriteSequencerTest {
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.empty());
     Mockito.when(messagePublication.isDisposed()).thenReturn(false);
     // long wait task
-    Mockito.when(messagePublication.enqueue(Mockito.any())).thenReturn(Mono.never());
-    RuntimeException expected = AeronExceptions.failWithMessagePublicationUnavailable();
+    Mockito.when(messagePublication.publish(Mockito.any())).thenReturn(Mono.never());
+    RuntimeException expected = AeronExceptions.failWithPublicationUnavailable();
 
     // flux request
     Flux<ByteBuffer> request =
@@ -380,7 +378,7 @@ class AeronWriteSequencerTest {
     // the Publication is already disposed
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.empty());
 
-    RuntimeException expected = AeronExceptions.failWithMessagePublicationUnavailable();
+    RuntimeException expected = AeronExceptions.failWithPublicationUnavailable();
 
     // flux empty request
     Flux<ByteBuffer> request = Flux.empty();
@@ -403,7 +401,7 @@ class AeronWriteSequencerTest {
 
     Mono<Void> first = Mono.empty();
     Mono<Void>[] next = new Mono[] {Mono.<Void>error(expected)};
-    Mockito.when(messagePublication.enqueue(Mockito.any())).thenReturn(first, next);
+    Mockito.when(messagePublication.publish(Mockito.any())).thenReturn(first, next);
 
     // flux request
     Flux<ByteBuffer> request =

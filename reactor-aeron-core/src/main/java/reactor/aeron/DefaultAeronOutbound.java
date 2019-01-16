@@ -5,16 +5,18 @@ import java.nio.charset.StandardCharsets;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
 
-public final class DefaultAeronOutbound implements AeronOutbound {
+final class DefaultAeronOutbound implements AeronOutbound {
 
   private final AeronWriteSequencer sequencer;
+  private final MessagePublication publication;
 
   /**
    * Constructor.
    *
    * @param publication message publication
    */
-  public DefaultAeronOutbound(MessagePublication publication) {
+  DefaultAeronOutbound(MessagePublication publication) {
+    this.publication = publication;
     this.sequencer = new AeronWriteSequencer(publication);
   }
 
@@ -27,5 +29,9 @@ public final class DefaultAeronOutbound implements AeronOutbound {
   public AeronOutbound sendString(Publisher<String> dataStream) {
     return send(
         Flux.from(dataStream).map(s -> s.getBytes(StandardCharsets.UTF_8)).map(ByteBuffer::wrap));
+  }
+
+  void dispose() {
+    publication.dispose();
   }
 }

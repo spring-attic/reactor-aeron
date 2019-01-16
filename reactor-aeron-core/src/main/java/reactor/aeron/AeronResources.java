@@ -2,12 +2,10 @@ package reactor.aeron;
 
 import io.aeron.Aeron;
 import io.aeron.ExclusivePublication;
-import io.aeron.FragmentAssembler;
 import io.aeron.Image;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
-import io.aeron.logbuffer.FragmentHandler;
 import java.io.File;
 import java.time.Duration;
 import java.util.Optional;
@@ -23,9 +21,6 @@ import reactor.core.scheduler.Schedulers;
 public class AeronResources implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronResources.class);
-
-  /** The stream ID that the server and client use for messages. */
-  private static final int STREAM_ID = 0xcafe0000;
 
   private final AeronResourcesConfig config;
 
@@ -118,17 +113,39 @@ public class AeronResources implements OnDisposable {
   }
 
   /**
+   * Creates and registers {@link DefaultAeronInbound}.
+   *
+   * @param image aeron image
+   * @param subscription subscription
+   * @return mono result
+   */
+  Mono<DefaultAeronInbound> inbound(Image image, MessageSubscription subscription) {
+    return Mono.defer(
+        () -> {
+          AeronEventLoop eventLoop = eventLoopGroup.next();
+          DefaultAeronInbound inbound = new DefaultAeronInbound(image, eventLoop, subscription);
+          return eventLoop
+              .registerInbound(inbound)
+              .doOnError(
+                  ex ->
+                      logger.error(
+                          "{} failed on registerInbound(), cause: {}", this, ex.toString()));
+        });
+  }
+
+  /**
    * Creates aeron {@link ExclusivePublication} then wraps it into {@link MessagePublication}.
    * Result message publication will be assigned to event loop.
    *
    * @param channel aeron channel
+   * @param streamId aeron stream id
    * @param options aeorn options
    * @return mono result
    */
-  public Mono<MessagePublication> publication(String channel, AeronOptions options) {
+  Mono<MessagePublication> publication(String channel, int streamId, AeronOptions options) {
     return Mono.defer(
         () ->
-            aeronPublication(channel)
+            aeronPublication(channel, streamId)
                 .subscribeOn(Schedulers.parallel())
                 .doOnError(
                     ex ->
@@ -156,13 +173,13 @@ public class AeronResources implements OnDisposable {
                     }));
   }
 
-  private Mono<Publication> aeronPublication(String channel) {
+  private Mono<Publication> aeronPublication(String channel, int streamId) {
     return Mono.fromCallable(
         () -> {
           logger.debug("Adding aeron.Publication for channel {}", channel);
           long startTime = System.nanoTime();
 
-          Publication publication = aeron.addExclusivePublication(channel, STREAM_ID);
+          Publication publication = aeron.addExclusivePublication(channel, streamId);
 
           long endTime = System.nanoTime();
           long spent = Duration.ofNanos(endTime - startTime).toNanos();
@@ -182,21 +199,20 @@ public class AeronResources implements OnDisposable {
    * message subscription will be assigned to event loop.
    *
    * @param channel aeron channel
-   * @param options aeron options
-   * @param fragmentHandler fragment handler
-   * @param availableImageHandler available image handler; optional
-   * @param unavailableImageHandler unavailable image handler; optional
+   * @param streamId aeron stream id
+   * @param onImageAvailable available image handler; optional
+   * @param onImageUnavailable unavailable image handler; optional
    * @return mono result
    */
-  public Mono<MessageSubscription> subscription(
+  Mono<MessageSubscription> subscription(
       String channel,
-      AeronOptions options,
-      FragmentHandler fragmentHandler,
-      Consumer<Image> availableImageHandler,
-      Consumer<Image> unavailableImageHandler) {
+      int streamId,
+      Consumer<Image> onImageAvailable,
+      Consumer<Image> onImageUnavailable) {
+
     return Mono.defer(
         () ->
-            aeronSubscription(channel, availableImageHandler, unavailableImageHandler)
+            aeronSubscription(channel, streamId, onImageAvailable, onImageUnavailable)
                 .subscribeOn(Schedulers.parallel())
                 .doOnError(
                     ex ->
@@ -210,11 +226,7 @@ public class AeronResources implements OnDisposable {
                       AeronEventLoop eventLoop = eventLoopGroup.next();
                       return eventLoop
                           .registerSubscription(
-                              new MessageSubscription(
-                                  aeronSubscription,
-                                  options,
-                                  eventLoop,
-                                  new FragmentAssembler(fragmentHandler)))
+                              new MessageSubscription(aeronSubscription, eventLoop))
                           .doOnError(
                               ex -> {
                                 logger.error(
@@ -230,8 +242,10 @@ public class AeronResources implements OnDisposable {
 
   private Mono<Subscription> aeronSubscription(
       String channel,
-      Consumer<Image> availableImageHandler,
-      Consumer<Image> unavailableImageHandler) {
+      int streamId,
+      Consumer<Image> onImageAvailable,
+      Consumer<Image> onImageUnavailable) {
+
     return Mono.fromCallable(
         () -> {
           logger.debug("Adding aeron.Subscription for channel {}", channel);
@@ -240,14 +254,14 @@ public class AeronResources implements OnDisposable {
           Subscription subscription =
               aeron.addSubscription(
                   channel,
-                  STREAM_ID,
+                  streamId,
                   image -> {
                     logger.debug(
                         "{} onImageAvailable: {} {}",
                         this,
                         Integer.toHexString(image.sessionId()),
                         image.sourceIdentity());
-                    Optional.ofNullable(availableImageHandler).ifPresent(c -> c.accept(image));
+                    Optional.ofNullable(onImageAvailable).ifPresent(c -> c.accept(image));
                   },
                   image -> {
                     logger.debug(
@@ -255,7 +269,7 @@ public class AeronResources implements OnDisposable {
                         this,
                         Integer.toHexString(image.sessionId()),
                         image.sourceIdentity());
-                    Optional.ofNullable(unavailableImageHandler).ifPresent(c -> c.accept(image));
+                    Optional.ofNullable(onImageUnavailable).ifPresent(c -> c.accept(image));
                   });
 
           long endTime = System.nanoTime();

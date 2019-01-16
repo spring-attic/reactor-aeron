@@ -9,8 +9,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
-import reactor.aeron.client.AeronClient;
-import reactor.aeron.server.AeronServer;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.test.StepVerifier;
@@ -93,7 +91,7 @@ class AeronServerTest extends BaseAeronTest {
     assertTrue(threadWatcher.awaitTerminated(5000, "single-", "parallel-"));
   }
 
-  private Connection createConnection() {
+  private AeronConnection createConnection() {
     return AeronClient.create(clientResources)
         .options("localhost", serverPort, serverControlPort)
         .connect()
@@ -101,7 +99,7 @@ class AeronServerTest extends BaseAeronTest {
   }
 
   private OnDisposable createServer(
-      Function<? super Connection, ? extends Publisher<Void>> handler) {
+      Function<? super AeronConnection, ? extends Publisher<Void>> handler) {
     return AeronServer.create(serverResources)
         .options("localhost", serverPort, serverControlPort)
         .handle(handler)
