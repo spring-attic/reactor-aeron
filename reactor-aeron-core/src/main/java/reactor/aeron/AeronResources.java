@@ -9,9 +9,12 @@ import io.aeron.driver.MediaDriver;
 import java.io.File;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import org.agrona.CloseHelper;
 import org.agrona.IoUtil;
+import org.agrona.concurrent.BackoffIdleStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -22,7 +25,8 @@ public final class AeronResources implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronResources.class);
 
-  private final AeronResourcesConfig config;
+  private final Aeron.Context aeronContext = new Aeron.Context();
+  private final MediaDriver.Context mediaDriverContext = new MediaDriver.Context();
 
   private final MonoProcessor<Void> start = MonoProcessor.create();
   private final MonoProcessor<Void> dispose = MonoProcessor.create();
@@ -32,7 +36,85 @@ public final class AeronResources implements OnDisposable {
   private MediaDriver mediaDriver;
   private AeronEventLoopGroup eventLoopGroup;
 
-  private AeronResources(AeronResourcesConfig config) {
+  public AeronResources() {}
+
+  private AeronResources(Aeron.Context ac, MediaDriver.Context mdc) {
+    aeronContext
+        .resourceLingerDurationNs(ac.resourceLingerDurationNs())
+        .keepAliveInterval(ac.keepAliveInterval())
+        .errorHandler(ac.errorHandler())
+        .driverTimeoutMs(ac.driverTimeoutMs())
+        .availableImageHandler(ac.availableImageHandler())
+        .unavailableImageHandler(ac.unavailableImageHandler())
+        .idleStrategy(ac.idleStrategy())
+        .aeronDirectoryName(ac.aeronDirectoryName())
+        .availableCounterHandler(ac.availableCounterHandler())
+        .unavailableCounterHandler(ac.unavailableCounterHandler())
+        .useConductorAgentInvoker(ac.useConductorAgentInvoker())
+        .threadFactory(ac.threadFactory())
+        .epochClock(ac.epochClock())
+        .clientLock(ac.clientLock())
+        .nanoClock(ac.nanoClock());
+
+    mediaDriverContext
+        .aeronDirectoryName(mdc.aeronDirectoryName())
+        .dirDeleteOnStart(mdc.dirDeleteOnStart())
+        .imageLivenessTimeoutNs(mdc.imageLivenessTimeoutNs())
+        .mtuLength(mdc.mtuLength())
+        .driverTimeoutMs(mdc.driverTimeoutMs())
+        .errorHandler(mdc.errorHandler())
+        .threadingMode(mdc.threadingMode())
+        .applicationSpecificFeedback(mdc.applicationSpecificFeedback())
+        .cachedEpochClock(mdc.cachedEpochClock())
+        .cachedNanoClock(mdc.cachedNanoClock())
+        .clientLivenessTimeoutNs(mdc.clientLivenessTimeoutNs())
+        .conductorIdleStrategy(mdc.conductorIdleStrategy())
+        .conductorThreadFactory(mdc.conductorThreadFactory())
+        .congestControlSupplier(mdc.congestionControlSupplier())
+        .counterFreeToReuseTimeoutNs(mdc.counterFreeToReuseTimeoutNs())
+        .countersManager(mdc.countersManager())
+        .countersMetaDataBuffer(mdc.countersMetaDataBuffer())
+        .countersValuesBuffer(mdc.countersValuesBuffer())
+        .epochClock(mdc.epochClock())
+        .warnIfDirectoryExists(mdc.warnIfDirectoryExists())
+        .useWindowsHighResTimer(mdc.useWindowsHighResTimer())
+        .useConcurrentCountersManager(mdc.useConcurrentCountersManager())
+        .unicastFlowControlSupplier(mdc.unicastFlowControlSupplier())
+        .multicastFlowControlSupplier(mdc.multicastFlowControlSupplier())
+        .timerIntervalNs(mdc.timerIntervalNs())
+        .termBufferSparseFile(mdc.termBufferSparseFile())
+        .tempBuffer(mdc.tempBuffer())
+        .systemCounters(mdc.systemCounters())
+        .statusMessageTimeoutNs(mdc.statusMessageTimeoutNs())
+        .spiesSimulateConnection(mdc.spiesSimulateConnection())
+        .sharedThreadFactory(mdc.sharedThreadFactory())
+        .sharedNetworkThreadFactory(mdc.sharedNetworkThreadFactory())
+        .sharedNetworkIdleStrategy(mdc.sharedNetworkIdleStrategy())
+        .sharedIdleStrategy(mdc.sharedIdleStrategy())
+        .senderThreadFactory(mdc.senderThreadFactory())
+        .senderIdleStrategy(mdc.senderIdleStrategy())
+        .sendChannelEndpointSupplier(mdc.sendChannelEndpointSupplier())
+        .receiverThreadFactory(mdc.receiverThreadFactory())
+        .receiverIdleStrategy(mdc.receiverIdleStrategy())
+        .receiveChannelEndpointThreadLocals(mdc.receiveChannelEndpointThreadLocals())
+        .receiveChannelEndpointSupplier(mdc.receiveChannelEndpointSupplier())
+        .publicationUnblockTimeoutNs(mdc.publicationUnblockTimeoutNs())
+        .publicationTermBufferLength(mdc.publicationTermBufferLength())
+        .publicationReservedSessionIdLow(mdc.publicationReservedSessionIdLow())
+        .publicationReservedSessionIdHigh(mdc.publicationReservedSessionIdHigh())
+        .publicationLingerTimeoutNs(mdc.publicationLingerTimeoutNs())
+        .publicationConnectionTimeoutNs(mdc.publicationConnectionTimeoutNs())
+        .performStorageChecks(mdc.performStorageChecks())
+        .nanoClock(mdc.nanoClock())
+        .lossReport(mdc.lossReport())
+        .ipcTermBufferLength(mdc.ipcTermBufferLength())
+        .ipcMtuLength(mdc.ipcMtuLength())
+        .initialWindowLength(mdc.initialWindowLength())
+        .filePageSize(mdc.filePageSize())
+        .errorLog(mdc.errorLog());
+  }
+
+  private AeronResources() {
     this.config = config;
 
     start
@@ -51,6 +133,20 @@ public final class AeronResources implements OnDisposable {
             null,
             th -> logger.warn("{} failed on doDispose(): {}", this, th.toString()),
             () -> logger.debug("Disposed {}", this));
+  }
+
+  private static BackoffIdleStrategy defaultBackoffIdleStrategy() {
+    return new BackoffIdleStrategy(
+        100, 10, TimeUnit.MICROSECONDS.toNanos(1), TimeUnit.MICROSECONDS.toNanos(100));
+  }
+
+  private static String generateRandomTmpDirName() {
+    return IoUtil.tmpDirName()
+        + "aeron"
+        + '-'
+        + System.getProperty("user.name", "default")
+        + '-'
+        + UUID.randomUUID().toString();
   }
 
   /**
@@ -320,6 +416,6 @@ public final class AeronResources implements OnDisposable {
 
   @Override
   public String toString() {
-    return "AeronResources0x" + Integer.toHexString(System.identityHashCode(this));
+    return "AeronResources" + Integer.toHexString(System.identityHashCode(this));
   }
 }

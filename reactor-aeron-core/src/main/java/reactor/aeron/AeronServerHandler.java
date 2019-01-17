@@ -188,6 +188,6 @@ final class AeronServerHandler implements OnDisposable {
 
   @Override
   public String toString() {
-    return "AeronServerHandler0x" + Integer.toHexString(System.identityHashCode(this));
+    return "AeronServerHandler" + Integer.toHexString(System.identityHashCode(this));
   }
 }

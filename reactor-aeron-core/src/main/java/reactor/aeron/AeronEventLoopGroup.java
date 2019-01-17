@@ -84,6 +84,6 @@ class AeronEventLoopGroup implements OnDisposable {
 
   @Override
   public String toString() {
-    return "AeronEventLoopGroup0x" + id;
+    return "AeronEventLoopGroup" + id;
   }
 }
