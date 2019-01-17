@@ -14,8 +14,8 @@ public final class AeronOptions {
 
   private AeronResources resources;
   private Function<? super AeronConnection, ? extends Publisher<Void>> handler;
-  private AeronChannelUri inboundUri = new AeronChannelUri();
-  private AeronChannelUri outboundUri = new AeronChannelUri();
+  private AeronChannelUriString inboundUri = new AeronChannelUriString();
+  private AeronChannelUriString outboundUri = new AeronChannelUriString();
   private Duration connectTimeout = Duration.ofSeconds(5);
   private Duration backpressureTimeout = Duration.ofSeconds(5);
   private Duration adminActionTimeout = Duration.ofSeconds(5);
@@ -49,19 +49,19 @@ public final class AeronOptions {
     return set(s -> s.handler = handler);
   }
 
-  public AeronChannelUri inboundUri() {
+  public AeronChannelUriString inboundUri() {
     return inboundUri;
   }
 
-  public AeronOptions inboundUri(AeronChannelUri inboundUri) {
+  public AeronOptions inboundUri(AeronChannelUriString inboundUri) {
     return set(s -> s.inboundUri = inboundUri);
   }
 
-  public AeronChannelUri outboundUri() {
+  public AeronChannelUriString outboundUri() {
     return outboundUri;
   }
 
-  public AeronOptions outboundUri(AeronChannelUri outboundUri) {
+  public AeronOptions outboundUri(AeronChannelUriString outboundUri) {
     return set(s -> s.outboundUri = outboundUri);
   }
 

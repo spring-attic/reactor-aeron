@@ -64,14 +64,19 @@ public final class AeronClient {
     return new AeronClient(options)
         .options(
             opts -> {
-              AeronChannelUri inboundUri = opts.inboundUri();
-              AeronChannelUri outboundUri = opts.outboundUri();
+              String endpoint = address + ':' + port;
+              String controlEndpoint = address + ':' + controlPort;
+
+              AeronChannelUriString inboundUri =
+                  opts.inboundUri()
+                      .with(b -> b.controlEndpoint(controlEndpoint).controlMode("dynamic"));
+
+              AeronChannelUriString outboundUri =
+                  opts.outboundUri().with(b -> b.endpoint(endpoint));
+
               return opts //
-                  .outboundUri(outboundUri.endpoint(address + ':' + port)) // Pub
-                  .inboundUri(
-                      inboundUri
-                          .controlEndpoint(address + ':' + controlPort)
-                          .controlModeDynamic()); // Sub->MDC(sessionId)
+                  .outboundUri(outboundUri) // Pub
+                  .inboundUri(inboundUri); // Sub->MDC(sessionId)
             });
   }
 

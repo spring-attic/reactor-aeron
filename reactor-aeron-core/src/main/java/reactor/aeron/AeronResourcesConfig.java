@@ -11,8 +11,6 @@ import org.agrona.IoUtil;
 import org.agrona.concurrent.BackoffIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
 
-//  TODO refactor to comply with approach est. at AeronChannelUri / AeronOptions; essentially need
-// immutable (!) config (maybe public inner static class of AeronResources)
 public class AeronResourcesConfig {
 
   private final ThreadingMode threadingMode;
