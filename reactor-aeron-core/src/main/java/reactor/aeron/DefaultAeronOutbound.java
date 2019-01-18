@@ -1,9 +1,6 @@
 package reactor.aeron;
 
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import org.reactivestreams.Publisher;
-import reactor.core.publisher.Flux;
 
 final class DefaultAeronOutbound implements AeronOutbound {
 
@@ -21,13 +18,8 @@ final class DefaultAeronOutbound implements AeronOutbound {
   }
 
   @Override
-  public AeronOutbound send(Publisher<Object> dataStream) {
+  public AeronOutbound send(Publisher<?> dataStream) {
     return then(sequencer.write(dataStream));
-  }
-
-  @Override
-  public AeronOutbound sendString(Publisher<String> dataStream) {
-    return send(Flux.from(dataStream).map(s -> s.getBytes(StandardCharsets.UTF_8)));
   }
 
   void dispose() {

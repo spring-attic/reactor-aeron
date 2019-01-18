@@ -1,10 +1,11 @@
 package reactor.aeron.demo;
 
 import java.util.Objects;
+import java.util.stream.Stream;
 import reactor.aeron.AeronClient;
 import reactor.aeron.AeronConnection;
 import reactor.aeron.AeronResources;
-import reactor.aeron.ByteBufferFlux;
+import reactor.core.publisher.Flux;
 
 public class ClientDemo {
 
@@ -25,7 +26,7 @@ public class ClientDemo {
                     System.out.println("Handler invoked");
                     return connection1
                         .outbound()
-                        .send(ByteBufferFlux.fromString("Hello", "world!").log("send"))
+                        .send(Flux.fromStream(Stream.of("Hello", "world!")).log("send"))
                         .then(connection1.onDispose());
                   })
               .connect()

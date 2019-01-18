@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -79,7 +80,7 @@ public class AeronConnectionTest extends BaseAeronTest {
     AeronConnection connection = createConnection();
     connection
         .outbound()
-        .sendString(
+        .send(
             Flux.range(1, 100)
                 .delayElements(Duration.ofSeconds(1))
                 .map(String::valueOf)
@@ -104,7 +105,7 @@ public class AeronConnectionTest extends BaseAeronTest {
                 connection
                     .outbound()
                     .send(
-                        ByteBufferFlux.fromString("hello1", "2", "3")
+                        Flux.fromStream(Stream.of("hello1", "2", "3"))
                             .delayElements(Duration.ofSeconds(1))
                             .log("server1"))
                     .then(connection.onDispose()));

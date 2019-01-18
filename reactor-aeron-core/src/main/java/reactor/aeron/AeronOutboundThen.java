@@ -1,6 +1,5 @@
 package reactor.aeron;
 
-import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 
@@ -20,13 +19,8 @@ final class AeronOutboundThen implements AeronOutbound {
   }
 
   @Override
-  public AeronOutbound send(Publisher<? extends ByteBuffer> dataStream) {
+  public AeronOutbound send(Publisher<?> dataStream) {
     return source.send(dataStream);
-  }
-
-  @Override
-  public AeronOutbound sendString(Publisher<String> dataStream) {
-    return source.sendString(dataStream);
   }
 
   @Override

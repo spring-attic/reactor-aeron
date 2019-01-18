@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.function.Function;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,7 +53,7 @@ class AeronServerTest extends BaseAeronTest {
 
     createConnection()
         .outbound()
-        .send(ByteBufferFlux.fromString("Hello", "world!").log("send"))
+        .send(Flux.fromStream(Stream.of("Hello", "world!")).log("send"))
         .then()
         .subscribe();
 
@@ -72,7 +73,7 @@ class AeronServerTest extends BaseAeronTest {
 
     createConnection()
         .outbound()
-        .sendString(
+        .send(
             Flux.range(1, 100)
                 .delayElements(Duration.ofSeconds(1))
                 .map(String::valueOf)

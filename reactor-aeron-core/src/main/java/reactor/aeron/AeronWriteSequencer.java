@@ -19,7 +19,7 @@ final class AeronWriteSequencer {
    * @param publisher data publisher
    * @return mono handle
    */
-  Mono<Void> write(Publisher<Object> publisher) {
+  Mono<Void> write(Publisher<?> publisher) {
     Objects.requireNonNull(publisher, "publisher must be not null");
 
     return Mono.defer(

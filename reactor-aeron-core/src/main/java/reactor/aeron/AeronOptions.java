@@ -3,6 +3,8 @@ package reactor.aeron;
 import java.time.Duration;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import org.agrona.DirectBuffer;
+import org.agrona.MutableDirectBuffer;
 import org.reactivestreams.Publisher;
 
 /**
@@ -19,6 +21,10 @@ public final class AeronOptions {
   private Duration connectTimeout = Duration.ofSeconds(5);
   private Duration backpressureTimeout = Duration.ofSeconds(5);
   private Duration adminActionTimeout = Duration.ofSeconds(5);
+  private Function<Object, Integer> bufferCalculator;
+  private Function<MutableDirectBuffer, Function<Integer, Function<Object, Void>>> bufferConsumer;
+  private Function<Object, DirectBuffer> bufferMapper;
+  private Consumer<Object> bufferDisposer;
 
   public AeronOptions() {}
 
@@ -30,6 +36,10 @@ public final class AeronOptions {
     this.connectTimeout = other.connectTimeout;
     this.backpressureTimeout = other.backpressureTimeout;
     this.adminActionTimeout = other.adminActionTimeout;
+    this.bufferCalculator = other.bufferCalculator;
+    this.bufferConsumer = other.bufferConsumer;
+    this.bufferMapper = other.bufferMapper;
+    this.bufferDisposer = other.bufferDisposer;
   }
 
   public AeronResources resources() {
@@ -87,6 +97,22 @@ public final class AeronOptions {
 
   public AeronOptions adminActionTimeout(Duration adminActionTimeout) {
     return set(s -> s.adminActionTimeout = adminActionTimeout);
+  }
+
+  public Function<Object, Integer> bufferCalculator() {
+    return bufferCalculator;
+  }
+
+  public Function<MutableDirectBuffer, Function<Integer, Function<Object, Void>>> bufferConsumer() {
+    return bufferConsumer;
+  }
+
+  public Function<Object, DirectBuffer> bufferMapper() {
+    return bufferMapper;
+  }
+
+  public Consumer<Object> bufferDisposer() {
+    return bufferDisposer;
   }
 
   private AeronOptions set(Consumer<AeronOptions> c) {
