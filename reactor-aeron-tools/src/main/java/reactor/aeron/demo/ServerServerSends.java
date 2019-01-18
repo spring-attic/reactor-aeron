@@ -13,9 +13,9 @@ public class ServerServerSends {
    * @param args program arguments.
    */
   public static void main(String[] args) throws Exception {
-    AeronResources aeronResources = AeronResources.start();
+    AeronResources resources = new AeronResources().useTmpDir().singleWorker().start().block();
     try {
-      AeronServer.create(aeronResources)
+      AeronServer.create(resources)
           .options("localhost", 13000, 13001)
           .handle(
               connection ->
@@ -33,8 +33,8 @@ public class ServerServerSends {
       System.out.println("main finished");
       Thread.currentThread().join();
     } finally {
-      aeronResources.dispose();
-      aeronResources.onDispose().block();
+      resources.dispose();
+      resources.onDispose().block();
     }
   }
 }

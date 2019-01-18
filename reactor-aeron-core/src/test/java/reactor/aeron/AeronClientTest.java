@@ -36,8 +36,8 @@ class AeronClientTest extends BaseAeronTest {
   void beforeEach() {
     serverPort = SocketUtils.findAvailableUdpPort();
     serverControlPort = SocketUtils.findAvailableUdpPort();
-    clientResources = AeronResources.start(AeronResourcesConfig.builder().numOfWorkers(1).build());
-    serverResources = AeronResources.start(AeronResourcesConfig.builder().numOfWorkers(1).build());
+    clientResources = new AeronResources().useTmpDir().singleWorker().start().block();
+    serverResources = new AeronResources().useTmpDir().singleWorker().start().block();
   }
 
   @AfterEach

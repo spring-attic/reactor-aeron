@@ -53,7 +53,8 @@ final class AeronClientConnector {
                   publication -> {
                     // inbound->MDC(sessionId)->Sub(control-endpoint, sessionId)
                     int sessionId = publication.sessionId();
-                    String inboundChannel = options.inboundUri().sessionId(sessionId).asString();
+                    String inboundChannel =
+                        options.inboundUri().uri(b -> b.sessionId(sessionId)).asString();
                     logger.debug(
                         "{}: creating client connection: {}",
                         Integer.toHexString(sessionId),

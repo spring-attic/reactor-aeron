@@ -31,17 +31,19 @@ public class AeronConnectionTest extends BaseAeronTest {
     serverPort = SocketUtils.findAvailableUdpPort();
     serverControlPort = SocketUtils.findAvailableUdpPort();
     clientResources =
-        AeronResources.start(
-            AeronResourcesConfig.builder()
-                .numOfWorkers(1)
-                .imageLivenessTimeout(IMAGE_TIMEOUT)
-                .build());
+        new AeronResources()
+            .useTmpDir()
+            .singleWorker()
+            .media(mdc -> mdc.imageLivenessTimeoutNs(IMAGE_TIMEOUT.toNanos()))
+            .start()
+            .block();
     serverResources =
-        AeronResources.start(
-            AeronResourcesConfig.builder()
-                .numOfWorkers(1)
-                .imageLivenessTimeout(IMAGE_TIMEOUT)
-                .build());
+        new AeronResources()
+            .useTmpDir()
+            .singleWorker()
+            .media(mdc -> mdc.imageLivenessTimeoutNs(IMAGE_TIMEOUT.toNanos()))
+            .start()
+            .block();
   }
 
   @AfterEach

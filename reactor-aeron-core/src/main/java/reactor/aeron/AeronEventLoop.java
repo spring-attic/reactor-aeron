@@ -39,7 +39,7 @@ final class AeronEventLoop implements OnDisposable {
   /**
    * Constructor.
    *
-   * @param name of thread.
+   * @param name thread name
    * @param workerId worker id
    * @param groupId id of parent {@link AeronEventLoopGroup}
    * @param idleStrategy {@link IdleStrategy} instance for this event loop

@@ -24,8 +24,8 @@ class AeronServerTest extends BaseAeronTest {
   void beforeEach() {
     serverPort = SocketUtils.findAvailableUdpPort();
     serverControlPort = SocketUtils.findAvailableUdpPort();
-    clientResources = AeronResources.start(AeronResourcesConfig.builder().numOfWorkers(1).build());
-    serverResources = AeronResources.start(AeronResourcesConfig.builder().numOfWorkers(1).build());
+    clientResources = new AeronResources().useTmpDir().singleWorker().start().block();
+    serverResources = new AeronResources().useTmpDir().singleWorker().start().block();
   }
 
   @AfterEach
@@ -84,11 +84,7 @@ class AeronServerTest extends BaseAeronTest {
 
     server.dispose();
 
-    // TODO add StepVerifier here and remove ThreadWatcher class
-
-    ThreadWatcher threadWatcher = new ThreadWatcher();
-
-    assertTrue(threadWatcher.awaitTerminated(5000, "single-", "parallel-"));
+    assertTrue(new ThreadWatcher().awaitTerminated(5000, "single-", "parallel-"));
   }
 
   private AeronConnection createConnection() {

@@ -68,13 +68,17 @@ public final class AeronServer {
     return new AeronServer(options)
         .options(
             opts -> {
-              AeronChannelUri inboundUri = opts.inboundUri();
-              AeronChannelUri outboundUri = opts.outboundUri();
+              String endpoint = address + ':' + port;
+              String controlEndpoint = address + ':' + controlPort;
+
+              AeronChannelUriString inboundUri = opts.inboundUri().uri(b -> b.endpoint(endpoint));
+
+              AeronChannelUriString outboundUri =
+                  opts.outboundUri().uri(b -> b.controlEndpoint(controlEndpoint));
+
               return opts //
-                  .inboundUri(inboundUri.endpoint(address + ':' + port)) // Sub
-                  .outboundUri(
-                      outboundUri.controlEndpoint(
-                          address + ':' + controlPort)); // Pub->MDC(sessionId)
+                  .inboundUri(inboundUri) // Sub
+                  .outboundUri(outboundUri); // Pub->MDC(sessionId)
             });
   }
 
