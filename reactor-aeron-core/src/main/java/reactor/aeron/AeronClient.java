@@ -69,10 +69,9 @@ public final class AeronClient {
 
               AeronChannelUriString inboundUri =
                   opts.inboundUri()
-                      .with(b -> b.controlEndpoint(controlEndpoint).controlMode("dynamic"));
+                      .uri(b -> b.controlEndpoint(controlEndpoint).controlMode("dynamic"));
 
-              AeronChannelUriString outboundUri =
-                  opts.outboundUri().with(b -> b.endpoint(endpoint));
+              AeronChannelUriString outboundUri = opts.outboundUri().uri(b -> b.endpoint(endpoint));
 
               return opts //
                   .outboundUri(outboundUri) // Pub

@@ -1,6 +1,7 @@
 package reactor.aeron;
 
 import io.aeron.Aeron;
+import io.aeron.Aeron.Context;
 import io.aeron.ExclusivePublication;
 import io.aeron.Image;
 import io.aeron.Publication;
@@ -12,9 +13,12 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import org.agrona.CloseHelper;
 import org.agrona.IoUtil;
 import org.agrona.concurrent.BackoffIdleStrategy;
+import org.agrona.concurrent.IdleStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -25,38 +29,67 @@ public final class AeronResources implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronResources.class);
 
-  private final Aeron.Context aeronContext = new Aeron.Context();
-  private final MediaDriver.Context mediaDriverContext = new MediaDriver.Context();
+  // Settings
+  private int numOfWorkers = Runtime.getRuntime().availableProcessors();
+  private Supplier<IdleStrategy> workerIdleStrategySupplier =
+      AeronResources::defaultBackoffIdleStrategy;
+  private Aeron.Context aeronContext = new Aeron.Context();
+  private MediaDriver.Context mediaContext =
+      new MediaDriver.Context().warnIfDirectoryExists(true).dirDeleteOnStart(true);
 
-  private final MonoProcessor<Void> start = MonoProcessor.create();
-  private final MonoProcessor<Void> dispose = MonoProcessor.create();
-  private final MonoProcessor<Void> onDispose = MonoProcessor.create();
-
+  // State
   private Aeron aeron;
   private MediaDriver mediaDriver;
   private AeronEventLoopGroup eventLoopGroup;
 
-  public AeronResources() {}
+  // Lifecycle
+  private final MonoProcessor<Void> start = MonoProcessor.create();
+  private final MonoProcessor<Void> onStart = MonoProcessor.create();
+  private final MonoProcessor<Void> dispose = MonoProcessor.create();
+  private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
-  private AeronResources(Aeron.Context ac, MediaDriver.Context mdc) {
-    aeronContext
-        .resourceLingerDurationNs(ac.resourceLingerDurationNs())
-        .keepAliveInterval(ac.keepAliveInterval())
-        .errorHandler(ac.errorHandler())
-        .driverTimeoutMs(ac.driverTimeoutMs())
-        .availableImageHandler(ac.availableImageHandler())
-        .unavailableImageHandler(ac.unavailableImageHandler())
-        .idleStrategy(ac.idleStrategy())
-        .aeronDirectoryName(ac.aeronDirectoryName())
-        .availableCounterHandler(ac.availableCounterHandler())
-        .unavailableCounterHandler(ac.unavailableCounterHandler())
-        .useConductorAgentInvoker(ac.useConductorAgentInvoker())
-        .threadFactory(ac.threadFactory())
-        .epochClock(ac.epochClock())
-        .clientLock(ac.clientLock())
-        .nanoClock(ac.nanoClock());
+  /**
+   * Default constructor. Setting up start and dispose routings. See methods: {@link #doStart()} and
+   * {@link #doDispose()}.
+   */
+  public AeronResources() {
+    start
+        .then(doStart())
+        .doFinally(s -> onStart.onComplete())
+        .subscribe(
+            null,
+            th -> {
+              logger.error("{} failed to start, cause: {}", this, th.toString());
+              dispose();
+            });
 
-    mediaDriverContext
+    dispose
+        .then(doDispose())
+        .doFinally(s -> onDispose.onComplete())
+        .subscribe(
+            null,
+            th -> logger.warn("{} failed on doDispose(): {}", this, th.toString()),
+            () -> logger.debug("Disposed {}", this));
+  }
+
+  /**
+   * Copy constructor.
+   *
+   * @param ac aeron context
+   * @param mdc media driver context
+   */
+  private AeronResources(Context ac, MediaDriver.Context mdc) {
+    this();
+    copy(ac);
+    copy(mdc);
+  }
+
+  private AeronResources copy() {
+    return new AeronResources(aeronContext, mediaContext);
+  }
+
+  private void copy(MediaDriver.Context mdc) {
+    mediaContext
         .aeronDirectoryName(mdc.aeronDirectoryName())
         .dirDeleteOnStart(mdc.dirDeleteOnStart())
         .imageLivenessTimeoutNs(mdc.imageLivenessTimeoutNs())
@@ -114,25 +147,23 @@ public final class AeronResources implements OnDisposable {
         .errorLog(mdc.errorLog());
   }
 
-  private AeronResources() {
-    this.config = config;
-
-    start
-        .then(doStart())
-        .subscribe(
-            null,
-            th -> {
-              logger.error("{} failed to start, cause: {}", this, th.toString());
-              dispose();
-            });
-
-    dispose
-        .then(doDispose())
-        .doFinally(s -> onDispose.onComplete())
-        .subscribe(
-            null,
-            th -> logger.warn("{} failed on doDispose(): {}", this, th.toString()),
-            () -> logger.debug("Disposed {}", this));
+  private void copy(Aeron.Context ac) {
+    aeronContext
+        .resourceLingerDurationNs(ac.resourceLingerDurationNs())
+        .keepAliveInterval(ac.keepAliveInterval())
+        .errorHandler(ac.errorHandler())
+        .driverTimeoutMs(ac.driverTimeoutMs())
+        .availableImageHandler(ac.availableImageHandler())
+        .unavailableImageHandler(ac.unavailableImageHandler())
+        .idleStrategy(ac.idleStrategy())
+        .aeronDirectoryName(ac.aeronDirectoryName())
+        .availableCounterHandler(ac.availableCounterHandler())
+        .unavailableCounterHandler(ac.unavailableCounterHandler())
+        .useConductorAgentInvoker(ac.useConductorAgentInvoker())
+        .threadFactory(ac.threadFactory())
+        .epochClock(ac.epochClock())
+        .clientLock(ac.clientLock())
+        .nanoClock(ac.nanoClock());
   }
 
   private static BackoffIdleStrategy defaultBackoffIdleStrategy() {
@@ -150,52 +181,86 @@ public final class AeronResources implements OnDisposable {
   }
 
   /**
-   * Starts aeron resources with default config.
+   * Applies modifier and produces new {@code AeronResources} object.
    *
-   * @return started instance of aeron resources
+   * @param o modifier operator
+   * @return new {@code AeronResources} object
    */
-  public static AeronResources start() {
-    return start(AeronResourcesConfig.defaultConfig());
+  public AeronResources aeron(UnaryOperator<Aeron.Context> o) {
+    AeronResources c = copy();
+    Aeron.Context ac = o.apply(c.aeronContext);
+    return new AeronResources(ac, c.mediaContext);
   }
 
   /**
-   * Starts aeron resources with given config.
+   * Applies modifier and produces new {@code AeronResources} object.
    *
-   * @param config aeron config
-   * @return started instance of aeron resources
+   * @param o modifier operator
+   * @return new {@code AeronResources} object
    */
-  // TODO refactor to comply with approach est. at
-  // AeronServer.bind(UnaryOperator<reactor.aeron.AeronOptions>)
-  public static AeronResources start(AeronResourcesConfig config) {
-    AeronResources aeronResources = new AeronResources(config);
-    aeronResources.start0();
-    return aeronResources;
+  public AeronResources media(UnaryOperator<MediaDriver.Context> o) {
+    AeronResources c = copy();
+    MediaDriver.Context mdc = o.apply(c.mediaContext);
+    return new AeronResources(c.aeronContext, mdc);
   }
 
-  private void start0() {
-    start.onComplete();
+  /**
+   * Set to use temp directory instead of default aeron directory.
+   *
+   * @return new {@code AeronResources} object
+   */
+  public AeronResources useTmpDir() {
+    return media(mdc -> mdc.aeronDirectoryName(generateRandomTmpDirName()));
+  }
+
+  /**
+   * Setting number of worker threads.
+   *
+   * @param n number of worker threads
+   * @return new {@code AeronResources} object
+   */
+  public AeronResources numOfWorkers(int n) {
+    AeronResources c = copy();
+    c.numOfWorkers = n;
+    return c;
+  }
+
+  /**
+   * Setter for supplier of {@code IdleStrategy} for worker thread(s).
+   *
+   * @param s supplier of {@code IdleStrategy} for worker thread(s)
+   * @return @return new {@code AeronResources} object
+   */
+  public AeronResources workerIdleStrategySupplier(Supplier<IdleStrategy> s) {
+    AeronResources c = copy();
+    c.workerIdleStrategySupplier = s;
+    return c;
+  }
+
+  /**
+   * Starting up this resources instance if not started already.
+   *
+   * @return started {@code AeronResources} object
+   */
+  public Mono<AeronResources> start() {
+    return Mono.defer(
+        () -> {
+          start.onComplete();
+          return onStart.thenReturn(this);
+        });
   }
 
   private Mono<Void> doStart() {
     return Mono.fromRunnable(
         () -> {
-          MediaDriver.Context mediaContext =
-              new MediaDriver.Context()
-                  .aeronDirectoryName(config.aeronDirectoryName())
-                  .mtuLength(config.mtuLength())
-                  .imageLivenessTimeoutNs(config.imageLivenessTimeout().toNanos())
-                  .dirDeleteOnStart(config.isDirDeleteOnStart());
-
           mediaDriver = MediaDriver.launchEmbedded(mediaContext);
 
-          Aeron.Context aeronContext = new Aeron.Context();
           aeronContext.aeronDirectoryName(mediaDriver.aeronDirectoryName());
 
           aeron = Aeron.connect(aeronContext);
 
           eventLoopGroup =
-              new AeronEventLoopGroup(
-                  "reactor-aeron", config.numOfWorkers(), config.idleStrategySupplier());
+              new AeronEventLoopGroup("reactor-aeron", numOfWorkers, workerIdleStrategySupplier);
 
           Runtime.getRuntime()
               .addShutdownHook(
@@ -400,9 +465,8 @@ public final class AeronResources implements OnDisposable {
 
                     CloseHelper.quietClose(mediaDriver);
 
-                    Optional.ofNullable(mediaDriver)
-                        .map(MediaDriver::context)
-                        .ifPresent(context -> IoUtil.delete(context.aeronDirectory(), true));
+                    Optional.ofNullable(aeronContext)
+                        .ifPresent(c -> IoUtil.delete(c.aeronDirectory(), true));
                   });
         });
   }

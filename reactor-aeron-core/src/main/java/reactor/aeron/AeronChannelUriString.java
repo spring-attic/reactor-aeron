@@ -5,7 +5,7 @@ import java.util.function.UnaryOperator;
 
 /**
  * Immutable wrapper of {@link ChannelUriStringBuilder}. See methods: {@link #builder()}, {@link
- * #asString()} and {@link #with(UnaryOperator)}.
+ * #asString()} and {@link #uri(UnaryOperator)}.
  */
 public final class AeronChannelUriString {
 
@@ -53,7 +53,7 @@ public final class AeronChannelUriString {
    * @return aeron channel uri string
    */
   public String asString() {
-    return builder.build();
+    return builder().build();
   }
 
   /**
@@ -62,10 +62,8 @@ public final class AeronChannelUriString {
    * @param o modifier operator
    * @return new {@code AeronChannelUriString} object
    */
-  public AeronChannelUriString with(UnaryOperator<ChannelUriStringBuilder> o) {
-    AeronChannelUriString c = new AeronChannelUriString(builder);
-    ChannelUriStringBuilder b = o.apply(c.builder);
-    return new AeronChannelUriString(b);
+  public AeronChannelUriString uri(UnaryOperator<ChannelUriStringBuilder> o) {
+    return new AeronChannelUriString(o.apply(builder()));
   }
 
   @Override

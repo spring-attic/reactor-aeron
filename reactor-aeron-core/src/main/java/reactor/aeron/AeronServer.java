@@ -71,10 +71,10 @@ public final class AeronServer {
               String endpoint = address + ':' + port;
               String controlEndpoint = address + ':' + controlPort;
 
-              AeronChannelUriString inboundUri = opts.inboundUri().with(b -> b.endpoint(endpoint));
+              AeronChannelUriString inboundUri = opts.inboundUri().uri(b -> b.endpoint(endpoint));
 
               AeronChannelUriString outboundUri =
-                  opts.outboundUri().with(b -> b.controlEndpoint(controlEndpoint));
+                  opts.outboundUri().uri(b -> b.controlEndpoint(controlEndpoint));
 
               return opts //
                   .inboundUri(inboundUri) // Sub
