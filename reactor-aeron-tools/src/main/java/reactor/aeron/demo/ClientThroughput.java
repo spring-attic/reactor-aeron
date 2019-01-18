@@ -23,16 +23,7 @@ public class ClientThroughput {
               connection ->
                   connection
                       .outbound()
-                      .send(
-                          Flux.create(
-                              sink -> {
-                                System.out.println("About to send");
-                                for (int i = 0; i < 10_000 * 1024; i++) {
-                                  sink.next(buffer);
-                                }
-                                sink.complete();
-                                System.out.println("Send complete");
-                              }))
+                      .send(Flux.range(0, Integer.MAX_VALUE).map(i -> buffer))
                       .then(connection.onDispose()))
           .connect()
           .block();
