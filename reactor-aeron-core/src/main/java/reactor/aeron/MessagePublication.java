@@ -2,12 +2,14 @@ package reactor.aeron;
 
 import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Queue;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import org.agrona.DirectBuffer;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
-import org.agrona.concurrent.UnsafeBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
@@ -26,6 +28,11 @@ class MessagePublication implements OnDisposable {
   private final Duration connectTimeout;
   private final Duration backpressureTimeout;
   private final Duration adminActionTimeout;
+
+  private final Function<Object, Integer> bufferLengthCalculator;
+  private final BiConsumer<MutableDirectBuffer, Object> bufferClaimConsumer;
+  private final Function<Object, DirectBuffer> offerBufferMapper;
+  private final Consumer<Object> bufferDisposer;
 
   private final Queue<PublishTask> publishTasks = new ManyToOneConcurrentLinkedQueue<>();
 
@@ -52,12 +59,12 @@ class MessagePublication implements OnDisposable {
    * @param buffer buffer
    * @return mono handle
    */
-  Mono<Void> publish(ByteBuffer buffer) {
+  Mono<Void> publish(Object buffer) {
     return Mono.create(
         sink -> {
           boolean result = false;
           if (!isDisposed()) {
-            result = publishTasks.offer(new PublishTask(buffer, sink));
+            result = publishTasks.offer(new PublishTask<>(buffer, sink));
           }
           if (!result) {
             sink.error(AeronExceptions.failWithPublicationUnavailable());
@@ -245,17 +252,24 @@ class MessagePublication implements OnDisposable {
    *
    * <p>Resident of {@link #publishTasks} queue.
    */
-  private class PublishTask {
+  private class PublishTask<BUFFER> {
 
-    private final ByteBuffer msgBody;
+    private final BUFFER buffer;
     private final MonoSink<Void> sink;
     private volatile boolean isDisposed = false;
 
     private long start;
 
-    private PublishTask(ByteBuffer msgBody, MonoSink<Void> sink) {
-      this.msgBody = msgBody;
-      this.sink = sink.onDispose(() -> isDisposed = true);
+    private PublishTask(BUFFER buffer, MonoSink<Void> sink) {
+      this.buffer = buffer;
+      this.sink =
+          sink.onDispose(
+              () -> {
+                if (!isDisposed) {
+                  isDisposed = true;
+                  bufferDisposer.accept(buffer);
+                }
+              });
     }
 
     private long publish() {
@@ -267,18 +281,15 @@ class MessagePublication implements OnDisposable {
         start = System.currentTimeMillis();
       }
 
-      int msgLength = msgBody.remaining();
-      int position = msgBody.position();
-      int limit = msgBody.limit();
+      int length = bufferLengthCalculator.apply(buffer);
 
-      if (msgLength < publication.maxPayloadLength()) {
+      if (length < publication.maxPayloadLength()) {
         BufferClaim bufferClaim = bufferClaims.get();
-        long result = publication.tryClaim(msgLength, bufferClaim);
+        long result = publication.tryClaim(length, bufferClaim);
         if (result > 0) {
           try {
             MutableDirectBuffer dstBuffer = bufferClaim.buffer();
-            int index = bufferClaim.offset();
-            dstBuffer.putBytes(index, msgBody, position, limit);
+            bufferClaimConsumer.accept(dstBuffer, buffer);
             bufferClaim.commit();
           } catch (Exception ex) {
             bufferClaim.abort();
@@ -286,7 +297,7 @@ class MessagePublication implements OnDisposable {
         }
         return result;
       } else {
-        return publication.offer(new UnsafeBuffer(msgBody, position, limit));
+        return publication.offer(offerBufferMapper.apply(buffer));
       }
     }
 

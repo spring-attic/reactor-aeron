@@ -29,6 +29,11 @@
       <groupId>com.lmax</groupId>
       <artifactId>disruptor</artifactId>
     </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-buffer</artifactId>
+      <version>4.1.32.Final</version>
+    </dependency>
   </dependencies>
 
 </project>

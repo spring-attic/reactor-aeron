@@ -1,6 +1,5 @@
 package reactor.aeron;
 
-import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import reactor.core.publisher.Mono;
@@ -15,7 +14,7 @@ public interface AeronOutbound extends Publisher<Void> {
    * @return A new {@link AeronOutbound} to append further send. It will emit a complete signal upon
    *     successful sequence write or an error during write.
    */
-  AeronOutbound send(Publisher<? extends ByteBuffer> dataStream);
+  AeronOutbound send(Publisher<Object> dataStream);
 
   /**
    * Send data to the peer, listen for any error on write and close on terminal signal
