@@ -32,13 +32,15 @@ public class AeronConnectionTest extends BaseAeronTest {
     serverControlPort = SocketUtils.findAvailableUdpPort();
     clientResources =
         new AeronResources()
-            .numOfWorkers(1)
+            .useTmpDir()
+            .singleWorker()
             .media(mdc -> mdc.imageLivenessTimeoutNs(IMAGE_TIMEOUT.toNanos()))
             .start()
             .block();
     serverResources =
         new AeronResources()
-            .numOfWorkers(1)
+            .useTmpDir()
+            .singleWorker()
             .media(mdc -> mdc.imageLivenessTimeoutNs(IMAGE_TIMEOUT.toNanos()))
             .start()
             .block();

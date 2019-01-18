@@ -7,15 +7,13 @@ import reactor.core.publisher.Flux;
 
 public class ClientThroughput {
 
-  private static final String HOST = "localhost";
-
   /**
    * Main runner.
    *
    * @param args program arguments.
    */
   public static void main(String[] args) throws Exception {
-    AeronResources aeronResources = AeronResources.start();
+    AeronResources aeronResources = new AeronResources().useTmpDir().start().block();
     try {
       ByteBuffer buffer = ByteBuffer.allocate(1024);
 

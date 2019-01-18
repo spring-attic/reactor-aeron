@@ -214,6 +214,15 @@ public final class AeronResources implements OnDisposable {
   }
 
   /**
+   * Shortcut for {@code numOfWorkers(1)}.
+   *
+   * @return new {@code AeronResources} object
+   */
+  public AeronResources singleWorker() {
+    return numOfWorkers(1);
+  }
+
+  /**
    * Setting number of worker threads.
    *
    * @param n number of worker threads

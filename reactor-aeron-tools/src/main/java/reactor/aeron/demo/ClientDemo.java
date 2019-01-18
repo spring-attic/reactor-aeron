@@ -15,10 +15,10 @@ public class ClientDemo {
    */
   public static void main(String[] args) {
     AeronConnection connection = null;
-    AeronResources aeronResources = AeronResources.start();
+    AeronResources resources = new AeronResources().useTmpDir().singleWorker().start().block();
     try {
       connection =
-          AeronClient.create(aeronResources)
+          AeronClient.create(resources)
               .options("localhost", 13000, 13001)
               .handle(
                   connection1 -> {
@@ -32,8 +32,8 @@ public class ClientDemo {
               .block();
     } finally {
       Objects.requireNonNull(connection).dispose();
-      aeronResources.dispose();
-      aeronResources.onDispose().block();
+      resources.dispose();
+      resources.onDispose().block();
     }
     System.out.println("main completed");
   }
