@@ -34,6 +34,7 @@ final class DefaultAeronInbound implements AeronInbound {
   private final MessageSubscription subscription;
 
   private volatile long requested;
+  private volatile boolean fastpath;
   private long produced;
   private volatile CoreSubscriber<? super ByteBuffer> destinationSubscriber;
 
@@ -56,6 +57,9 @@ final class DefaultAeronInbound implements AeronInbound {
   }
 
   int poll() {
+    if (fastpath) {
+      return image.poll(fragmentHandler, MAX_FRAGMENT_LIMIT);
+    }
     int r = (int) Math.min(requested, MAX_FRAGMENT_LIMIT);
     int fragments = 0;
     if (r > 0) {
@@ -110,6 +114,14 @@ final class DefaultAeronInbound implements AeronInbound {
 
     @Override
     public void request(long n) {
+      if (fastpath) {
+        return;
+      }
+      if (n == Long.MAX_VALUE) {
+        fastpath = true;
+        requested = Long.MAX_VALUE;
+        return;
+      }
       Operators.addCap(REQUESTED, DefaultAeronInbound.this, n);
     }
 
