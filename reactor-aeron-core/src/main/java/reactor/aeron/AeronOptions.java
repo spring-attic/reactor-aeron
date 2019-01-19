@@ -22,7 +22,7 @@ public final class AeronOptions {
   private Duration backpressureTimeout = Duration.ofSeconds(5);
   private Duration adminActionTimeout = Duration.ofSeconds(5);
   private Function<Object, Integer> bufferCalculator;
-  private Function<MutableDirectBuffer, Function<Integer, Function<Object, Void>>> bufferConsumer;
+  private Function<MutableDirectBuffer, Function<Integer, Function<Object, Void>>> bufferWriter;
   private Function<Object, DirectBuffer> bufferMapper;
   private Consumer<Object> bufferDisposer;
 
@@ -37,7 +37,7 @@ public final class AeronOptions {
     this.backpressureTimeout = other.backpressureTimeout;
     this.adminActionTimeout = other.adminActionTimeout;
     this.bufferCalculator = other.bufferCalculator;
-    this.bufferConsumer = other.bufferConsumer;
+    this.bufferWriter = other.bufferWriter;
     this.bufferMapper = other.bufferMapper;
     this.bufferDisposer = other.bufferDisposer;
   }
@@ -103,16 +103,33 @@ public final class AeronOptions {
     return bufferCalculator;
   }
 
-  public Function<MutableDirectBuffer, Function<Integer, Function<Object, Void>>> bufferConsumer() {
-    return bufferConsumer;
+  public AeronOptions bufferCalculator(Function<Object, Integer> bufferCalculator) {
+    return set(s -> s.bufferCalculator = bufferCalculator);
+  }
+
+  public Function<MutableDirectBuffer, Function<Integer, Function<Object, Void>>> bufferWriter() {
+    return bufferWriter;
+  }
+
+  public AeronOptions bufferWriter(
+      Function<MutableDirectBuffer, Function<Integer, Function<Object, Void>>> bufferWriter) {
+    return set(s -> s.bufferWriter = bufferWriter);
   }
 
   public Function<Object, DirectBuffer> bufferMapper() {
     return bufferMapper;
   }
 
+  public AeronOptions bufferMapper(Function<Object, DirectBuffer> bufferMapper) {
+    return set(s -> s.bufferMapper = bufferMapper);
+  }
+
   public Consumer<Object> bufferDisposer() {
     return bufferDisposer;
+  }
+
+  public AeronOptions bufferDisposer(Consumer<Object> bufferDisposer) {
+    return set(s -> s.bufferDisposer = bufferDisposer);
   }
 
   private AeronOptions set(Consumer<AeronOptions> c) {

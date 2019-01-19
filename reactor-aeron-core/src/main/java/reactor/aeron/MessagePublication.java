@@ -2,6 +2,7 @@ package reactor.aeron;
 
 import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Queue;
@@ -32,7 +33,7 @@ class MessagePublication implements OnDisposable {
 
   private final Function<Object, Integer> bufferCalculator;
   private final Function<MutableDirectBuffer, Function<Integer, Function<Object, Void>>>
-      bufferConsumer;
+      bufferWriter;
   private final Function<Object, DirectBuffer> bufferMapper;
   private final Consumer<Object> bufferDisposer;
 
@@ -58,6 +59,8 @@ class MessagePublication implements OnDisposable {
         o -> {
           if (o instanceof byte[]) {
             return ((byte[]) o).length;
+          } else if (o instanceof ByteBuffer) {
+            return ((ByteBuffer) o).remaining();
           } else if (options.bufferCalculator() != null) {
             return options.bufferCalculator().apply(o);
           } else {
@@ -65,16 +68,18 @@ class MessagePublication implements OnDisposable {
           }
         };
 
-    this.bufferConsumer =
+    this.bufferWriter =
         directBuffer ->
             offset ->
                 o -> {
                   if (o instanceof byte[]) {
                     directBuffer.putBytes(offset, (byte[]) o);
-                  } else if (options.bufferConsumer() != null) {
-                    options.bufferConsumer().apply(directBuffer).apply(offset).apply(o);
+                  } else if (o instanceof ByteBuffer) {
+                    directBuffer.putBytes(offset, ((ByteBuffer) o), ((ByteBuffer) o).remaining());
+                  } else if (options.bufferWriter() != null) {
+                    options.bufferWriter().apply(directBuffer).apply(offset).apply(o);
                   } else {
-                    throw new IllegalStateException("bufferConsumer must not be null");
+                    throw new IllegalStateException("bufferWriter must not be null");
                   }
                   return null;
                 };
@@ -83,6 +88,8 @@ class MessagePublication implements OnDisposable {
         o -> {
           if (o instanceof byte[]) {
             return new UnsafeBuffer(((byte[]) o));
+          } else if (o instanceof ByteBuffer) {
+            return new UnsafeBuffer(((ByteBuffer) o));
           } else if (options.bufferMapper() != null) {
             return options.bufferMapper().apply(o);
           } else {
@@ -92,7 +99,7 @@ class MessagePublication implements OnDisposable {
 
     this.bufferDisposer =
         o -> {
-          if (o instanceof byte[]) {
+          if (o instanceof byte[] || o instanceof ByteBuffer) {
             // no-op
             return;
           }
@@ -351,7 +358,7 @@ class MessagePublication implements OnDisposable {
           try {
             MutableDirectBuffer directBuffer = bufferClaim.buffer();
             int offset = bufferClaim.offset();
-            bufferConsumer.apply(directBuffer).apply(offset).apply(content);
+            bufferWriter.apply(directBuffer).apply(offset).apply(content);
             bufferClaim.commit();
           } catch (Exception ex) {
             bufferClaim.abort();

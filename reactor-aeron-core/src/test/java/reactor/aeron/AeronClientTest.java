@@ -140,7 +140,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(connection.inbound().receive().asString())
+                .send(connection.inbound().receive())
                 .then(connection.onDispose()));
 
     AeronConnection connection1 = createConnection();
@@ -162,8 +162,7 @@ class AeronClientTest extends BaseAeronTest {
             connection
                 .inbound()
                 .receive()
-                .asString()
-                .flatMap(s -> connection.outbound().send(Mono.just(s)).then())
+                .flatMap(byteBuffer -> connection.outbound().send(Mono.just(byteBuffer)).then())
                 .then(connection.onDispose()));
 
     AeronConnection connection1 = createConnection();
@@ -189,8 +188,7 @@ class AeronClientTest extends BaseAeronTest {
             connection
                 .inbound()
                 .receive()
-                .asString()
-                .flatMap(s -> connection.outbound().send(Mono.just(s)).then())
+                .flatMap(byteBuffer -> connection.outbound().send(Mono.just(byteBuffer)).then())
                 .then(connection.onDispose()));
 
     ReplayProcessor<String> processor1 = ReplayProcessor.create();
@@ -232,8 +230,7 @@ class AeronClientTest extends BaseAeronTest {
             connection
                 .inbound()
                 .receive()
-                .asString()
-                .flatMap(s -> connection.outbound().send(Mono.just(s)).then())
+                .flatMap(byteBuffer -> connection.outbound().send(Mono.just(byteBuffer)).then())
                 .then(connection.onDispose()));
 
     AeronConnection connection1 = createConnection();
