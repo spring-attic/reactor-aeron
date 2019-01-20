@@ -4,10 +4,10 @@ import io.aeron.Image;
 import io.aeron.ImageFragmentAssembler;
 import io.aeron.logbuffer.FragmentHandler;
 import io.aeron.logbuffer.Header;
-import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import org.agrona.DirectBuffer;
+import org.agrona.concurrent.UnsafeBuffer;
 import org.reactivestreams.Subscription;
 import reactor.core.CoreSubscriber;
 import reactor.core.Exceptions;
@@ -35,7 +35,7 @@ final class DefaultAeronInbound implements AeronInbound {
 
   private volatile long requested;
   private long produced;
-  private volatile CoreSubscriber<? super ByteBuffer> destinationSubscriber;
+  private volatile CoreSubscriber<? super DirectBuffer> destinationSubscriber;
 
   /**
    * Constructor.
@@ -51,8 +51,8 @@ final class DefaultAeronInbound implements AeronInbound {
   }
 
   @Override
-  public ByteBufferFlux receive() {
-    return new ByteBufferFlux(inbound);
+  public DirectBufferFlux receive() {
+    return new DirectBufferFlux(inbound);
   }
 
   int poll() {
@@ -94,19 +94,15 @@ final class DefaultAeronInbound implements AeronInbound {
     public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
       produced++;
 
-      ByteBuffer dstBuffer = ByteBuffer.allocate(length);
-      buffer.getBytes(offset, dstBuffer, length);
-      dstBuffer.flip();
-
-      CoreSubscriber<? super ByteBuffer> destination =
+      CoreSubscriber<? super DirectBuffer> destination =
           DefaultAeronInbound.this.destinationSubscriber;
 
       // TODO check on cancel?
-      destination.onNext(dstBuffer);
+      destination.onNext(new UnsafeBuffer(buffer, offset, length));
     }
   }
 
-  private class FluxReceive extends Flux<ByteBuffer> implements Subscription {
+  private class FluxReceive extends Flux<DirectBuffer> implements Subscription {
 
     @Override
     public void request(long n) {
@@ -125,13 +121,14 @@ final class DefaultAeronInbound implements AeronInbound {
     }
 
     @Override
-    public void subscribe(CoreSubscriber<? super ByteBuffer> destinationSubscriber) {
-      boolean destinationSet =
+    public void subscribe(CoreSubscriber<? super DirectBuffer> destinationSubscriber) {
+      boolean result =
           DESTINATION_SUBSCRIBER.compareAndSet(
               DefaultAeronInbound.this, null, destinationSubscriber);
-      if (destinationSet) {
+      if (result) {
         destinationSubscriber.onSubscribe(this);
       } else {
+        // only subscriber is allowed on receive()
         Operators.error(destinationSubscriber, Exceptions.duplicateOnSubscribeException());
       }
     }

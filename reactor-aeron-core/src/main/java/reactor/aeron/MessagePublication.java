@@ -61,6 +61,8 @@ class MessagePublication implements OnDisposable {
             return ((byte[]) o).length;
           } else if (o instanceof ByteBuffer) {
             return ((ByteBuffer) o).remaining();
+          } else if (o instanceof DirectBuffer) {
+            return ((DirectBuffer) o).capacity();
           } else if (options.bufferCalculator() != null) {
             return options.bufferCalculator().apply(o);
           } else {
@@ -75,7 +77,11 @@ class MessagePublication implements OnDisposable {
                   if (o instanceof byte[]) {
                     directBuffer.putBytes(offset, (byte[]) o);
                   } else if (o instanceof ByteBuffer) {
-                    directBuffer.putBytes(offset, ((ByteBuffer) o), ((ByteBuffer) o).remaining());
+                    ByteBuffer buffer = (ByteBuffer) o;
+                    directBuffer.putBytes(offset, buffer, buffer.remaining());
+                  } else if (o instanceof DirectBuffer) {
+                    DirectBuffer buffer = (DirectBuffer) o;
+                    directBuffer.putBytes(offset, buffer, 0, buffer.capacity());
                   } else if (options.bufferWriter() != null) {
                     options.bufferWriter().apply(directBuffer).apply(offset).apply(o);
                   } else {
@@ -90,6 +96,8 @@ class MessagePublication implements OnDisposable {
             return new UnsafeBuffer(((byte[]) o));
           } else if (o instanceof ByteBuffer) {
             return new UnsafeBuffer(((ByteBuffer) o));
+          } else if (o instanceof DirectBuffer) {
+            return new UnsafeBuffer(((DirectBuffer) o));
           } else if (options.bufferMapper() != null) {
             return options.bufferMapper().apply(o);
           } else {
