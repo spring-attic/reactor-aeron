@@ -53,7 +53,7 @@ class AeronServerTest extends BaseAeronTest {
 
     createConnection()
         .outbound()
-        .send(Flux.fromStream(Stream.of("Hello", "world!")).log("send"))
+        .sendString(Flux.fromStream(Stream.of("Hello", "world!")).log("send"))
         .then()
         .subscribe();
 
@@ -73,7 +73,7 @@ class AeronServerTest extends BaseAeronTest {
 
     createConnection()
         .outbound()
-        .send(
+        .sendString(
             Flux.range(1, 100)
                 .delayElements(Duration.ofSeconds(1))
                 .map(String::valueOf)

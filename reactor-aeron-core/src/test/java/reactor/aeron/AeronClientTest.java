@@ -59,7 +59,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(Flux.fromStream(Stream.of("hello1", "2", "3")).log("server"))
+                .sendString(Flux.fromStream(Stream.of("hello1", "2", "3")).log("server"))
                 .then(connection.onDispose()));
 
     AeronConnection connection = createConnection();
@@ -80,7 +80,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(Flux.fromStream(Stream.of(str, str, str)).log("server"))
+                .sendString(Flux.fromStream(Stream.of(str, str, str)).log("server"))
                 .then(connection.onDispose()));
 
     AeronConnection connection = createConnection();
@@ -98,7 +98,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(Flux.fromStream(Stream.of("1", "2", "3")).log("server"))
+                .sendString(Flux.fromStream(Stream.of("1", "2", "3")).log("server"))
                 .then(connection.onDispose()));
 
     AeronConnection connection1 = createConnection();
@@ -122,7 +122,8 @@ class AeronClientTest extends BaseAeronTest {
     int count = 200_000;
     Flux<String> payloads = Flux.range(0, count).map(String::valueOf);
 
-    createServer(connection -> connection.outbound().send(payloads).then(connection.onDispose()));
+    createServer(
+        connection -> connection.outbound().sendString(payloads).then(connection.onDispose()));
 
     AeronConnection connection1 = createConnection();
 
@@ -145,7 +146,7 @@ class AeronClientTest extends BaseAeronTest {
 
     AeronConnection connection1 = createConnection();
 
-    connection1.outbound().send(Flux.range(0, count).map(String::valueOf)).then().subscribe();
+    connection1.outbound().sendString(Flux.range(0, count).map(String::valueOf)).then().subscribe();
 
     StepVerifier.create(connection1.inbound().receive().asString())
         .expectNextCount(count)
@@ -169,7 +170,11 @@ class AeronClientTest extends BaseAeronTest {
 
     Flux.range(0, count)
         .flatMap(
-            i -> connection1.outbound().send(Flux.fromStream(Stream.of("client_send:" + i))).then())
+            i ->
+                connection1
+                    .outbound()
+                    .sendString(Flux.fromStream(Stream.of("client_send:" + i)))
+                    .then())
         .then()
         .subscribe();
 
@@ -198,7 +203,8 @@ class AeronClientTest extends BaseAeronTest {
         connection -> {
           connection.inbound().receive().asString().subscribe(processor1);
           Flux.range(0, count)
-              .flatMap(i -> connection.outbound().send(Mono.just("client-1 send:" + i)).then())
+              .flatMap(
+                  i -> connection.outbound().sendString(Mono.just("client-1 send:" + i)).then())
               .then()
               .subscribe();
           return connection.onDispose();
@@ -208,7 +214,8 @@ class AeronClientTest extends BaseAeronTest {
         connection -> {
           connection.inbound().receive().asString().subscribe(processor2);
           Flux.range(0, count)
-              .flatMap(i -> connection.outbound().send(Mono.just("client-2 send:" + i)).then())
+              .flatMap(
+                  i -> connection.outbound().sendString(Mono.just("client-2 send:" + i)).then())
               .then()
               .subscribe();
           return connection.onDispose();
@@ -235,13 +242,13 @@ class AeronClientTest extends BaseAeronTest {
 
     AeronConnection connection1 = createConnection();
     Flux.range(0, count)
-        .flatMap(i -> connection1.outbound().send(Mono.just("client-1 send:" + i)).then())
+        .flatMap(i -> connection1.outbound().sendString(Mono.just("client-1 send:" + i)).then())
         .then()
         .subscribe();
 
     AeronConnection connection2 = createConnection();
     Flux.range(0, count)
-        .flatMap(i -> connection2.outbound().send(Mono.just("client-2 send:" + i)).then())
+        .flatMap(i -> connection2.outbound().sendString(Mono.just("client-2 send:" + i)).then())
         .then()
         .subscribe();
 
@@ -271,7 +278,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(Flux.fromStream(Stream.of("1", "2", "3")).log("server"))
+                .sendString(Flux.fromStream(Stream.of("1", "2", "3")).log("server"))
                 .then(connection.onDispose()));
 
     ReplayProcessor<String> processor1 = ReplayProcessor.create();
@@ -327,7 +334,7 @@ class AeronClientTest extends BaseAeronTest {
             int count = start + requestPerStream;
             connection
                 .outbound()
-                .send(Flux.range(start, count).map(String::valueOf))
+                .sendString(Flux.range(start, count).map(String::valueOf))
                 .then()
                 .subscribe(null, Throwable::printStackTrace);
           }
@@ -363,7 +370,7 @@ class AeronClientTest extends BaseAeronTest {
         connection -> {
           connection
               .outbound()
-              .send(Flux.range(0, overall).map(i -> "server send:" + i))
+              .sendString(Flux.range(0, overall).map(i -> "server send:" + i))
               .then()
               .subscribe();
           return connection.onDispose();
@@ -424,7 +431,11 @@ class AeronClientTest extends BaseAeronTest {
 
     createServer(
         connection -> {
-          connection.outbound().send(Flux.range(0, overall).map(i -> i + msg)).then().subscribe();
+          connection
+              .outbound()
+              .sendString(Flux.range(0, overall).map(i -> i + msg))
+              .then()
+              .subscribe();
           return connection.onDispose();
         });
 

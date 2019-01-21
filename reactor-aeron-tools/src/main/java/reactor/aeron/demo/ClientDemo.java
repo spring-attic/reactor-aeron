@@ -26,7 +26,7 @@ public class ClientDemo {
                     System.out.println("Handler invoked");
                     return connection1
                         .outbound()
-                        .send(Flux.fromStream(Stream.of("Hello", "world!")).log("send"))
+                        .sendString(Flux.fromStream(Stream.of("Hello", "world!")).log("send"))
                         .then(connection1.onDispose());
                   })
               .connect()

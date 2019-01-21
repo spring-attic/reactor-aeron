@@ -2,16 +2,10 @@ package reactor.aeron;
 
 import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Queue;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import org.agrona.DirectBuffer;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
-import org.agrona.concurrent.UnsafeBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
@@ -31,12 +25,6 @@ class MessagePublication implements OnDisposable {
   private final Duration backpressureTimeout;
   private final Duration adminActionTimeout;
 
-  private final Function<Object, Integer> bufferCalculator;
-  private final Function<MutableDirectBuffer, Function<Integer, Function<Object, Void>>>
-      bufferWriter;
-  private final Function<Object, DirectBuffer> bufferMapper;
-  private final Consumer<Object> bufferDisposer;
-
   private final Queue<PublishTask> publishTasks = new ManyToOneConcurrentLinkedQueue<>();
 
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
@@ -54,81 +42,21 @@ class MessagePublication implements OnDisposable {
     this.connectTimeout = options.connectTimeout();
     this.backpressureTimeout = options.backpressureTimeout();
     this.adminActionTimeout = options.adminActionTimeout();
-
-    this.bufferCalculator =
-        o -> {
-          if (o instanceof byte[]) {
-            return ((byte[]) o).length;
-          } else if (o instanceof ByteBuffer) {
-            return ((ByteBuffer) o).remaining();
-          } else if (o instanceof DirectBuffer) {
-            return ((DirectBuffer) o).capacity();
-          } else if (options.bufferCalculator() != null) {
-            return options.bufferCalculator().apply(o);
-          } else {
-            throw new IllegalStateException("bufferCalculator must not be null");
-          }
-        };
-
-    this.bufferWriter =
-        directBuffer ->
-            offset ->
-                o -> {
-                  if (o instanceof byte[]) {
-                    directBuffer.putBytes(offset, (byte[]) o);
-                  } else if (o instanceof ByteBuffer) {
-                    ByteBuffer buffer = (ByteBuffer) o;
-                    directBuffer.putBytes(offset, buffer, buffer.remaining());
-                  } else if (o instanceof DirectBuffer) {
-                    DirectBuffer buffer = (DirectBuffer) o;
-                    directBuffer.putBytes(offset, buffer, 0, buffer.capacity());
-                  } else if (options.bufferWriter() != null) {
-                    options.bufferWriter().apply(directBuffer).apply(offset).apply(o);
-                  } else {
-                    throw new IllegalStateException("bufferWriter must not be null");
-                  }
-                  return null;
-                };
-
-    this.bufferMapper =
-        o -> {
-          if (o instanceof byte[]) {
-            return new UnsafeBuffer(((byte[]) o));
-          } else if (o instanceof ByteBuffer) {
-            return new UnsafeBuffer(((ByteBuffer) o));
-          } else if (o instanceof DirectBuffer) {
-            return new UnsafeBuffer(((DirectBuffer) o));
-          } else if (options.bufferMapper() != null) {
-            return options.bufferMapper().apply(o);
-          } else {
-            throw new IllegalStateException("bufferMapper must not be null");
-          }
-        };
-
-    this.bufferDisposer =
-        o -> {
-          if (o instanceof byte[] || o instanceof ByteBuffer) {
-            // no-op
-            return;
-          }
-          if (options.bufferDisposer() != null) {
-            options.bufferDisposer().accept(o);
-          }
-        };
   }
 
   /**
    * Enqueues content for future sending.
    *
-   * @param content content to send
+   * @param buffer abstract buffer to send
+   * @param bufferHandler abstract buffer handler
    * @return mono handle
    */
-  Mono<Void> publish(Object content) {
+  <B> Mono<Void> publish(B buffer, DirectBufferHandler<? super B> bufferHandler) {
     return Mono.create(
         sink -> {
           boolean result = false;
           if (!isDisposed()) {
-            result = publishTasks.offer(new PublishTask(content, sink));
+            result = publishTasks.offer(new PublishTask<>(buffer, bufferHandler, sink));
           }
           if (!result) {
             sink.error(AeronExceptions.failWithPublicationUnavailable());
@@ -323,27 +251,32 @@ class MessagePublication implements OnDisposable {
    *
    * <p>Resident of {@link #publishTasks} queue.
    */
-  private class PublishTask {
+  private class PublishTask<B> {
 
-    private final Object content;
+    private final B buffer;
+    private final DirectBufferHandler<B> bufferHandler;
     private final MonoSink<Void> sink;
     private volatile boolean isDisposed = false;
 
     private long start;
 
-    private PublishTask(Object content, MonoSink<Void> sink) {
-      if (content instanceof CharSequence) {
-        this.content = ((CharSequence) content).toString().getBytes(StandardCharsets.UTF_8);
-      } else {
-        this.content = content;
-      }
+    /**
+     * Constructor.
+     *
+     * @param buffer abstract buffer
+     * @param bufferHandler abstract buffer handler
+     * @param sink sink of result
+     */
+    private PublishTask(B buffer, DirectBufferHandler<B> bufferHandler, MonoSink<Void> sink) {
 
+      this.buffer = buffer;
+      this.bufferHandler = bufferHandler;
       this.sink =
           sink.onDispose(
               () -> {
                 if (!isDisposed) {
                   isDisposed = true;
-                  bufferDisposer.accept(content);
+                  bufferHandler.dispose(buffer);
                 }
               });
     }
@@ -357,7 +290,7 @@ class MessagePublication implements OnDisposable {
         start = System.currentTimeMillis();
       }
 
-      int length = bufferCalculator.apply(content);
+      int length = bufferHandler.estimateLength(buffer);
 
       if (length < publication.maxPayloadLength()) {
         BufferClaim bufferClaim = bufferClaims.get();
@@ -366,7 +299,7 @@ class MessagePublication implements OnDisposable {
           try {
             MutableDirectBuffer directBuffer = bufferClaim.buffer();
             int offset = bufferClaim.offset();
-            bufferWriter.apply(directBuffer).apply(offset).apply(content);
+            bufferHandler.write(directBuffer, offset, buffer, length);
             bufferClaim.commit();
           } catch (Exception ex) {
             bufferClaim.abort();
@@ -375,7 +308,7 @@ class MessagePublication implements OnDisposable {
         }
         return result;
       } else {
-        return publication.offer(bufferMapper.apply(content));
+        return publication.offer(bufferHandler.map(buffer, length));
       }
     }
 

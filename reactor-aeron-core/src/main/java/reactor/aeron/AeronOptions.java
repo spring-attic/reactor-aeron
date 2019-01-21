@@ -3,8 +3,6 @@ package reactor.aeron;
 import java.time.Duration;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import org.agrona.DirectBuffer;
-import org.agrona.MutableDirectBuffer;
 import org.reactivestreams.Publisher;
 
 /**
@@ -21,10 +19,6 @@ public final class AeronOptions {
   private Duration connectTimeout = Duration.ofSeconds(5);
   private Duration backpressureTimeout = Duration.ofSeconds(5);
   private Duration adminActionTimeout = Duration.ofSeconds(5);
-  private Function<Object, Integer> bufferCalculator;
-  private Function<MutableDirectBuffer, Function<Integer, Function<Object, Void>>> bufferWriter;
-  private Function<Object, DirectBuffer> bufferMapper;
-  private Consumer<Object> bufferDisposer;
 
   public AeronOptions() {}
 
@@ -36,10 +30,6 @@ public final class AeronOptions {
     this.connectTimeout = other.connectTimeout;
     this.backpressureTimeout = other.backpressureTimeout;
     this.adminActionTimeout = other.adminActionTimeout;
-    this.bufferCalculator = other.bufferCalculator;
-    this.bufferWriter = other.bufferWriter;
-    this.bufferMapper = other.bufferMapper;
-    this.bufferDisposer = other.bufferDisposer;
   }
 
   public AeronResources resources() {
@@ -97,39 +87,6 @@ public final class AeronOptions {
 
   public AeronOptions adminActionTimeout(Duration adminActionTimeout) {
     return set(s -> s.adminActionTimeout = adminActionTimeout);
-  }
-
-  public Function<Object, Integer> bufferCalculator() {
-    return bufferCalculator;
-  }
-
-  public AeronOptions bufferCalculator(Function<Object, Integer> bufferCalculator) {
-    return set(s -> s.bufferCalculator = bufferCalculator);
-  }
-
-  public Function<MutableDirectBuffer, Function<Integer, Function<Object, Void>>> bufferWriter() {
-    return bufferWriter;
-  }
-
-  public AeronOptions bufferWriter(
-      Function<MutableDirectBuffer, Function<Integer, Function<Object, Void>>> bufferWriter) {
-    return set(s -> s.bufferWriter = bufferWriter);
-  }
-
-  public Function<Object, DirectBuffer> bufferMapper() {
-    return bufferMapper;
-  }
-
-  public AeronOptions bufferMapper(Function<Object, DirectBuffer> bufferMapper) {
-    return set(s -> s.bufferMapper = bufferMapper);
-  }
-
-  public Consumer<Object> bufferDisposer() {
-    return bufferDisposer;
-  }
-
-  public AeronOptions bufferDisposer(Consumer<Object> bufferDisposer) {
-    return set(s -> s.bufferDisposer = bufferDisposer);
   }
 
   private AeronOptions set(Consumer<AeronOptions> c) {

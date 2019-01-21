@@ -21,7 +21,7 @@ public class ServerServerSends {
               connection ->
                   connection
                       .outbound()
-                      .send(
+                      .sendString(
                           Flux.range(1, 10000)
                               .delayElements(Duration.ofMillis(250))
                               .map(String::valueOf)

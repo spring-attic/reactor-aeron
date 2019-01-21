@@ -81,7 +81,7 @@ public class AeronConnectionTest extends BaseAeronTest {
     AeronConnection connection = createConnection();
     connection
         .outbound()
-        .send(
+        .sendString(
             Flux.range(1, 100)
                 .delayElements(Duration.ofSeconds(1))
                 .map(String::valueOf)
@@ -105,7 +105,7 @@ public class AeronConnectionTest extends BaseAeronTest {
             connection ->
                 connection
                     .outbound()
-                    .send(
+                    .sendString(
                         Flux.fromStream(Stream.of("hello1", "2", "3"))
                             .delayElements(Duration.ofSeconds(1))
                             .log("server1"))
@@ -165,7 +165,7 @@ public class AeronConnectionTest extends BaseAeronTest {
         .subscribe();
     client
         .outbound()
-        .send(
+        .sendBuffer(
             Mono.<ByteBuffer>never()
                 .log("CLIENT_OUTBOUND_SEND")
                 .doFinally(s -> clientConnectionLatch.countDown()))
@@ -212,7 +212,7 @@ public class AeronConnectionTest extends BaseAeronTest {
               .then()
               .subscribe();
           c.outbound()
-              .send(
+              .sendBuffer(
                   Mono.<ByteBuffer>never()
                       .log("SERVER_OUTBOUND_SEND")
                       .doFinally(s -> serverConnectionLatch.countDown()))
