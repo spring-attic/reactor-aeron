@@ -12,12 +12,13 @@ public interface AeronOutbound extends Publisher<Void> {
    * Send data to the peer, listen for any error on write and close on terminal signal
    * (complete|error).
    *
+   * @param <B> abstract buffer type (comes from client code)
    * @param dataStream the dataStream publishing items to send
-   * @param bufferMapper abstract buffer mapper to {@link DirectBuffer} buffer
+   * @param bufferHandler abstract buffer handler for {@link DirectBuffer} buffer
    * @return A new {@link AeronOutbound} to append further send. It will emit a complete signal upon
    *     successful sequence write or an error during write.
    */
-  <B> AeronOutbound send(Publisher<B> dataStream, DirectBufferHandler<? super B> bufferMapper);
+  <B> AeronOutbound send(Publisher<B> dataStream, DirectBufferHandler<? super B> bufferHandler);
 
   /**
    * Send data to the peer, listen for any error on write and close on terminal signal

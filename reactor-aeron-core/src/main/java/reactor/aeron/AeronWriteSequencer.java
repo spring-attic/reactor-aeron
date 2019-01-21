@@ -19,7 +19,7 @@ final class AeronWriteSequencer {
   /**
    * Adds a client defined data publisher to {@link AeronWriteSequencer} instance.
    *
-   * @param <B> abstract buffer type (come from client code)
+   * @param <B> abstract buffer type (comes from client code)
    * @param publisher {@link DirectBuffer} data publisher
    * @param bufferHandler abstract buffer type handler {@link DirectBufferHandler}
    * @return mono result

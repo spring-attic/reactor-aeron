@@ -22,8 +22,8 @@ final class AeronOutboundThen implements AeronOutbound {
 
   @Override
   public <B> AeronOutbound send(
-      Publisher<B> dataStream, DirectBufferHandler<? super B> bufferMapper) {
-    return source.send(dataStream, bufferMapper);
+      Publisher<B> dataStream, DirectBufferHandler<? super B> bufferHandler) {
+    return source.send(dataStream, bufferHandler);
   }
 
   @Override
