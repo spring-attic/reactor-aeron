@@ -2,9 +2,10 @@ package reactor.aeron;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.function.Function;
+import java.util.stream.Stream;
+import org.agrona.DirectBuffer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,7 +53,7 @@ class AeronServerTest extends BaseAeronTest {
 
     createConnection()
         .outbound()
-        .send(ByteBufferFlux.fromString("Hello", "world!").log("send"))
+        .sendString(Flux.fromStream(Stream.of("Hello", "world!")).log("send"))
         .then()
         .subscribe();
 
@@ -61,7 +62,7 @@ class AeronServerTest extends BaseAeronTest {
 
   @Test
   public void testServerDisconnectsClientsUponShutdown() throws InterruptedException {
-    ReplayProcessor<ByteBuffer> processor = ReplayProcessor.create();
+    ReplayProcessor<DirectBuffer> processor = ReplayProcessor.create();
 
     OnDisposable server =
         createServer(
