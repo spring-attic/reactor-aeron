@@ -1,6 +1,7 @@
 package reactor.aeron;
 
 import io.aeron.Image;
+import java.time.Duration;
 import java.util.function.Function;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
@@ -41,17 +42,7 @@ final class AeronClientConnector {
   Mono<AeronConnection> start() {
     return Mono.defer(
         () -> {
-          // outbound->Pub(endpoint, sessionId)
-          options.sessionIdGenerator();
-          // TODO for SG
-
-          String outboundChannel = options.outboundUri().asString();
-
-          return resources
-              .publication(outboundChannel, STREAM_ID, options)
-              // TODO here problem possible since sessionId is not globally unique; need to
-              //  retry few times if connection wasn't succeeeded
-              .flatMap(MessagePublication::ensureConnected)
+          return connect()
               .flatMap(
                   publication -> {
                     // inbound->MDC(sessionId)->Sub(control-endpoint, sessionId)
@@ -135,5 +126,60 @@ final class AeronClientConnector {
 
               return connection.start(handler).doOnError(ex -> connection.dispose());
             });
+  }
+
+  private Mono<MessagePublication> connect() {
+    return Mono.defer(
+        () -> {
+          Duration retryInterval = Duration.ofMillis(300);
+          long retryCount = options.connectTimeout().toMillis() / retryInterval.toMillis();
+          retryCount = Math.max(retryCount, 1);
+
+          return Mono.defer(
+                  () -> {
+                    String outboundChannel;
+
+                    if (options.sessionIdGenerator() != null) {
+                      // only for test
+                      int sessionId = options.sessionIdGenerator().get();
+                      outboundChannel =
+                          options
+                              .outboundUri()
+                              .uri(options -> options.sessionId(sessionId))
+                              .asString();
+
+                    } else {
+                      // outbound->Pub(endpoint, sessionId)
+                      outboundChannel = options.outboundUri().asString();
+                    }
+                    return resources.publication(outboundChannel, STREAM_ID, options);
+                  })
+              .flatMap(this::ensureConnected)
+              .retryBackoff(retryCount, retryInterval, retryInterval)
+              .timeout(options.connectTimeout())
+              .doOnError(
+                  ex -> logger.warn("aeron.Publication is not connected after several retries"));
+        });
+  }
+
+  private Mono<MessagePublication> ensureConnected(MessagePublication messagePublication) {
+    return Mono.defer(
+        () -> {
+          Duration retryInterval = Duration.ofMillis(100);
+          Duration ensureConnectedTimeout = options.connectTimeout().dividedBy(5);
+          long retryCount = ensureConnectedTimeout.toMillis() / retryInterval.toMillis();
+          retryCount = Math.max(retryCount, 1);
+
+          return Mono.defer(
+                  () ->
+                      messagePublication.isConnected()
+                          ? Mono.just(messagePublication)
+                          : Mono.error(
+                              AeronExceptions.failWithPublication(
+                                  "aeron.Publication is not connected")))
+              .retryBackoff(retryCount, retryInterval, retryInterval)
+              .timeout(ensureConnectedTimeout)
+              .doOnError(ex -> messagePublication.dispose());
+        });
   }
 }

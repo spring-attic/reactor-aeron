@@ -32,8 +32,7 @@ class AeronMultiClientTest extends BaseAeronTest {
   @AfterEach
   void afterEach() {
     Mono.whenDelayError(
-            clientResources
-                .stream()
+            clientResources.stream()
                 .peek(AeronResources::dispose)
                 .map(AeronResources::onDispose)
                 .collect(Collectors.toList()))
@@ -55,15 +54,17 @@ class AeronMultiClientTest extends BaseAeronTest {
             .block(TIMEOUT);
 
     // create the first client connection
-    AeronConnection clientConnection1 =
-        AeronClient.create(newClientResources())
-            .options("localhost", serverPort, serverControlPort)
-            .options(options -> options.connectTimeout(CONNECT_TIMEOUT))
-            .options(
-                options ->
-                    options.outboundUri(options.outboundUri().uri(o -> o.sessionId(sessionId))))
-            .connect()
-            .block(TIMEOUT);
+    StepVerifier.create(
+            AeronClient.create(newClientResources())
+                .options("localhost", serverPort, serverControlPort)
+                .options(options -> options.connectTimeout(CONNECT_TIMEOUT))
+                .options(
+                    options ->
+                        options.outboundUri(options.outboundUri().uri(o -> o.sessionId(sessionId))))
+                .connect())
+        .expectNextCount(1)
+        .expectComplete()
+        .verify(CONNECT_TIMEOUT.plusSeconds(1));
 
     // create the second client connection with the same session id
     StepVerifier.create(
@@ -79,7 +80,7 @@ class AeronMultiClientTest extends BaseAeronTest {
   }
 
   @Test
-  public void testMultiClientWithTheSameSessionIdWtihRecovery() {
+  public void testMultiClientWithTheSameSessionIdWithRecovery() {
     OnDisposable server =
         AeronServer.create(serverResources)
             .options("localhost", serverPort, serverControlPort)
@@ -90,13 +91,15 @@ class AeronMultiClientTest extends BaseAeronTest {
     AtomicInteger sessionIdCounterClient1 = new AtomicInteger();
     Supplier<Integer> sessionIdGeneratorClient1 = sessionIdCounterClient1::getAndIncrement;
 
-    AeronConnection clientConnection1 =
-        AeronClient.create(newClientResources())
-            .options("localhost", serverPort, serverControlPort)
-            .options(options -> options.connectTimeout(CONNECT_TIMEOUT))
-            .options(options -> options.sessionIdGenerator(sessionIdGeneratorClient1))
-            .connect()
-            .block(TIMEOUT);
+    StepVerifier.create(
+            AeronClient.create(newClientResources())
+                .options("localhost", serverPort, serverControlPort)
+                .options(options -> options.connectTimeout(CONNECT_TIMEOUT))
+                .options(options -> options.sessionIdGenerator(sessionIdGeneratorClient1))
+                .connect())
+        .expectNextCount(1)
+        .expectComplete()
+        .verify(CONNECT_TIMEOUT.plusSeconds(1));
 
     // create the second client connection
     AtomicInteger sessionIdCounterClient2 = new AtomicInteger();
@@ -110,7 +113,21 @@ class AeronMultiClientTest extends BaseAeronTest {
                 .connect())
         .expectNextCount(1)
         .expectComplete()
-        .verify(CONNECT_TIMEOUT.plusSeconds(3));
+        .verify(CONNECT_TIMEOUT.plusSeconds(1));
+
+    // create the third client connection
+    AtomicInteger sessionIdCounterClient3 = new AtomicInteger();
+    Supplier<Integer> sessionIdGeneratorClient3 = sessionIdCounterClient3::getAndIncrement;
+
+    StepVerifier.create(
+            AeronClient.create(newClientResources())
+                .options("localhost", serverPort, serverControlPort)
+                .options(options -> options.connectTimeout(CONNECT_TIMEOUT))
+                .options(options -> options.sessionIdGenerator(sessionIdGeneratorClient3))
+                .connect())
+        .expectNextCount(1)
+        .expectComplete()
+        .verify(CONNECT_TIMEOUT.plusSeconds(1));
   }
 
   private AeronResources newClientResources() {
