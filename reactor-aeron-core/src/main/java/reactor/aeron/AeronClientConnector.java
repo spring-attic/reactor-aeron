@@ -42,6 +42,9 @@ final class AeronClientConnector {
     return Mono.defer(
         () -> {
           // outbound->Pub(endpoint, sessionId)
+          options.sessionIdGenerator();
+          // TODO for SG
+
           String outboundChannel = options.outboundUri().asString();
 
           return resources
