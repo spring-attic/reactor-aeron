@@ -69,10 +69,9 @@ public class ServerThroughput {
                   connection
                       .inbound()
                       .receive()
-                      .asString()
                       .doOnNext(
                           buffer -> {
-                            int size = buffer.length() / 2;
+                            int size = buffer.capacity();
                             queue.add(new Data(now(), size));
                             counter.addAndGet(size);
                           })
