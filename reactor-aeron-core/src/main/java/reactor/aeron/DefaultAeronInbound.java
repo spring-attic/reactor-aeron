@@ -30,7 +30,7 @@ final class DefaultAeronInbound implements AeronInbound {
   private final AeronEventLoop eventLoop;
   private final FluxReceive inbound = new FluxReceive();
   private final FragmentHandler fragmentHandler =
-      new ImageFragmentAssembler(new InnerFragmentHandler());
+      new ImageFragmentAssembler(new FragmentHandlerImpl());
   private final MessageSubscription subscription;
 
   private volatile long requested;
@@ -88,7 +88,7 @@ final class DefaultAeronInbound implements AeronInbound {
     }
   }
 
-  private class InnerFragmentHandler implements FragmentHandler {
+  private class FragmentHandlerImpl implements FragmentHandler {
 
     @Override
     public void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
