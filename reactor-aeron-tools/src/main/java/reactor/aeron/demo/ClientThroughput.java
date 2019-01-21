@@ -23,7 +23,7 @@ public class ClientThroughput {
               connection ->
                   connection
                       .outbound()
-                      .send(Flux.range(0, Integer.MAX_VALUE).map(i -> buffer))
+                      .sendBuffer(Flux.range(0, Integer.MAX_VALUE).map(i -> buffer))
                       .then(connection.onDispose()))
           .connect()
           .block();

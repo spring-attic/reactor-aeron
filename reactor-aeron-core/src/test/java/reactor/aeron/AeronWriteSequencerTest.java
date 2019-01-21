@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+import org.agrona.DirectBuffer;
+import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -44,9 +46,9 @@ class AeronWriteSequencerTest {
     // the Publication is already disposed
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.empty());
     // long wait task
-    Mockito.when(messagePublication.publish(Mockito.any())).thenReturn(Mono.never());
+    Mockito.when(messagePublication.publish(Mockito.any(), Mockito.any())).thenReturn(Mono.never());
 
-    Mono<ByteBuffer> request = Mono.just(toByteBuffer("test"));
+    Mono<DirectBuffer> request = Mono.just(toDirectBuffer("test"));
 
     StepVerifier.create(aeronWriteSequencer.write(request))
         .expectErrorSatisfies(
@@ -63,7 +65,7 @@ class AeronWriteSequencerTest {
     // the Publication is already disposed
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.empty());
 
-    Mono<ByteBuffer> request = Mono.empty();
+    Mono<DirectBuffer> request = Mono.empty();
 
     StepVerifier.create(aeronWriteSequencer.write(request))
         .expectErrorSatisfies(
@@ -81,9 +83,10 @@ class AeronWriteSequencerTest {
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.never());
     // publication rejects incoming requests
     RuntimeException expected = new RuntimeException("some reasons");
-    Mockito.when(messagePublication.publish(Mockito.any())).thenReturn(Mono.error(expected));
+    Mockito.when(messagePublication.publish(Mockito.any(), Mockito.any()))
+        .thenReturn(Mono.error(expected));
 
-    Mono<ByteBuffer> request = Mono.just(toByteBuffer("test"));
+    Mono<DirectBuffer> request = Mono.just(toDirectBuffer("test"));
 
     StepVerifier.create(aeronWriteSequencer.write(request))
         .expectErrorSatisfies(
@@ -99,7 +102,7 @@ class AeronWriteSequencerTest {
     // the Publication is ready
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.never());
 
-    Mono<ByteBuffer> request = Mono.empty();
+    Mono<DirectBuffer> request = Mono.empty();
 
     StepVerifier.create(aeronWriteSequencer.write(request)).expectComplete().verify(TIMEOUT);
   }
@@ -111,8 +114,8 @@ class AeronWriteSequencerTest {
 
     // mono never request
     MonoProcessor<Throwable> latch = MonoProcessor.create();
-    Mono<ByteBuffer> request =
-        Mono.<ByteBuffer>never()
+    Mono<DirectBuffer> request =
+        Mono.<DirectBuffer>never()
             .doOnNext(item -> latch.onError(fail("it was emitted an item")))
             .doOnError(ex -> latch.onError(fail("it was emitted ex: ", ex)))
             .doOnTerminate(() -> latch.onError(fail("it was emitted the completion signal")))
@@ -134,10 +137,10 @@ class AeronWriteSequencerTest {
 
     // mono request with delay
     MonoProcessor<Throwable> latch = MonoProcessor.create();
-    Mono<ByteBuffer> request =
+    Mono<DirectBuffer> request =
         Mono.delay(TIMEOUT)
             .map(i -> "test" + i)
-            .map(this::toByteBuffer)
+            .map(this::toDirectBuffer)
             .doOnNext(item -> latch.onError(fail("it was emitted an item")))
             .doOnError(ex -> latch.onError(fail("it was emitted ex: ", ex)))
             .doOnTerminate(() -> latch.onError(fail("it was emitted the completion signal")))
@@ -159,7 +162,7 @@ class AeronWriteSequencerTest {
 
     // long wait task
     MonoProcessor<Throwable> latch = MonoProcessor.create();
-    Mockito.when(messagePublication.publish(Mockito.any()))
+    Mockito.when(messagePublication.publish(Mockito.any(), Mockito.any()))
         .thenReturn(
             Mono.<Void>never()
                 .log("response")
@@ -169,7 +172,7 @@ class AeronWriteSequencerTest {
                 .doOnCancel(latch::onComplete));
 
     // mono request
-    Mono<ByteBuffer> request = Mono.just(toByteBuffer("test"));
+    Mono<DirectBuffer> request = Mono.just(toDirectBuffer("test"));
 
     StepVerifier.create(aeronWriteSequencer.write(request))
         .thenAwait(TIMEOUT.dividedBy(2))
@@ -186,11 +189,11 @@ class AeronWriteSequencerTest {
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.never());
     // long wait task
     Duration delayForFinishEnqueueTask = TIMEOUT.dividedBy(2);
-    Mockito.when(messagePublication.publish(Mockito.any()))
+    Mockito.when(messagePublication.publish(Mockito.any(), Mockito.any()))
         .thenReturn(Mono.delay(delayForFinishEnqueueTask).then());
 
     // mono request
-    Mono<ByteBuffer> request = Mono.just(toByteBuffer("test"));
+    Mono<DirectBuffer> request = Mono.just(toDirectBuffer("test"));
 
     long start = System.nanoTime();
     StepVerifier.create(aeronWriteSequencer.write(request)).expectComplete().verify(TIMEOUT);
@@ -207,7 +210,7 @@ class AeronWriteSequencerTest {
 
     // mono error request
     RuntimeException expected = new RuntimeException("request error");
-    Mono<ByteBuffer> request = Mono.error(expected);
+    Mono<DirectBuffer> request = Mono.error(expected);
 
     StepVerifier.create(aeronWriteSequencer.write(request))
         .expectErrorSatisfies(
@@ -246,11 +249,11 @@ class AeronWriteSequencerTest {
     Mono<Void> first = responses.get(0);
     Mono<Void>[] next = responses.stream().skip(1).toArray(Mono[]::new);
 
-    Mockito.when(messagePublication.publish(Mockito.any())).thenReturn(first, next);
+    Mockito.when(messagePublication.publish(Mockito.any(), Mockito.any())).thenReturn(first, next);
 
     // flux request
-    Flux<ByteBuffer> request =
-        Flux.range(0, FLUX_REQUESTS).map(i -> "test" + i).map(this::toByteBuffer);
+    Flux<DirectBuffer> request =
+        Flux.range(0, FLUX_REQUESTS).map(i -> "test" + i).map(this::toDirectBuffer);
 
     StepVerifier.create(aeronWriteSequencer.write(request))
         .thenAwait(TIMEOUT)
@@ -267,12 +270,12 @@ class AeronWriteSequencerTest {
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.never());
     // long wait task
     Duration delayForFinishEnqueueTasks = TIMEOUT.dividedBy(2).dividedBy(FLUX_REQUESTS);
-    Mockito.when(messagePublication.publish(Mockito.any()))
+    Mockito.when(messagePublication.publish(Mockito.any(), Mockito.any()))
         .thenReturn(Mono.delay(delayForFinishEnqueueTasks).then());
 
     // flux request
-    Flux<ByteBuffer> request =
-        Flux.range(0, FLUX_REQUESTS).map(i -> "test" + i).map(this::toByteBuffer);
+    Flux<DirectBuffer> request =
+        Flux.range(0, FLUX_REQUESTS).map(i -> "test" + i).map(this::toDirectBuffer);
 
     long start = System.nanoTime();
     StepVerifier.create(aeronWriteSequencer.write(request)).expectComplete().verify(TIMEOUT);
@@ -290,11 +293,11 @@ class AeronWriteSequencerTest {
 
     // flux request with delay
     MonoProcessor<Throwable> latch = MonoProcessor.create();
-    Flux<ByteBuffer> request =
+    Flux<DirectBuffer> request =
         Flux.range(0, FLUX_REQUESTS)
             .delayElements(TIMEOUT)
             .map(i -> "test" + i)
-            .map(this::toByteBuffer)
+            .map(this::toDirectBuffer)
             .doOnNext(item -> latch.onError(fail("it was emitted an item")))
             .doOnError(ex -> latch.onError(fail("it was emitted ex: ", ex)))
             .doOnTerminate(() -> latch.onError(fail("it was emitted the completion signal")))
@@ -321,7 +324,7 @@ class AeronWriteSequencerTest {
     ReplayProcessor<Integer> latch = ReplayProcessor.create();
 
     // generates responses
-    Mockito.when(messagePublication.publish(Mockito.any()))
+    Mockito.when(messagePublication.publish(Mockito.any(), Mockito.any()))
         .thenReturn(
             Mono.<Void>never()
                 .doOnNext(item -> latch.onError(fail("it was emitted an item")))
@@ -330,10 +333,10 @@ class AeronWriteSequencerTest {
                 .doOnCancel(() -> latch.onNext(1)));
 
     // flux request
-    Flux<ByteBuffer> request =
+    Flux<DirectBuffer> request =
         Flux.range(0, waitingTasks)
             .map(i -> "test" + i)
-            .map(this::toByteBuffer)
+            .map(this::toDirectBuffer)
             .concatWith(Mono.error(expected));
 
     StepVerifier.create(aeronWriteSequencer.write(request))
@@ -353,16 +356,16 @@ class AeronWriteSequencerTest {
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.empty());
     Mockito.when(messagePublication.isDisposed()).thenReturn(false);
     // long wait task
-    Mockito.when(messagePublication.publish(Mockito.any())).thenReturn(Mono.never());
+    Mockito.when(messagePublication.publish(Mockito.any(), Mockito.any())).thenReturn(Mono.never());
     RuntimeException expected = AeronExceptions.failWithPublicationUnavailable();
 
     // flux request
-    Flux<ByteBuffer> request =
+    Flux<DirectBuffer> request =
         Flux.range(0, FLUX_REQUESTS)
             .subscribeOn(Schedulers.single())
             .publishOn(Schedulers.single())
             .map(i -> "test" + i)
-            .map(this::toByteBuffer);
+            .map(this::toDirectBuffer);
 
     StepVerifier.create(aeronWriteSequencer.write(request).subscribeOn(Schedulers.single()))
         .expectErrorSatisfies(
@@ -381,7 +384,7 @@ class AeronWriteSequencerTest {
     RuntimeException expected = AeronExceptions.failWithPublicationUnavailable();
 
     // flux empty request
-    Flux<ByteBuffer> request = Flux.empty();
+    Flux<DirectBuffer> request = Flux.empty();
 
     StepVerifier.create(aeronWriteSequencer.write(request))
         .expectErrorSatisfies(
@@ -401,15 +404,15 @@ class AeronWriteSequencerTest {
 
     Mono<Void> first = Mono.empty();
     Mono<Void>[] next = new Mono[] {Mono.<Void>error(expected)};
-    Mockito.when(messagePublication.publish(Mockito.any())).thenReturn(first, next);
+    Mockito.when(messagePublication.publish(Mockito.any(), Mockito.any())).thenReturn(first, next);
 
     // flux request
-    Flux<ByteBuffer> request =
+    Flux<DirectBuffer> request =
         Flux.range(0, FLUX_REQUESTS)
             .subscribeOn(Schedulers.parallel())
             .publishOn(Schedulers.parallel())
             .map(i -> "test" + i)
-            .map(this::toByteBuffer);
+            .map(this::toDirectBuffer);
 
     StepVerifier.create(aeronWriteSequencer.write(request).subscribeOn(Schedulers.parallel()))
         .expectErrorSatisfies(
@@ -425,12 +428,12 @@ class AeronWriteSequencerTest {
     // the Publication is ready
     Mockito.when(messagePublication.onDispose()).thenReturn(Mono.never());
 
-    Flux<ByteBuffer> request = Flux.empty();
+    Flux<DirectBuffer> request = Flux.empty();
 
     StepVerifier.create(aeronWriteSequencer.write(request)).expectComplete().verify(TIMEOUT);
   }
 
-  private ByteBuffer toByteBuffer(String string) {
-    return ByteBuffer.wrap(string.getBytes(StandardCharsets.UTF_8));
+  private DirectBuffer toDirectBuffer(String string) {
+    return new UnsafeBuffer(ByteBuffer.wrap(string.getBytes(StandardCharsets.UTF_8)));
   }
 }
