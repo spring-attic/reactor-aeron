@@ -131,10 +131,12 @@ final class AeronClientConnector {
   private Mono<MessagePublication> connect() {
     return Mono.defer(
         () -> {
-          Duration retryInterval = Duration.ofMillis(300);
-          long retryCount = options.connectTimeout().toMillis() / retryInterval.toMillis();
-          retryCount = Math.max(retryCount, 1);
-
+          int retryCount = options.connectRetryCount();
+          Duration retryInterval = options.connectTimeout();
+          Duration overallConnectionTimeout = retryInterval;
+          if (retryCount > 0) {
+            overallConnectionTimeout = retryInterval.multipliedBy(retryCount);
+          }
           return Mono.defer(
                   () -> {
                     String outboundChannel;
@@ -156,7 +158,7 @@ final class AeronClientConnector {
                   })
               .flatMap(this::ensureConnected)
               .retryBackoff(retryCount, retryInterval, retryInterval)
-              .timeout(options.connectTimeout())
+              .timeout(overallConnectionTimeout)
               .doOnError(
                   ex -> logger.warn("aeron.Publication is not connected after several retries"));
         });
@@ -166,7 +168,7 @@ final class AeronClientConnector {
     return Mono.defer(
         () -> {
           Duration retryInterval = Duration.ofMillis(100);
-          Duration ensureConnectedTimeout = options.connectTimeout().dividedBy(5);
+          Duration ensureConnectedTimeout = options.connectTimeout();
           long retryCount = ensureConnectedTimeout.toMillis() / retryInterval.toMillis();
           retryCount = Math.max(retryCount, 1);
 

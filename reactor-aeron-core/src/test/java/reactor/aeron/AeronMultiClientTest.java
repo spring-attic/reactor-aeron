@@ -15,7 +15,8 @@ import reactor.test.StepVerifier;
 
 class AeronMultiClientTest extends BaseAeronTest {
 
-  public static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
+  private static final Duration CONNECT_TIMEOUT = Duration.ofMillis(1000);
+  private static final int CONNECT_RETRY_COUNT = 5;
 
   private int serverPort;
   private int serverControlPort;
@@ -64,7 +65,7 @@ class AeronMultiClientTest extends BaseAeronTest {
                 .connect())
         .expectNextCount(1)
         .expectComplete()
-        .verify(CONNECT_TIMEOUT.plusSeconds(1));
+        .verify(CONNECT_TIMEOUT.multipliedBy(CONNECT_RETRY_COUNT));
 
     // create the second client connection with the same session id
     StepVerifier.create(
@@ -76,7 +77,7 @@ class AeronMultiClientTest extends BaseAeronTest {
                         options.outboundUri(options.outboundUri().uri(o -> o.sessionId(sessionId))))
                 .connect())
         .expectError(TimeoutException.class)
-        .verify(CONNECT_TIMEOUT.plusSeconds(1));
+        .verify(CONNECT_TIMEOUT.multipliedBy(CONNECT_RETRY_COUNT));
   }
 
   @Test
@@ -95,11 +96,12 @@ class AeronMultiClientTest extends BaseAeronTest {
             AeronClient.create(newClientResources())
                 .options("localhost", serverPort, serverControlPort)
                 .options(options -> options.connectTimeout(CONNECT_TIMEOUT))
+                .options(options -> options.connectRetryCount(0))
                 .options(options -> options.sessionIdGenerator(sessionIdGeneratorClient1))
                 .connect())
         .expectNextCount(1)
         .expectComplete()
-        .verify(CONNECT_TIMEOUT.plusSeconds(1));
+        .verify(CONNECT_TIMEOUT.multipliedBy(CONNECT_RETRY_COUNT));
 
     // create the second client connection
     AtomicInteger sessionIdCounterClient2 = new AtomicInteger();
@@ -109,11 +111,12 @@ class AeronMultiClientTest extends BaseAeronTest {
             AeronClient.create(newClientResources())
                 .options("localhost", serverPort, serverControlPort)
                 .options(options -> options.connectTimeout(CONNECT_TIMEOUT))
+                .options(options -> options.connectRetryCount(3))
                 .options(options -> options.sessionIdGenerator(sessionIdGeneratorClient2))
                 .connect())
         .expectNextCount(1)
         .expectComplete()
-        .verify(CONNECT_TIMEOUT.plusSeconds(1));
+        .verify(CONNECT_TIMEOUT.multipliedBy(CONNECT_RETRY_COUNT));
 
     // create the third client connection
     AtomicInteger sessionIdCounterClient3 = new AtomicInteger();
@@ -123,11 +126,12 @@ class AeronMultiClientTest extends BaseAeronTest {
             AeronClient.create(newClientResources())
                 .options("localhost", serverPort, serverControlPort)
                 .options(options -> options.connectTimeout(CONNECT_TIMEOUT))
+                .options(options -> options.connectRetryCount(5))
                 .options(options -> options.sessionIdGenerator(sessionIdGeneratorClient3))
                 .connect())
         .expectNextCount(1)
         .expectComplete()
-        .verify(CONNECT_TIMEOUT.plusSeconds(1));
+        .verify(CONNECT_TIMEOUT.multipliedBy(CONNECT_RETRY_COUNT));
   }
 
   private AeronResources newClientResources() {

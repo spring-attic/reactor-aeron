@@ -18,6 +18,7 @@ public final class AeronOptions {
   private AeronChannelUriString inboundUri = new AeronChannelUriString();
   private AeronChannelUriString outboundUri = new AeronChannelUriString();
   private Duration connectTimeout = Duration.ofSeconds(5);
+  private int connectRetryCount = 1;
   private Duration backpressureTimeout = Duration.ofSeconds(5);
   private Duration adminActionTimeout = Duration.ofSeconds(5);
   private Supplier<Integer> sessionIdGenerator;
@@ -33,6 +34,7 @@ public final class AeronOptions {
     this.backpressureTimeout = other.backpressureTimeout;
     this.adminActionTimeout = other.adminActionTimeout;
     this.sessionIdGenerator = other.sessionIdGenerator;
+    this.connectRetryCount = other.connectRetryCount;
   }
 
   public AeronResources resources() {
@@ -74,6 +76,14 @@ public final class AeronOptions {
 
   public AeronOptions connectTimeout(Duration connectTimeout) {
     return set(s -> s.connectTimeout = connectTimeout);
+  }
+
+  public int connectRetryCount() {
+    return connectRetryCount;
+  }
+
+  public AeronOptions connectRetryCount(int connectRetryCount) {
+    return set(s -> s.connectRetryCount = connectRetryCount);
   }
 
   public Duration backpressureTimeout() {
