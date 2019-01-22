@@ -198,8 +198,36 @@ class MessagePublication implements OnDisposable {
     return onDispose;
   }
 
-  boolean isConnected() {
-    return publication.isConnected();
+  /**
+   * Spins (in async fashion) until {@link Publication#isConnected()} would have returned {@code
+   * true} or {@code connectTimeout} elapsed. See also {@link
+   * MessagePublication#ensureConnected0()}.
+   *
+   * @return mono result
+   */
+  Mono<MessagePublication> ensureConnected() {
+    return Mono.defer(
+        () -> {
+          Duration retryInterval = Duration.ofMillis(100);
+          long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
+          retryCount = Math.max(retryCount, 1);
+
+          return ensureConnected0()
+              .retryBackoff(retryCount, retryInterval, retryInterval)
+              .timeout(connectTimeout)
+              .doOnError(
+                  ex -> logger.warn("aeron.Publication is not connected after several retries"))
+              .thenReturn(this);
+        });
+  }
+
+  private Mono<Void> ensureConnected0() {
+    return Mono.defer(
+        () ->
+            publication.isConnected()
+                ? Mono.empty()
+                : Mono.error(
+                    AeronExceptions.failWithPublication("aeron.Publication is not connected")));
   }
 
   private void disposePublishTasks() {
