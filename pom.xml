@@ -22,7 +22,7 @@
   </scm>
 
   <properties>
-    <aeron.version>1.11.3</aeron.version>
+    <aeron.version>1.15.0</aeron.version>
     <reactor-core.version>3.2.2.RELEASE</reactor-core.version>
     <reactivestreams.version>1.0.2</reactivestreams.version>
     <netty-buffer.version>4.1.32.Final</netty-buffer.version>
