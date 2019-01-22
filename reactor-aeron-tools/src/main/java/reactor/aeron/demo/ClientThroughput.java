@@ -7,15 +7,13 @@ import reactor.core.publisher.Flux;
 
 public class ClientThroughput {
 
-  private static final String HOST = "localhost";
-
   /**
    * Main runner.
    *
    * @param args program arguments.
    */
   public static void main(String[] args) throws Exception {
-    AeronResources aeronResources = AeronResources.start();
+    AeronResources aeronResources = new AeronResources().useTmpDir().start().block();
     try {
       ByteBuffer buffer = ByteBuffer.allocate(1024);
 
@@ -25,16 +23,7 @@ public class ClientThroughput {
               connection ->
                   connection
                       .outbound()
-                      .send(
-                          Flux.create(
-                              sink -> {
-                                System.out.println("About to send");
-                                for (int i = 0; i < 10_000 * 1024; i++) {
-                                  sink.next(buffer);
-                                }
-                                sink.complete();
-                                System.out.println("Send complete");
-                              }))
+                      .sendBuffer(Flux.range(0, Integer.MAX_VALUE).map(i -> buffer))
                       .then(connection.onDispose()))
           .connect()
           .block();

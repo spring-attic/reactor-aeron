@@ -2,9 +2,10 @@ package reactor.aeron;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.function.Function;
+import java.util.stream.Stream;
+import org.agrona.DirectBuffer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,8 +25,8 @@ class AeronServerTest extends BaseAeronTest {
   void beforeEach() {
     serverPort = SocketUtils.findAvailableUdpPort();
     serverControlPort = SocketUtils.findAvailableUdpPort();
-    clientResources = AeronResources.start(AeronResourcesConfig.builder().numOfWorkers(1).build());
-    serverResources = AeronResources.start(AeronResourcesConfig.builder().numOfWorkers(1).build());
+    clientResources = new AeronResources().useTmpDir().singleWorker().start().block();
+    serverResources = new AeronResources().useTmpDir().singleWorker().start().block();
   }
 
   @AfterEach
@@ -52,7 +53,7 @@ class AeronServerTest extends BaseAeronTest {
 
     createConnection()
         .outbound()
-        .send(ByteBufferFlux.fromString("Hello", "world!").log("send"))
+        .sendString(Flux.fromStream(Stream.of("Hello", "world!")).log("send"))
         .then()
         .subscribe();
 
@@ -61,7 +62,7 @@ class AeronServerTest extends BaseAeronTest {
 
   @Test
   public void testServerDisconnectsClientsUponShutdown() throws InterruptedException {
-    ReplayProcessor<ByteBuffer> processor = ReplayProcessor.create();
+    ReplayProcessor<DirectBuffer> processor = ReplayProcessor.create();
 
     OnDisposable server =
         createServer(
@@ -84,11 +85,7 @@ class AeronServerTest extends BaseAeronTest {
 
     server.dispose();
 
-    // TODO add StepVerifier here and remove ThreadWatcher class
-
-    ThreadWatcher threadWatcher = new ThreadWatcher();
-
-    assertTrue(threadWatcher.awaitTerminated(5000, "single-", "parallel-"));
+    assertTrue(new ThreadWatcher().awaitTerminated(5000, "single-", "parallel-"));
   }
 
   private AeronConnection createConnection() {

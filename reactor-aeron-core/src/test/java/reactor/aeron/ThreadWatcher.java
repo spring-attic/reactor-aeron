@@ -6,7 +6,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-// TODO to be removed, used in single place in single test
 public class ThreadWatcher {
 
   private List<String> beforeThreadNames;

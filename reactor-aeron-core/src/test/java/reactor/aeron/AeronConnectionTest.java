@@ -9,6 +9,8 @@ import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.stream.Stream;
+import org.agrona.DirectBuffer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,17 +33,19 @@ public class AeronConnectionTest extends BaseAeronTest {
     serverPort = SocketUtils.findAvailableUdpPort();
     serverControlPort = SocketUtils.findAvailableUdpPort();
     clientResources =
-        AeronResources.start(
-            AeronResourcesConfig.builder()
-                .numOfWorkers(1)
-                .imageLivenessTimeout(IMAGE_TIMEOUT)
-                .build());
+        new AeronResources()
+            .useTmpDir()
+            .singleWorker()
+            .media(mdc -> mdc.imageLivenessTimeoutNs(IMAGE_TIMEOUT.toNanos()))
+            .start()
+            .block();
     serverResources =
-        AeronResources.start(
-            AeronResourcesConfig.builder()
-                .numOfWorkers(1)
-                .imageLivenessTimeout(IMAGE_TIMEOUT)
-                .build());
+        new AeronResources()
+            .useTmpDir()
+            .singleWorker()
+            .media(mdc -> mdc.imageLivenessTimeoutNs(IMAGE_TIMEOUT.toNanos()))
+            .start()
+            .block();
   }
 
   @AfterEach
@@ -64,7 +68,7 @@ public class AeronConnectionTest extends BaseAeronTest {
   @Test
   public void testServerDisconnectsSessionAndClientHandleUnavailableImage()
       throws InterruptedException {
-    ReplayProcessor<ByteBuffer> processor = ReplayProcessor.create();
+    ReplayProcessor<DirectBuffer> processor = ReplayProcessor.create();
     CountDownLatch latch = new CountDownLatch(1);
 
     createServer(
@@ -101,8 +105,8 @@ public class AeronConnectionTest extends BaseAeronTest {
             connection ->
                 connection
                     .outbound()
-                    .send(
-                        ByteBufferFlux.fromString("hello1", "2", "3")
+                    .sendString(
+                        Flux.fromStream(Stream.of("hello1", "2", "3"))
                             .delayElements(Duration.ofSeconds(1))
                             .log("server1"))
                     .then(connection.onDispose()));
@@ -161,7 +165,7 @@ public class AeronConnectionTest extends BaseAeronTest {
         .subscribe();
     client
         .outbound()
-        .send(
+        .sendBuffer(
             Mono.<ByteBuffer>never()
                 .log("CLIENT_OUTBOUND_SEND")
                 .doFinally(s -> clientConnectionLatch.countDown()))
@@ -208,7 +212,7 @@ public class AeronConnectionTest extends BaseAeronTest {
               .then()
               .subscribe();
           c.outbound()
-              .send(
+              .sendBuffer(
                   Mono.<ByteBuffer>never()
                       .log("SERVER_OUTBOUND_SEND")
                       .doFinally(s -> serverConnectionLatch.countDown()))

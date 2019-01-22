@@ -107,6 +107,6 @@ final class DuplexAeronConnection implements AeronConnection {
 
   @Override
   public String toString() {
-    return "DefaultAeronConnection0x" + Integer.toHexString(sessionId);
+    return "DefaultAeronConnection" + Integer.toHexString(sessionId);
   }
 }

@@ -22,9 +22,10 @@
   </scm>
 
   <properties>
-    <aeron.version>1.11.3</aeron.version>
+    <aeron.version>1.15.0</aeron.version>
     <reactor-core.version>3.2.2.RELEASE</reactor-core.version>
     <reactivestreams.version>1.0.2</reactivestreams.version>
+    <netty-buffer.version>4.1.32.Final</netty-buffer.version>
 
     <slf4j.version>1.7.7</slf4j.version>
     <log4j.version>2.11.0</log4j.version>
@@ -52,17 +53,18 @@
         <version>${aeron.version}</version>
       </dependency>
 
+      <!-- Netty Buffer -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-buffer</artifactId>
+        <version>${netty-buffer.version}</version>
+      </dependency>
+
       <!-- Reactor Core -->
       <dependency>
         <groupId>io.projectreactor</groupId>
         <artifactId>reactor-core</artifactId>
         <version>${reactor-core.version}</version>
-      </dependency>
-
-      <dependency>
-        <groupId>io.projectreactor.addons</groupId>
-        <artifactId>reactor-extra</artifactId>
-        <version>3.2.0.RELEASE</version>
       </dependency>
 
       <!-- Reactive Streams -->

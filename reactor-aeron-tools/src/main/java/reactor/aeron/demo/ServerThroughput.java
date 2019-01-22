@@ -31,7 +31,7 @@ public class ServerThroughput {
    * @param args program arguments.
    */
   public static void main(String[] args) throws Exception {
-    AeronResources aeronResources = AeronResources.start();
+    AeronResources aeronResources = new AeronResources().useTmpDir().start().block();
     try {
       Queue<Data> queue = new ConcurrentLinkedDeque<>();
       AtomicLong counter = new AtomicLong();
@@ -71,7 +71,7 @@ public class ServerThroughput {
                       .receive()
                       .doOnNext(
                           buffer -> {
-                            int size = buffer.remaining();
+                            int size = buffer.capacity();
                             queue.add(new Data(now(), size));
                             counter.addAndGet(size);
                           })

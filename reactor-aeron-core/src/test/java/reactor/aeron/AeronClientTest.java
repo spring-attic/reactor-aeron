@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,8 +37,8 @@ class AeronClientTest extends BaseAeronTest {
   void beforeEach() {
     serverPort = SocketUtils.findAvailableUdpPort();
     serverControlPort = SocketUtils.findAvailableUdpPort();
-    clientResources = AeronResources.start(AeronResourcesConfig.builder().numOfWorkers(1).build());
-    serverResources = AeronResources.start(AeronResourcesConfig.builder().numOfWorkers(1).build());
+    clientResources = new AeronResources().useTmpDir().singleWorker().start().block();
+    serverResources = new AeronResources().useTmpDir().singleWorker().start().block();
   }
 
   @AfterEach
@@ -58,7 +59,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(ByteBufferFlux.fromString("hello1", "2", "3").log("server"))
+                .sendString(Flux.fromStream(Stream.of("hello1", "2", "3")).log("server"))
                 .then(connection.onDispose()));
 
     AeronConnection connection = createConnection();
@@ -79,7 +80,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(ByteBufferFlux.fromString(str, str, str).log("server"))
+                .sendString(Flux.fromStream(Stream.of(str, str, str)).log("server"))
                 .then(connection.onDispose()));
 
     AeronConnection connection = createConnection();
@@ -97,7 +98,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(ByteBufferFlux.fromString("1", "2", "3").log("server"))
+                .sendString(Flux.fromStream(Stream.of("1", "2", "3")).log("server"))
                 .then(connection.onDispose()));
 
     AeronConnection connection1 = createConnection();
@@ -169,7 +170,11 @@ class AeronClientTest extends BaseAeronTest {
 
     Flux.range(0, count)
         .flatMap(
-            i -> connection1.outbound().send(ByteBufferFlux.fromString("client_send:" + i)).then())
+            i ->
+                connection1
+                    .outbound()
+                    .sendString(Flux.fromStream(Stream.of("client_send:" + i)))
+                    .then())
         .then()
         .subscribe();
 
@@ -273,7 +278,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(ByteBufferFlux.fromString("1", "2", "3").log("server"))
+                .sendString(Flux.fromStream(Stream.of("1", "2", "3")).log("server"))
                 .then(connection.onDispose()));
 
     ReplayProcessor<String> processor1 = ReplayProcessor.create();

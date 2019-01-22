@@ -3,6 +3,7 @@ package reactor.aeron;
 import java.time.Duration;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import org.reactivestreams.Publisher;
 
 /**
@@ -14,20 +15,17 @@ public final class AeronOptions {
 
   private AeronResources resources;
   private Function<? super AeronConnection, ? extends Publisher<Void>> handler;
-  private AeronChannelUri inboundUri = new AeronChannelUri();
-  private AeronChannelUri outboundUri = new AeronChannelUri();
+  private AeronChannelUriString inboundUri = new AeronChannelUriString();
+  private AeronChannelUriString outboundUri = new AeronChannelUriString();
   private Duration connectTimeout = Duration.ofSeconds(5);
+  private int connectRetryCount = 0;
   private Duration backpressureTimeout = Duration.ofSeconds(5);
   private Duration adminActionTimeout = Duration.ofSeconds(5);
+  private Supplier<Integer> sessionIdGenerator;
 
   public AeronOptions() {}
 
-  /**
-   * Copy constructor.
-   *
-   * @param other instance to copy from
-   */
-  public AeronOptions(AeronOptions other) {
+  AeronOptions(AeronOptions other) {
     this.resources = other.resources;
     this.handler = other.handler;
     this.inboundUri = other.inboundUri;
@@ -35,6 +33,8 @@ public final class AeronOptions {
     this.connectTimeout = other.connectTimeout;
     this.backpressureTimeout = other.backpressureTimeout;
     this.adminActionTimeout = other.adminActionTimeout;
+    this.sessionIdGenerator = other.sessionIdGenerator;
+    this.connectRetryCount = other.connectRetryCount;
   }
 
   public AeronResources resources() {
@@ -54,19 +54,19 @@ public final class AeronOptions {
     return set(s -> s.handler = handler);
   }
 
-  public AeronChannelUri inboundUri() {
+  public AeronChannelUriString inboundUri() {
     return inboundUri;
   }
 
-  public AeronOptions inboundUri(AeronChannelUri inboundUri) {
+  public AeronOptions inboundUri(AeronChannelUriString inboundUri) {
     return set(s -> s.inboundUri = inboundUri);
   }
 
-  public AeronChannelUri outboundUri() {
+  public AeronChannelUriString outboundUri() {
     return outboundUri;
   }
 
-  public AeronOptions outboundUri(AeronChannelUri outboundUri) {
+  public AeronOptions outboundUri(AeronChannelUriString outboundUri) {
     return set(s -> s.outboundUri = outboundUri);
   }
 
@@ -76,6 +76,14 @@ public final class AeronOptions {
 
   public AeronOptions connectTimeout(Duration connectTimeout) {
     return set(s -> s.connectTimeout = connectTimeout);
+  }
+
+  public int connectRetryCount() {
+    return connectRetryCount;
+  }
+
+  public AeronOptions connectRetryCount(int connectRetryCount) {
+    return set(s -> s.connectRetryCount = connectRetryCount);
   }
 
   public Duration backpressureTimeout() {
@@ -92,6 +100,14 @@ public final class AeronOptions {
 
   public AeronOptions adminActionTimeout(Duration adminActionTimeout) {
     return set(s -> s.adminActionTimeout = adminActionTimeout);
+  }
+
+  Supplier<Integer> sessionIdGenerator() {
+    return sessionIdGenerator;
+  }
+
+  AeronOptions sessionIdGenerator(Supplier<Integer> sessionIdGenerator) {
+    return set(s -> s.sessionIdGenerator = sessionIdGenerator);
   }
 
   private AeronOptions set(Consumer<AeronOptions> c) {
