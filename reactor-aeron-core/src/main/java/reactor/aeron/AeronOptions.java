@@ -3,6 +3,7 @@ package reactor.aeron;
 import java.time.Duration;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import org.reactivestreams.Publisher;
 
 /**
@@ -17,8 +18,10 @@ public final class AeronOptions {
   private AeronChannelUriString inboundUri = new AeronChannelUriString();
   private AeronChannelUriString outboundUri = new AeronChannelUriString();
   private Duration connectTimeout = Duration.ofSeconds(5);
+  private int connectRetryCount = 0;
   private Duration backpressureTimeout = Duration.ofSeconds(5);
   private Duration adminActionTimeout = Duration.ofSeconds(5);
+  private Supplier<Integer> sessionIdGenerator;
 
   public AeronOptions() {}
 
@@ -30,6 +33,8 @@ public final class AeronOptions {
     this.connectTimeout = other.connectTimeout;
     this.backpressureTimeout = other.backpressureTimeout;
     this.adminActionTimeout = other.adminActionTimeout;
+    this.sessionIdGenerator = other.sessionIdGenerator;
+    this.connectRetryCount = other.connectRetryCount;
   }
 
   public AeronResources resources() {
@@ -73,6 +78,14 @@ public final class AeronOptions {
     return set(s -> s.connectTimeout = connectTimeout);
   }
 
+  public int connectRetryCount() {
+    return connectRetryCount;
+  }
+
+  public AeronOptions connectRetryCount(int connectRetryCount) {
+    return set(s -> s.connectRetryCount = connectRetryCount);
+  }
+
   public Duration backpressureTimeout() {
     return backpressureTimeout;
   }
@@ -87,6 +100,14 @@ public final class AeronOptions {
 
   public AeronOptions adminActionTimeout(Duration adminActionTimeout) {
     return set(s -> s.adminActionTimeout = adminActionTimeout);
+  }
+
+  Supplier<Integer> sessionIdGenerator() {
+    return sessionIdGenerator;
+  }
+
+  AeronOptions sessionIdGenerator(Supplier<Integer> sessionIdGenerator) {
+    return set(s -> s.sessionIdGenerator = sessionIdGenerator);
   }
 
   private AeronOptions set(Consumer<AeronOptions> c) {

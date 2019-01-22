@@ -55,7 +55,8 @@ public final class AeronResources implements OnDisposable {
   public AeronResources() {
     start
         .then(doStart())
-        .doFinally(s -> onStart.onComplete())
+        .doOnSuccess(avoid -> onStart.onComplete())
+        .doOnError(onStart::onError)
         .subscribe(
             null,
             th -> {
