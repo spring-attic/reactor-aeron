@@ -18,7 +18,7 @@ public final class AeronOptions {
   private AeronChannelUriString inboundUri = new AeronChannelUriString();
   private AeronChannelUriString outboundUri = new AeronChannelUriString();
   private Duration connectTimeout = Duration.ofSeconds(5);
-  private int connectRetryCount = 1;
+  private int connectRetryCount = 0;
   private Duration backpressureTimeout = Duration.ofSeconds(5);
   private Duration adminActionTimeout = Duration.ofSeconds(5);
   private Supplier<Integer> sessionIdGenerator;

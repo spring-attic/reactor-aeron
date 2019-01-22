@@ -76,7 +76,7 @@ class AeronMultiClientTest extends BaseAeronTest {
                     options ->
                         options.outboundUri(options.outboundUri().uri(o -> o.sessionId(sessionId))))
                 .connect())
-        .expectError(TimeoutException.class)
+        .expectError()
         .verify(CONNECT_TIMEOUT.multipliedBy(CONNECT_RETRY_COUNT));
   }
 
@@ -111,7 +111,7 @@ class AeronMultiClientTest extends BaseAeronTest {
             AeronClient.create(newClientResources())
                 .options("localhost", serverPort, serverControlPort)
                 .options(options -> options.connectTimeout(CONNECT_TIMEOUT))
-                .options(options -> options.connectRetryCount(3))
+                .options(options -> options.connectRetryCount(1))
                 .options(options -> options.sessionIdGenerator(sessionIdGeneratorClient2))
                 .connect())
         .expectNextCount(1)
@@ -126,7 +126,7 @@ class AeronMultiClientTest extends BaseAeronTest {
             AeronClient.create(newClientResources())
                 .options("localhost", serverPort, serverControlPort)
                 .options(options -> options.connectTimeout(CONNECT_TIMEOUT))
-                .options(options -> options.connectRetryCount(5))
+                .options(options -> options.connectRetryCount(2))
                 .options(options -> options.sessionIdGenerator(sessionIdGeneratorClient3))
                 .connect())
         .expectNextCount(1)

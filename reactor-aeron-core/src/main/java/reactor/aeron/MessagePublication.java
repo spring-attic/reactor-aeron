@@ -209,12 +209,10 @@ class MessagePublication implements OnDisposable {
     return Mono.defer(
         () -> {
           Duration retryInterval = Duration.ofMillis(100);
-          long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
-          retryCount = Math.max(retryCount, 1);
+          long retryCount = Math.max(connectTimeout.toMillis() / retryInterval.toMillis(), 1);
 
           return ensureConnected0()
               .retryBackoff(retryCount, retryInterval, retryInterval)
-              .timeout(connectTimeout)
               .doOnError(
                   ex -> logger.warn("aeron.Publication is not connected after several retries"))
               .thenReturn(this);
