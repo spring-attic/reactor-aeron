@@ -1,5 +1,6 @@
 package reactor.aeron.demo;
 
+import io.aeron.driver.ThreadingMode;
 import java.nio.ByteBuffer;
 import reactor.aeron.AeronClient;
 import reactor.aeron.AeronResources;
@@ -13,7 +14,14 @@ public class ClientThroughput {
    * @param args program arguments.
    */
   public static void main(String[] args) throws Exception {
-    AeronResources aeronResources = new AeronResources().useTmpDir().start().block();
+    AeronResources aeronResources =
+        new AeronResources()
+            .useTmpDir()
+            .singleWorker()
+            .media(ctx -> ctx.threadingMode(ThreadingMode.SHARED))
+            .start()
+            .block();
+
     try {
       ByteBuffer buffer = ByteBuffer.allocate(1024);
 

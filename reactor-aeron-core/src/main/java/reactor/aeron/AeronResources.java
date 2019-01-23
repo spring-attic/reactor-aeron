@@ -1,5 +1,10 @@
 package reactor.aeron;
 
+import static io.aeron.driver.Configuration.IDLE_MAX_PARK_NS;
+import static io.aeron.driver.Configuration.IDLE_MAX_SPINS;
+import static io.aeron.driver.Configuration.IDLE_MAX_YIELDS;
+import static io.aeron.driver.Configuration.IDLE_MIN_PARK_NS;
+
 import io.aeron.Aeron;
 import io.aeron.Aeron.Context;
 import io.aeron.ExclusivePublication;
@@ -169,7 +174,7 @@ public final class AeronResources implements OnDisposable {
 
   private static BackoffIdleStrategy defaultBackoffIdleStrategy() {
     return new BackoffIdleStrategy(
-        100, 10, TimeUnit.MICROSECONDS.toNanos(1), TimeUnit.MICROSECONDS.toNanos(100));
+        IDLE_MAX_SPINS, IDLE_MAX_YIELDS, IDLE_MIN_PARK_NS, IDLE_MAX_PARK_NS);
   }
 
   private static String generateRandomTmpDirName() {
