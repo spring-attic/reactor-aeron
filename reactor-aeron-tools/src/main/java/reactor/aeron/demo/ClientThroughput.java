@@ -2,6 +2,8 @@ package reactor.aeron.demo;
 
 import io.aeron.driver.ThreadingMode;
 import java.nio.ByteBuffer;
+import org.agrona.DirectBuffer;
+import org.agrona.concurrent.UnsafeBuffer;
 import reactor.aeron.AeronClient;
 import reactor.aeron.AeronResources;
 import reactor.core.publisher.Flux;
@@ -22,7 +24,7 @@ public class ClientThroughput {
             .start()
             .block();
 
-    ByteBuffer buffer = ByteBuffer.allocate(1024);
+    DirectBuffer buffer = new UnsafeBuffer(ByteBuffer.allocate(1024));
 
     AeronClient.create(aeronResources)
         .options("localhost", 13000, 13001)
@@ -30,7 +32,7 @@ public class ClientThroughput {
             connection ->
                 connection
                     .outbound()
-                    .sendBuffer(Flux.range(0, Integer.MAX_VALUE).map(i -> buffer))
+                    .send(Flux.range(0, Integer.MAX_VALUE).map(i -> buffer))
                     .then(connection.onDispose()))
         .connect()
         .block()
