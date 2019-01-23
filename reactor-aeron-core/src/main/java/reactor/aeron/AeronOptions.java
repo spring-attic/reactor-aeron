@@ -1,5 +1,6 @@
 package reactor.aeron;
 
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -102,11 +103,11 @@ public final class AeronOptions {
     return set(s -> s.adminActionTimeout = adminActionTimeout);
   }
 
-  Supplier<Integer> sessionIdGenerator() {
+  public Supplier<Integer> sessionIdGenerator() {
     return sessionIdGenerator;
   }
 
-  AeronOptions sessionIdGenerator(Supplier<Integer> sessionIdGenerator) {
+  public AeronOptions sessionIdGenerator(Supplier<Integer> sessionIdGenerator) {
     return set(s -> s.sessionIdGenerator = sessionIdGenerator);
   }
 
@@ -115,4 +116,5 @@ public final class AeronOptions {
     c.accept(s);
     return s;
   }
+
 }

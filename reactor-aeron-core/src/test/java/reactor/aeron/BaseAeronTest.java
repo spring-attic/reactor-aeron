@@ -11,7 +11,7 @@ public class BaseAeronTest {
 
   public static final Logger logger = LoggerFactory.getLogger(BaseAeronTest.class);
 
-  public static final Duration TIMEOUT = Duration.ofSeconds(10);
+  public static final Duration TIMEOUT = Duration.ofSeconds(30);
 
   @BeforeEach
   public final void baseSetUp(TestInfo testInfo) {

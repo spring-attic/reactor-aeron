@@ -3,6 +3,7 @@ package reactor.aeron;
 import io.aeron.Image;
 import java.time.Duration;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -136,12 +137,11 @@ final class AeronClientConnector {
   }
 
   private String getOutboundChannel() {
-    String outboundChannel = options.outboundUri().asString();
-    if (options.sessionIdGenerator() != null) {
-      int sessionId = options.sessionIdGenerator().get();
-      outboundChannel =
-          options.outboundUri().uri(options -> options.sessionId(sessionId)).asString();
-    }
-    return outboundChannel;
+    AeronChannelUriString outboundUri = options.outboundUri();
+    Supplier<Integer> sessionIdGenerator = options.sessionIdGenerator();
+
+    return sessionIdGenerator != null && outboundUri.builder().sessionId() == null
+        ? outboundUri.uri(opts -> opts.sessionId(sessionIdGenerator.get())).asString()
+        : outboundUri.asString();
   }
 }

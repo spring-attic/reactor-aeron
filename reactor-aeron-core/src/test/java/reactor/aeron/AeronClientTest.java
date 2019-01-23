@@ -16,6 +16,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.DirectProcessor;
 import reactor.core.publisher.Flux;
@@ -27,6 +29,8 @@ import reactor.test.StepVerifier;
 import reactor.util.concurrent.Queues;
 
 class AeronClientTest extends BaseAeronTest {
+
+  private static final Logger logger = LoggerFactory.getLogger(AeronClientTest.class);
 
   private int serverPort;
   private int serverControlPort;
@@ -226,7 +230,7 @@ class AeronClientTest extends BaseAeronTest {
                 processor1.take(count).filter(response -> !response.startsWith("client-1 ")),
                 processor2.take(count).filter(response -> !response.startsWith("client-2 "))))
         .expectComplete()
-        .verify(Duration.ofSeconds(30));
+        .verify(TIMEOUT);
   }
 
   @Test
@@ -244,16 +248,16 @@ class AeronClientTest extends BaseAeronTest {
     Flux.range(0, count)
         .flatMap(i -> connection1.outbound().sendString(Mono.just("client-1 send:" + i)).then())
         .then()
-        .subscribe();
+        .subscribe(null, ex -> logger.error("client-1 didn't send all, cause: ", ex));
 
     AeronConnection connection2 = createConnection();
     Flux.range(0, count)
         .flatMap(i -> connection2.outbound().sendString(Mono.just("client-2 send:" + i)).then())
         .then()
-        .subscribe();
+        .subscribe(null, ex -> logger.error("client-2 didn't send all, cause: ", ex));
 
     StepVerifier.create(
-            Mono.delay(Duration.ofSeconds(1))
+            Mono.delay(Duration.ofMillis(100))
                 .thenMany(
                     Flux.merge(
                         connection1
@@ -269,7 +273,7 @@ class AeronClientTest extends BaseAeronTest {
                             .take(count)
                             .filter(response -> !response.startsWith("client-2 ")))))
         .expectComplete()
-        .verify(Duration.ofSeconds(20));
+        .verify(TIMEOUT);
   }
 
   @Test
