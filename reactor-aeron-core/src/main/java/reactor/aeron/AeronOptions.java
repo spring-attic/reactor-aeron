@@ -22,8 +22,7 @@ public final class AeronOptions {
   private int connectRetryCount = 0;
   private Duration backpressureTimeout = Duration.ofSeconds(5);
   private Duration adminActionTimeout = Duration.ofSeconds(5);
-  private Supplier<Integer> sessionIdGenerator =
-      new SecureRandomSessionIdGenerator(0, Integer.MAX_VALUE);
+  private Supplier<Integer> sessionIdGenerator;
 
   public AeronOptions() {}
 
@@ -118,24 +117,4 @@ public final class AeronOptions {
     return s;
   }
 
-  private static class SecureRandomSessionIdGenerator implements Supplier<Integer> {
-
-    private final SecureRandom random = new SecureRandom();
-    private final int offset;
-    private final int diff;
-
-    public SecureRandomSessionIdGenerator(int low, int high) {
-      if (low > high) {
-        throw new IllegalArgumentException(
-            "low value " + low + " must be <= high value " + high);
-      }
-      this.offset = low;
-      this.diff = high - low;
-    }
-
-    @Override
-    public Integer get() {
-      return offset + random.nextInt(diff);
-    }
-  }
 }
