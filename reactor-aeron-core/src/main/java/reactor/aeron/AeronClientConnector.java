@@ -138,9 +138,18 @@ final class AeronClientConnector {
   private String getOutboundChannel() {
     String outboundChannel = options.outboundUri().asString();
     if (options.sessionIdGenerator() != null) {
-      int sessionId = options.sessionIdGenerator().get();
       outboundChannel =
-          options.outboundUri().uri(options -> options.sessionId(sessionId)).asString();
+          options
+              .outboundUri()
+              .uri(
+                  uriOptions -> {
+                    if (uriOptions.sessionId() == null) {
+                      int sessionId = options.sessionIdGenerator().get();
+                      return uriOptions.sessionId(sessionId);
+                    }
+                    return uriOptions;
+                  })
+              .asString();
     }
     return outboundChannel;
   }
