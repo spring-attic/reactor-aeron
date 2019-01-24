@@ -1,12 +1,14 @@
 package reactor.aeron.demo;
 
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import org.HdrHistogram.Recorder;
+import org.agrona.DirectBuffer;
+import org.agrona.ExpandableArrayBuffer;
 import reactor.aeron.AeronClient;
 import reactor.aeron.AeronConnection;
 import reactor.aeron.AeronResources;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 public final class AeronPingClient {
 
@@ -18,7 +20,6 @@ public final class AeronPingClient {
    * @param args program arguments.
    */
   public static void main(String... args) {
-    int count = 1_000_000_000;
 
     AeronResources resources = new AeronResources().useTmpDir().singleWorker().start().block();
 
@@ -42,16 +43,14 @@ public final class AeronPingClient {
     connection
         .outbound()
         .send(
-            Flux.range(1, count)
-                .map(
-                    i -> {
-                      ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
-                      buffer.putLong(System.nanoTime());
-                      buffer.flip();
+            Mono.<DirectBuffer>fromCallable(
+                    () -> {
+                      ExpandableArrayBuffer buffer = new ExpandableArrayBuffer(Long.BYTES);
+                      buffer.putLong(0, System.nanoTime());
                       return buffer;
-                    }))
+                    })
+                .repeat(Integer.MAX_VALUE))
         .then()
-        .doOnTerminate(() -> System.out.println("---- Sent " + count + " messages. ---- "))
         .doOnTerminate(connection::dispose)
         .doOnError(Throwable::printStackTrace)
         .subscribe();
@@ -62,7 +61,7 @@ public final class AeronPingClient {
         .receive()
         .doOnNext(
             buffer -> {
-              long start = buffer.getLong();
+              long start = buffer.getLong(0);
               long diff = System.nanoTime() - start;
               histogram.recordValue(diff);
             })
