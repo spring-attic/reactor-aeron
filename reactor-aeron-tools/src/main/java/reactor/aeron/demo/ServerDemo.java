@@ -11,7 +11,7 @@ public class ServerDemo {
    * @param args program arguments.
    */
   public static void main(String[] args) throws Exception {
-    AeronResources resources = new AeronResources().useTmpDir().singleWorker().start().block();
+    AeronResources resources = new AeronResources().useTmpDir().start().block();
     try {
       AeronServer.create(resources)
           .options("localhost", 13000, 13001)

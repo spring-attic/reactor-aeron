@@ -1,5 +1,6 @@
 package reactor.aeron.demo;
 
+import io.aeron.driver.ThreadingMode;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronServer;
 
@@ -11,7 +12,12 @@ public final class AeronPongServer {
    * @param args program arguments.
    */
   public static void main(String... args) {
-    AeronResources resources = new AeronResources().useTmpDir().singleWorker().start().block();
+    AeronResources resources =
+        new AeronResources()
+            .useTmpDir()
+            .media(ctx -> ctx.threadingMode(ThreadingMode.SHARED))
+            .start()
+            .block();
 
     AeronServer.create(resources)
         .options("localhost", 13000, 13001)

@@ -1,5 +1,6 @@
 package reactor.aeron.demo;
 
+import io.aeron.driver.ThreadingMode;
 import java.time.Duration;
 import org.HdrHistogram.Recorder;
 import org.agrona.DirectBuffer;
@@ -21,7 +22,12 @@ public final class AeronPingClient {
    */
   public static void main(String... args) {
 
-    AeronResources resources = new AeronResources().useTmpDir().singleWorker().start().block();
+    AeronResources resources =
+        new AeronResources()
+            .useTmpDir()
+            .media(ctx -> ctx.threadingMode(ThreadingMode.SHARED))
+            .start()
+            .block();
 
     AeronConnection connection =
         AeronClient.create(resources).options("localhost", 13000, 13001).connect().block();

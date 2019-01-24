@@ -16,7 +16,6 @@ public class ServerThroughput {
     AeronResources aeronResources =
         new AeronResources()
             .useTmpDir()
-            .singleWorker()
             .media(ctx -> ctx.threadingMode(ThreadingMode.SHARED))
             .start()
             .block();

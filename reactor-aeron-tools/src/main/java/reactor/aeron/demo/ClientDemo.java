@@ -16,7 +16,7 @@ public class ClientDemo {
    */
   public static void main(String[] args) {
     AeronConnection connection = null;
-    AeronResources resources = new AeronResources().useTmpDir().singleWorker().start().block();
+    AeronResources resources = new AeronResources().useTmpDir().start().block();
     try {
       connection =
           AeronClient.create(resources)
