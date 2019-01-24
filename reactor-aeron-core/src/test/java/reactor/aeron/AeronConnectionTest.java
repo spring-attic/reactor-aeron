@@ -25,21 +25,13 @@ public class AeronConnectionTest extends BaseAeronTest {
 
   private int serverPort;
   private int serverControlPort;
-  private AeronResources clientResources;
-  private AeronResources serverResources;
+  private AeronResources resources;
 
   @BeforeEach
   void beforeEach() {
     serverPort = SocketUtils.findAvailableUdpPort();
     serverControlPort = SocketUtils.findAvailableUdpPort();
-    clientResources =
-        new AeronResources()
-            .useTmpDir()
-            .singleWorker()
-            .media(mdc -> mdc.imageLivenessTimeoutNs(IMAGE_TIMEOUT.toNanos()))
-            .start()
-            .block();
-    serverResources =
+    resources =
         new AeronResources()
             .useTmpDir()
             .singleWorker()
@@ -50,13 +42,9 @@ public class AeronConnectionTest extends BaseAeronTest {
 
   @AfterEach
   void afterEach() {
-    if (clientResources != null) {
-      clientResources.dispose();
-      clientResources.onDispose().block(TIMEOUT);
-    }
-    if (serverResources != null) {
-      serverResources.dispose();
-      serverResources.onDispose().block(TIMEOUT);
+    if (resources != null) {
+      resources.dispose();
+      resources.onDispose().block(TIMEOUT);
     }
   }
 
@@ -234,7 +222,7 @@ public class AeronConnectionTest extends BaseAeronTest {
   }
 
   private AeronConnection createConnection() {
-    return AeronClient.create(clientResources)
+    return AeronClient.create(resources)
         .options("localhost", serverPort, serverControlPort)
         .connect()
         .block(TIMEOUT);
@@ -242,7 +230,7 @@ public class AeronConnectionTest extends BaseAeronTest {
 
   private OnDisposable createServer(
       Function<? super AeronConnection, ? extends Publisher<Void>> handler) {
-    return AeronServer.create(serverResources)
+    return AeronServer.create(resources)
         .options("localhost", serverPort, serverControlPort)
         .handle(handler)
         .bind()
