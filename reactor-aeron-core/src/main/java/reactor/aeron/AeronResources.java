@@ -6,7 +6,6 @@ import static io.aeron.driver.Configuration.IDLE_MAX_YIELDS;
 import static io.aeron.driver.Configuration.IDLE_MIN_PARK_NS;
 
 import io.aeron.Aeron;
-import io.aeron.Aeron.Context;
 import io.aeron.ExclusivePublication;
 import io.aeron.Image;
 import io.aeron.Publication;
@@ -16,7 +15,6 @@ import java.io.File;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -84,7 +82,7 @@ public final class AeronResources implements OnDisposable {
    * @param ac aeron context
    * @param mdc media driver context
    */
-  private AeronResources(Context ac, MediaDriver.Context mdc) {
+  private AeronResources(Aeron.Context ac, MediaDriver.Context mdc) {
     this();
     copy(ac);
     copy(mdc);

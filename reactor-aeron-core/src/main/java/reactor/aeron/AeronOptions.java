@@ -1,6 +1,5 @@
 package reactor.aeron;
 
-import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -116,5 +115,4 @@ public final class AeronOptions {
     c.accept(s);
     return s;
   }
-
 }
