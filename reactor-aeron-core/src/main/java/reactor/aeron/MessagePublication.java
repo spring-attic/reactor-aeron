@@ -5,7 +5,7 @@ import io.aeron.logbuffer.BufferClaim;
 import java.time.Duration;
 import java.util.Queue;
 import org.agrona.MutableDirectBuffer;
-import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
+import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
@@ -25,7 +25,7 @@ class MessagePublication implements OnDisposable {
   private final Duration backpressureTimeout;
   private final Duration adminActionTimeout;
 
-  private final Queue<PublishTask> publishTasks = new ManyToOneConcurrentLinkedQueue<>();
+  private final Queue<PublishTask> publishTasks = new ManyToOneConcurrentArrayQueue<>(8192);
 
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
