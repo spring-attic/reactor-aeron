@@ -257,7 +257,7 @@ class MessagePublication implements OnDisposable {
         ThreadLocal.withInitial(BufferClaim::new);
 
     private static final Recycler<PublishTask> recycler =
-        new Recycler<PublishTask>() {
+        new Recycler<PublishTask>(32768) {
           protected PublishTask newObject(Recycler.Handle<PublishTask> handle) {
             return new PublishTask(handle);
           }
@@ -291,17 +291,8 @@ class MessagePublication implements OnDisposable {
       task.bufferHandler = bufferHandler;
       task.isDisposed = false;
       task.start = 0;
-      task.sink =
-          sink.onDispose(
-              () -> {
-                if (!task.isDisposed) {
-
-                  task.isDisposed = true;
-                  bufferHandler.dispose(buffer);
-
-                  task.recycle();
-                }
-              });
+      task.sink = sink;
+      task.sink.onDispose(task::onDispose);
 
       return task;
     }
@@ -359,6 +350,14 @@ class MessagePublication implements OnDisposable {
       bufferHandler = null;
       sink = null;
       handle.recycle(this);
+    }
+
+    private void onDispose() {
+      if (!isDisposed) {
+        isDisposed = true;
+        bufferHandler.dispose(buffer);
+        recycle();
+      }
     }
   }
 }
