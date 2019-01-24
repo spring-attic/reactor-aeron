@@ -2,12 +2,10 @@ package reactor.aeron;
 
 import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Queue;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
-import org.agrona.concurrent.UnsafeBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
@@ -47,17 +45,18 @@ class MessagePublication implements OnDisposable {
   }
 
   /**
-   * Enqueues buffer for future sending.
+   * Enqueues content for future sending.
    *
-   * @param buffer buffer
+   * @param buffer abstract buffer to send
+   * @param bufferHandler abstract buffer handler
    * @return mono handle
    */
-  Mono<Void> publish(ByteBuffer buffer) {
+  <B> Mono<Void> publish(B buffer, DirectBufferHandler<? super B> bufferHandler) {
     return Mono.create(
         sink -> {
           boolean result = false;
           if (!isDisposed()) {
-            result = publishTasks.offer(new PublishTask(buffer, sink));
+            result = publishTasks.offer(new PublishTask<>(buffer, bufferHandler, sink));
           }
           if (!result) {
             sink.error(AeronExceptions.failWithPublicationUnavailable());
@@ -71,12 +70,21 @@ class MessagePublication implements OnDisposable {
    * @return 1 - some progress was done; 0 - denotes no progress was done
    */
   int proceed() {
+    Exception ex = null;
+
     PublishTask task = publishTasks.peek();
     if (task == null) {
       return 0;
     }
 
-    long result = task.publish();
+    long result = 0;
+
+    try {
+      result = task.publish();
+    } catch (Exception e) {
+      ex = e;
+    }
+
     if (result > 0) {
       publishTasks.poll();
       task.success();
@@ -96,8 +104,6 @@ class MessagePublication implements OnDisposable {
       dispose();
       return 0;
     }
-
-    Exception ex = null;
 
     // Handle failed connection
     if (result == Publication.NOT_CONNECTED) {
@@ -203,12 +209,10 @@ class MessagePublication implements OnDisposable {
     return Mono.defer(
         () -> {
           Duration retryInterval = Duration.ofMillis(100);
-          long retryCount = connectTimeout.toMillis() / retryInterval.toMillis();
-          retryCount = Math.max(retryCount, 1);
+          long retryCount = Math.max(connectTimeout.toMillis() / retryInterval.toMillis(), 1);
 
           return ensureConnected0()
               .retryBackoff(retryCount, retryInterval, retryInterval)
-              .timeout(connectTimeout)
               .doOnError(
                   ex -> logger.warn("aeron.Publication is not connected after several retries"))
               .thenReturn(this);
@@ -245,17 +249,34 @@ class MessagePublication implements OnDisposable {
    *
    * <p>Resident of {@link #publishTasks} queue.
    */
-  private class PublishTask {
+  private class PublishTask<B> {
 
-    private final ByteBuffer msgBody;
+    private final B buffer;
+    private final DirectBufferHandler<B> bufferHandler;
     private final MonoSink<Void> sink;
     private volatile boolean isDisposed = false;
 
     private long start;
 
-    private PublishTask(ByteBuffer msgBody, MonoSink<Void> sink) {
-      this.msgBody = msgBody;
-      this.sink = sink.onDispose(() -> isDisposed = true);
+    /**
+     * Constructor.
+     *
+     * @param buffer abstract buffer
+     * @param bufferHandler abstract buffer handler
+     * @param sink sink of result
+     */
+    private PublishTask(B buffer, DirectBufferHandler<B> bufferHandler, MonoSink<Void> sink) {
+
+      this.buffer = buffer;
+      this.bufferHandler = bufferHandler;
+      this.sink =
+          sink.onDispose(
+              () -> {
+                if (!isDisposed) {
+                  isDisposed = true;
+                  bufferHandler.dispose(buffer);
+                }
+              });
     }
 
     private long publish() {
@@ -267,26 +288,25 @@ class MessagePublication implements OnDisposable {
         start = System.currentTimeMillis();
       }
 
-      int msgLength = msgBody.remaining();
-      int position = msgBody.position();
-      int limit = msgBody.limit();
+      int length = bufferHandler.estimateLength(buffer);
 
-      if (msgLength < publication.maxPayloadLength()) {
+      if (length < publication.maxPayloadLength()) {
         BufferClaim bufferClaim = bufferClaims.get();
-        long result = publication.tryClaim(msgLength, bufferClaim);
+        long result = publication.tryClaim(length, bufferClaim);
         if (result > 0) {
           try {
-            MutableDirectBuffer dstBuffer = bufferClaim.buffer();
-            int index = bufferClaim.offset();
-            dstBuffer.putBytes(index, msgBody, position, limit);
+            MutableDirectBuffer directBuffer = bufferClaim.buffer();
+            int offset = bufferClaim.offset();
+            bufferHandler.write(directBuffer, offset, buffer, length);
             bufferClaim.commit();
           } catch (Exception ex) {
             bufferClaim.abort();
+            throw Exceptions.propagate(ex);
           }
         }
         return result;
       } else {
-        return publication.offer(new UnsafeBuffer(msgBody, position, limit));
+        return publication.offer(bufferHandler.map(buffer, length));
       }
     }
 

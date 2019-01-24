@@ -8,7 +8,7 @@
   </parent>
 
   <artifactId>scalecube-reactor-aeron</artifactId>
-  <version>0.1.1-SNAPSHOT</version>
+  <version>0.1.2-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <name>ScaleCube/scalecube-reactor-aeron</name>
@@ -22,9 +22,10 @@
   </scm>
 
   <properties>
-    <aeron.version>1.11.3</aeron.version>
+    <aeron.version>1.15.0</aeron.version>
     <reactor-core.version>3.2.2.RELEASE</reactor-core.version>
     <reactivestreams.version>1.0.2</reactivestreams.version>
+    <netty-buffer.version>4.1.32.Final</netty-buffer.version>
 
     <hdrhistogram.version>2.1.10</hdrhistogram.version>
     <slf4j.version>1.7.7</slf4j.version>
@@ -51,6 +52,13 @@
         <groupId>io.aeron</groupId>
         <artifactId>aeron-client</artifactId>
         <version>${aeron.version}</version>
+      </dependency>
+
+      <!-- Netty Buffer -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-buffer</artifactId>
+        <version>${netty-buffer.version}</version>
       </dependency>
 
       <!-- Reactor Core -->

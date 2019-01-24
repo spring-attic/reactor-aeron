@@ -10,11 +10,14 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.DirectProcessor;
 import reactor.core.publisher.Flux;
@@ -26,6 +29,8 @@ import reactor.test.StepVerifier;
 import reactor.util.concurrent.Queues;
 
 class AeronClientTest extends BaseAeronTest {
+
+  private static final Logger logger = LoggerFactory.getLogger(AeronClientTest.class);
 
   private int serverPort;
   private int serverControlPort;
@@ -58,7 +63,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(ByteBufferFlux.fromString("hello1", "2", "3").log("server"))
+                .sendString(Flux.fromStream(Stream.of("hello1", "2", "3")).log("server"))
                 .then(connection.onDispose()));
 
     AeronConnection connection = createConnection();
@@ -79,7 +84,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(ByteBufferFlux.fromString(str, str, str).log("server"))
+                .sendString(Flux.fromStream(Stream.of(str, str, str)).log("server"))
                 .then(connection.onDispose()));
 
     AeronConnection connection = createConnection();
@@ -97,7 +102,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(ByteBufferFlux.fromString("1", "2", "3").log("server"))
+                .sendString(Flux.fromStream(Stream.of("1", "2", "3")).log("server"))
                 .then(connection.onDispose()));
 
     AeronConnection connection1 = createConnection();
@@ -169,7 +174,11 @@ class AeronClientTest extends BaseAeronTest {
 
     Flux.range(0, count)
         .flatMap(
-            i -> connection1.outbound().send(ByteBufferFlux.fromString("client_send:" + i)).then())
+            i ->
+                connection1
+                    .outbound()
+                    .sendString(Flux.fromStream(Stream.of("client_send:" + i)))
+                    .then())
         .then()
         .subscribe();
 
@@ -221,7 +230,7 @@ class AeronClientTest extends BaseAeronTest {
                 processor1.take(count).filter(response -> !response.startsWith("client-1 ")),
                 processor2.take(count).filter(response -> !response.startsWith("client-2 "))))
         .expectComplete()
-        .verify(Duration.ofSeconds(30));
+        .verify(TIMEOUT);
   }
 
   @Test
@@ -239,16 +248,16 @@ class AeronClientTest extends BaseAeronTest {
     Flux.range(0, count)
         .flatMap(i -> connection1.outbound().sendString(Mono.just("client-1 send:" + i)).then())
         .then()
-        .subscribe();
+        .subscribe(null, ex -> logger.error("client-1 didn't send all, cause: ", ex));
 
     AeronConnection connection2 = createConnection();
     Flux.range(0, count)
         .flatMap(i -> connection2.outbound().sendString(Mono.just("client-2 send:" + i)).then())
         .then()
-        .subscribe();
+        .subscribe(null, ex -> logger.error("client-2 didn't send all, cause: ", ex));
 
     StepVerifier.create(
-            Mono.delay(Duration.ofSeconds(1))
+            Mono.delay(Duration.ofMillis(100))
                 .thenMany(
                     Flux.merge(
                         connection1
@@ -264,7 +273,7 @@ class AeronClientTest extends BaseAeronTest {
                             .take(count)
                             .filter(response -> !response.startsWith("client-2 ")))))
         .expectComplete()
-        .verify(Duration.ofSeconds(20));
+        .verify(TIMEOUT);
   }
 
   @Test
@@ -273,7 +282,7 @@ class AeronClientTest extends BaseAeronTest {
         connection ->
             connection
                 .outbound()
-                .send(ByteBufferFlux.fromString("1", "2", "3").log("server"))
+                .sendString(Flux.fromStream(Stream.of("1", "2", "3")).log("server"))
                 .then(connection.onDispose()));
 
     ReplayProcessor<String> processor1 = ReplayProcessor.create();
