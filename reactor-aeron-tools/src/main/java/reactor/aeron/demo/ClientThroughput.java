@@ -1,6 +1,9 @@
 package reactor.aeron.demo;
 
+import io.aeron.driver.ThreadingMode;
 import java.nio.ByteBuffer;
+import org.agrona.DirectBuffer;
+import org.agrona.concurrent.UnsafeBuffer;
 import reactor.aeron.AeronClient;
 import reactor.aeron.AeronResources;
 import reactor.core.publisher.Flux;
@@ -12,27 +15,30 @@ public class ClientThroughput {
    *
    * @param args program arguments.
    */
-  public static void main(String[] args) throws Exception {
-    AeronResources aeronResources = new AeronResources().useTmpDir().start().block();
-    try {
-      ByteBuffer buffer = ByteBuffer.allocate(1024);
+  public static void main(String[] args) {
+    AeronResources aeronResources =
+        new AeronResources()
+            .useTmpDir()
+            .singleWorker()
+            .media(ctx -> ctx.threadingMode(ThreadingMode.SHARED))
+            .start()
+            .block();
 
-      AeronClient.create(aeronResources)
-          .options("localhost", 13000, 13001)
-          .handle(
-              connection ->
-                  connection
-                      .outbound()
-                      .sendBuffer(Flux.range(0, Integer.MAX_VALUE).map(i -> buffer))
-                      .then(connection.onDispose()))
-          .connect()
-          .block();
+    DirectBuffer buffer = new UnsafeBuffer(ByteBuffer.allocate(1024));
 
-      System.out.println("main completed");
-      Thread.currentThread().join();
-    } finally {
-      aeronResources.dispose();
-      aeronResources.onDispose().block();
-    }
+    AeronClient.create(aeronResources)
+        .options("localhost", 13000, 13001)
+        .handle(
+            connection ->
+                connection
+                    .outbound()
+                    .send(Flux.range(0, Integer.MAX_VALUE).map(i -> buffer))
+                    .then(connection.onDispose()))
+        .connect()
+        .block()
+        .onDispose()
+        .doFinally(s -> aeronResources.dispose())
+        .then(aeronResources.onDispose())
+        .block();
   }
 }
