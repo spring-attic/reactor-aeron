@@ -19,13 +19,17 @@ class MessagePublication implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(MessagePublication.class);
 
+  private static final int QUEUE_CAPACITY = 8192;
+  private static final int RECYCLER_CAPACITY_PER_THREAD = 32768;
+
   private final Publication publication;
   private final AeronEventLoop eventLoop;
   private final Duration connectTimeout;
   private final Duration backpressureTimeout;
   private final Duration adminActionTimeout;
 
-  private final Queue<PublishTask> publishTasks = new ManyToOneConcurrentArrayQueue<>(8192);
+  private final Queue<PublishTask> publishTasks =
+      new ManyToOneConcurrentArrayQueue<>(QUEUE_CAPACITY);
 
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
@@ -257,7 +261,7 @@ class MessagePublication implements OnDisposable {
         ThreadLocal.withInitial(BufferClaim::new);
 
     private static final Recycler<PublishTask> recycler =
-        new Recycler<PublishTask>(32768) {
+        new Recycler<PublishTask>(RECYCLER_CAPACITY_PER_THREAD) {
           protected PublishTask newObject(Recycler.Handle<PublishTask> handle) {
             return new PublishTask(handle);
           }
