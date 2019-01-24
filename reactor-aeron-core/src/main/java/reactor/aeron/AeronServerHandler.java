@@ -21,7 +21,7 @@ import reactor.core.publisher.MonoProcessor;
  * serverPort->inbound->Sub(endpoint, acceptor[onImageAvailable, onImageUnavailbe])
  * + onImageAvailable(Image)
  * sessionId->inbound->EmitterPocessor
- * serverControlPort->outbound->MDC(sessionId)->Pub(control-endpoint, sessionId)
+ * serverControlPort->outbound->MDC(xor(sessionId))->Pub(control-endpoint, xor(sessionId))
  * </pre>
  */
 final class AeronServerHandler implements OnDisposable {
@@ -80,14 +80,14 @@ final class AeronServerHandler implements OnDisposable {
 
   /**
    * Setting up new {@link AeronConnection} identified by {@link Image#sessionId()}. Specifically
-   * creates message publication (aeron {@link io.aeron.Publication} underneath) with
-   * control-endpoint, control-mode and given sessionId. Essentially creates server side MDC for
-   * concrete sessionId; think of this as <i>server-side-individual-MDC</i>.
+   * creates Multi Destination Cast (MDC) message publication (aeron {@link io.aeron.Publication}
+   * underneath) with control-endpoint, control-mode and XOR-ed image sessionId. Essentially creates
+   * <i>server-side-individual-MDC</i>.
    *
    * @param image source image
    */
   private void onImageAvailable(Image image) {
-    // Pub(control-endpoint{address:serverControlPort}, sessionId)->MDC(sessionId)
+    // Pub(control-endpoint{address:serverControlPort}, xor(sessionId))->MDC(xor(sessionId))
     int sessionId = image.sessionId();
     String outboundChannel =
         options.outboundUri().uri(b -> b.sessionId(sessionId ^ Integer.MAX_VALUE)).asString();

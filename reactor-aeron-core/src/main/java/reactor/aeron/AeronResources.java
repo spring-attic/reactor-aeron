@@ -33,9 +33,18 @@ public final class AeronResources implements OnDisposable {
   private int numOfWorkers = Runtime.getRuntime().availableProcessors();
   private Supplier<IdleStrategy> workerIdleStrategySupplier =
       AeronResources::defaultBackoffIdleStrategy;
-  private Aeron.Context aeronContext = new Aeron.Context();
+
+  private Aeron.Context aeronContext =
+      new Aeron.Context().errorHandler(th -> logger.warn("Aeron exception occurred: " + th, th));
+
   private MediaDriver.Context mediaContext =
-      new MediaDriver.Context().warnIfDirectoryExists(true).dirDeleteOnStart(true);
+      new MediaDriver.Context()
+          .errorHandler(th -> logger.warn("Exception occurred on MediaDriver: " + th, th))
+          .warnIfDirectoryExists(true)
+          .dirDeleteOnStart(true)
+          // explicit range of reserved session ids
+          .publicationReservedSessionIdLow(0)
+          .publicationReservedSessionIdHigh(Integer.MAX_VALUE);
 
   // State
   private Aeron aeron;
