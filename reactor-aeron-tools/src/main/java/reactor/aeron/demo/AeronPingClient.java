@@ -42,14 +42,7 @@ public final class AeronPingClient {
     // send current nano time as body
     connection
         .outbound()
-        .send(
-            Mono.<DirectBuffer>fromCallable(
-                    () -> {
-                      ExpandableArrayBuffer buffer = new ExpandableArrayBuffer(Long.BYTES);
-                      buffer.putLong(0, System.nanoTime());
-                      return buffer;
-                    })
-                .repeat(Integer.MAX_VALUE))
+        .send(Mono.fromCallable(AeronPingClient::generatePayload).repeat(Integer.MAX_VALUE))
         .then()
         .doOnTerminate(connection::dispose)
         .doOnError(Throwable::printStackTrace)
@@ -69,5 +62,11 @@ public final class AeronPingClient {
         .subscribe();
 
     connection.onDispose(resources).onDispose().block();
+  }
+
+  private static DirectBuffer generatePayload() {
+    ExpandableArrayBuffer buffer = new ExpandableArrayBuffer(Long.BYTES);
+    buffer.putLong(0, System.nanoTime());
+    return buffer;
   }
 }
