@@ -16,7 +16,7 @@ import reactor.core.publisher.MonoProcessor;
  * <pre>
  * Client
  * serverPort->outbound->Pub(endpoint, sessionId)
- * serverControlPort->inbound->MDC(sessionId)->Sub(control-endpoint, sessionId)</pre>
+ * serverControlPort->inbound->MDC(xor(sessionId))->Sub(control-endpoint, xor(sessionId))</pre>
  */
 final class AeronClientConnector {
 
@@ -44,10 +44,13 @@ final class AeronClientConnector {
     return tryConnect()
         .flatMap(
             publication -> {
-              // inbound->MDC(sessionId)->Sub(control-endpoint, sessionId)
+              // inbound->MDC(xor(sessionId))->Sub(control-endpoint, xor(sessionId))
               int sessionId = publication.sessionId();
               String inboundChannel =
-                  options.inboundUri().uri(b -> b.sessionId(sessionId)).asString();
+                  options
+                      .inboundUri()
+                      .uri(b -> b.sessionId(sessionId ^ Integer.MAX_VALUE))
+                      .asString();
               logger.debug(
                   "{}: creating client connection: {}",
                   Integer.toHexString(sessionId),

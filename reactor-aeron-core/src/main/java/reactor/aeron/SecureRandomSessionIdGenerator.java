@@ -7,10 +7,9 @@ import java.util.function.Supplier;
 /**
  * Session id generator (in the range {@code 0..Int.MAX_VALUE}) based on {@link SecureRandom}.
  *
- * <p>NOTE: along with this session id generator one must setup {@link
- * Context#publicationReservedSessionIdLow(int)} and {@link
- * Context#publicationReservedSessionIdHigh(int)} of {@link io.aeron.driver.MediaDriver.Context}
- * accordingly.
+ * <p>NOTE: this session id generator aligns with defaults (that comes from {@link AeronResources}
+ * object) for {@link Context#publicationReservedSessionIdLow()} and {@link
+ * Context#publicationReservedSessionIdHigh()}.
  */
 public final class SecureRandomSessionIdGenerator implements Supplier<Integer> {
 
