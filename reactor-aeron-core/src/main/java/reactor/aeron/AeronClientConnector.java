@@ -3,6 +3,7 @@ package reactor.aeron;
 import io.aeron.Image;
 import java.time.Duration;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,7 +16,7 @@ import reactor.core.publisher.MonoProcessor;
  * <pre>
  * Client
  * serverPort->outbound->Pub(endpoint, sessionId)
- * serverControlPort->inbound->MDC(sessionId)->Sub(control-endpoint, sessionId)</pre>
+ * serverControlPort->inbound->MDC(xor(sessionId))->Sub(control-endpoint, xor(sessionId))</pre>
  */
 final class AeronClientConnector {
 
@@ -43,10 +44,13 @@ final class AeronClientConnector {
     return tryConnect()
         .flatMap(
             publication -> {
-              // inbound->MDC(sessionId)->Sub(control-endpoint, sessionId)
+              // inbound->MDC(xor(sessionId))->Sub(control-endpoint, xor(sessionId))
               int sessionId = publication.sessionId();
               String inboundChannel =
-                  options.inboundUri().uri(b -> b.sessionId(sessionId)).asString();
+                  options
+                      .inboundUri()
+                      .uri(b -> b.sessionId(sessionId ^ Integer.MAX_VALUE))
+                      .asString();
               logger.debug(
                   "{}: creating client connection: {}",
                   Integer.toHexString(sessionId),
@@ -136,12 +140,11 @@ final class AeronClientConnector {
   }
 
   private String getOutboundChannel() {
-    String outboundChannel = options.outboundUri().asString();
-    if (options.sessionIdGenerator() != null) {
-      int sessionId = options.sessionIdGenerator().get();
-      outboundChannel =
-          options.outboundUri().uri(options -> options.sessionId(sessionId)).asString();
-    }
-    return outboundChannel;
+    AeronChannelUriString outboundUri = options.outboundUri();
+    Supplier<Integer> sessionIdGenerator = options.sessionIdGenerator();
+
+    return sessionIdGenerator != null && outboundUri.builder().sessionId() == null
+        ? outboundUri.uri(opts -> opts.sessionId(sessionIdGenerator.get())).asString()
+        : outboundUri.asString();
   }
 }

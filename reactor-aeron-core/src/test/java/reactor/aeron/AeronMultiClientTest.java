@@ -3,7 +3,6 @@ package reactor.aeron;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -33,7 +32,8 @@ class AeronMultiClientTest extends BaseAeronTest {
   @AfterEach
   void afterEach() {
     Mono.whenDelayError(
-            clientResources.stream()
+            clientResources
+                .stream()
                 .peek(AeronResources::dispose)
                 .map(AeronResources::onDispose)
                 .collect(Collectors.toList()))
@@ -131,6 +131,46 @@ class AeronMultiClientTest extends BaseAeronTest {
                 .connect())
         .expectNextCount(1)
         .expectComplete()
+        .verify(CONNECT_TIMEOUT.multipliedBy(CONNECT_RETRY_COUNT));
+  }
+
+  @Test
+  public void testMultiClientReachRetryLimit() {
+    int maxAvailableRetryCount = 2;
+
+    OnDisposable server =
+        AeronServer.create(serverResources)
+            .options("localhost", serverPort, serverControlPort)
+            .bind()
+            .block(TIMEOUT);
+
+    // create the first client connection
+    AtomicInteger sessionIdCounterClient1 = new AtomicInteger();
+    Supplier<Integer> sessionIdGeneratorClient1 = sessionIdCounterClient1::incrementAndGet;
+
+    StepVerifier.create(
+            AeronClient.create(newClientResources())
+                .options("localhost", serverPort, serverControlPort)
+                .options(options -> options.connectTimeout(CONNECT_TIMEOUT))
+                .options(options -> options.connectRetryCount(0))
+                .options(options -> options.sessionIdGenerator(sessionIdGeneratorClient1))
+                .connect())
+        .expectNextCount(1)
+        .expectComplete()
+        .verify(CONNECT_TIMEOUT.multipliedBy(CONNECT_RETRY_COUNT));
+
+    // create the second client connection and sessionIdGenerator always gives the engaged session
+    // id
+    Supplier<Integer> sessionIdGeneratorClient2 = sessionIdCounterClient1::get;
+
+    StepVerifier.create(
+            AeronClient.create(newClientResources())
+                .options("localhost", serverPort, serverControlPort)
+                .options(options -> options.connectTimeout(CONNECT_TIMEOUT))
+                .options(options -> options.connectRetryCount(maxAvailableRetryCount))
+                .options(options -> options.sessionIdGenerator(sessionIdGeneratorClient2))
+                .connect())
+        .expectError()
         .verify(CONNECT_TIMEOUT.multipliedBy(CONNECT_RETRY_COUNT));
   }
 

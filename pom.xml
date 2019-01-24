@@ -25,8 +25,9 @@
     <aeron.version>1.15.0</aeron.version>
     <reactor-core.version>3.2.2.RELEASE</reactor-core.version>
     <reactivestreams.version>1.0.2</reactivestreams.version>
-    <netty-buffer.version>4.1.32.Final</netty-buffer.version>
+    <netty.version>4.1.32.Final</netty.version>
 
+    <hdrhistogram.version>2.1.10</hdrhistogram.version>
     <slf4j.version>1.7.7</slf4j.version>
     <log4j.version>2.11.0</log4j.version>
     <disruptor.version>3.4.2</disruptor.version>
@@ -53,11 +54,16 @@
         <version>${aeron.version}</version>
       </dependency>
 
-      <!-- Netty Buffer -->
+      <!-- Netty -->
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-buffer</artifactId>
-        <version>${netty-buffer.version}</version>
+        <version>${netty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-common</artifactId>
+        <version>${netty.version}</version>
       </dependency>
 
       <!-- Reactor Core -->
@@ -72,6 +78,12 @@
         <groupId>org.reactivestreams</groupId>
         <artifactId>reactive-streams</artifactId>
         <version>${reactivestreams.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.hdrhistogram</groupId>
+        <artifactId>HdrHistogram</artifactId>
+        <version>${hdrhistogram.version}</version>
       </dependency>
 
       <!-- Loggers -->

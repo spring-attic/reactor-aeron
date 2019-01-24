@@ -2,10 +2,12 @@ package reactor.aeron;
 
 import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
+import io.netty.util.Recycler;
+import io.netty.util.Recycler.Handle;
 import java.time.Duration;
 import java.util.Queue;
 import org.agrona.MutableDirectBuffer;
-import org.agrona.concurrent.ManyToOneConcurrentLinkedQueue;
+import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
@@ -17,7 +19,8 @@ class MessagePublication implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(MessagePublication.class);
 
-  private final ThreadLocal<BufferClaim> bufferClaims = ThreadLocal.withInitial(BufferClaim::new);
+  private static final int QUEUE_CAPACITY = 8192;
+  private static final int RECYCLER_CAPACITY_PER_THREAD = 32768;
 
   private final Publication publication;
   private final AeronEventLoop eventLoop;
@@ -25,7 +28,8 @@ class MessagePublication implements OnDisposable {
   private final Duration backpressureTimeout;
   private final Duration adminActionTimeout;
 
-  private final Queue<PublishTask> publishTasks = new ManyToOneConcurrentLinkedQueue<>();
+  private final Queue<PublishTask> publishTasks =
+      new ManyToOneConcurrentArrayQueue<>(QUEUE_CAPACITY);
 
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
@@ -56,7 +60,9 @@ class MessagePublication implements OnDisposable {
         sink -> {
           boolean result = false;
           if (!isDisposed()) {
-            result = publishTasks.offer(new PublishTask<>(buffer, bufferHandler, sink));
+            result =
+                publishTasks.offer(
+                    PublishTask.newInstance(publication, buffer, bufferHandler, sink));
           }
           if (!result) {
             sink.error(AeronExceptions.failWithPublicationUnavailable());
@@ -249,34 +255,50 @@ class MessagePublication implements OnDisposable {
    *
    * <p>Resident of {@link #publishTasks} queue.
    */
-  private class PublishTask<B> {
+  private static class PublishTask<B> {
 
-    private final B buffer;
-    private final DirectBufferHandler<B> bufferHandler;
-    private final MonoSink<Void> sink;
-    private volatile boolean isDisposed = false;
+    private static final ThreadLocal<BufferClaim> bufferClaims =
+        ThreadLocal.withInitial(BufferClaim::new);
+
+    private static final Recycler<PublishTask> recycler =
+        new Recycler<PublishTask>(RECYCLER_CAPACITY_PER_THREAD) {
+          protected PublishTask newObject(Recycler.Handle<PublishTask> handle) {
+            return new PublishTask(handle);
+          }
+        };
+
+    private final Handle<PublishTask> handle;
+
+    private Publication publication;
+    private B buffer;
+    private DirectBufferHandler<B> bufferHandler;
+    private MonoSink<Void> sink;
+    private volatile boolean isDisposed;
 
     private long start;
 
-    /**
-     * Constructor.
-     *
-     * @param buffer abstract buffer
-     * @param bufferHandler abstract buffer handler
-     * @param sink sink of result
-     */
-    private PublishTask(B buffer, DirectBufferHandler<B> bufferHandler, MonoSink<Void> sink) {
+    private PublishTask(Handle<PublishTask> handle) {
+      this.handle = handle;
+    }
 
-      this.buffer = buffer;
-      this.bufferHandler = bufferHandler;
-      this.sink =
-          sink.onDispose(
-              () -> {
-                if (!isDisposed) {
-                  isDisposed = true;
-                  bufferHandler.dispose(buffer);
-                }
-              });
+    private static <B> PublishTask<B> newInstance(
+        Publication publication,
+        B buffer,
+        DirectBufferHandler<B> bufferHandler,
+        MonoSink<Void> sink) {
+
+      //noinspection unchecked
+      PublishTask<B> task = recycler.get();
+
+      task.publication = publication;
+      task.buffer = buffer;
+      task.bufferHandler = bufferHandler;
+      task.isDisposed = false;
+      task.start = 0;
+      task.sink = sink;
+      task.sink.onDispose(task::onDispose);
+
+      return task;
     }
 
     private long publish() {
@@ -323,6 +345,22 @@ class MessagePublication implements OnDisposable {
     private void error(Throwable ex) {
       if (!isDisposed) {
         sink.error(ex);
+      }
+    }
+
+    private void recycle() {
+      publication = null;
+      buffer = null;
+      bufferHandler = null;
+      sink = null;
+      handle.recycle(this);
+    }
+
+    private void onDispose() {
+      if (!isDisposed) {
+        isDisposed = true;
+        bufferHandler.dispose(buffer);
+        recycle();
       }
     }
   }

@@ -102,11 +102,11 @@ public final class AeronOptions {
     return set(s -> s.adminActionTimeout = adminActionTimeout);
   }
 
-  Supplier<Integer> sessionIdGenerator() {
+  public Supplier<Integer> sessionIdGenerator() {
     return sessionIdGenerator;
   }
 
-  AeronOptions sessionIdGenerator(Supplier<Integer> sessionIdGenerator) {
+  public AeronOptions sessionIdGenerator(Supplier<Integer> sessionIdGenerator) {
     return set(s -> s.sessionIdGenerator = sessionIdGenerator);
   }
 

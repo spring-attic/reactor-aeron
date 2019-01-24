@@ -1,7 +1,11 @@
 package reactor.aeron;
 
+import static io.aeron.driver.Configuration.IDLE_MAX_PARK_NS;
+import static io.aeron.driver.Configuration.IDLE_MAX_SPINS;
+import static io.aeron.driver.Configuration.IDLE_MAX_YIELDS;
+import static io.aeron.driver.Configuration.IDLE_MIN_PARK_NS;
+
 import io.aeron.Aeron;
-import io.aeron.Aeron.Context;
 import io.aeron.ExclusivePublication;
 import io.aeron.Image;
 import io.aeron.Publication;
@@ -11,7 +15,6 @@ import java.io.File;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -33,9 +36,18 @@ public final class AeronResources implements OnDisposable {
   private int numOfWorkers = Runtime.getRuntime().availableProcessors();
   private Supplier<IdleStrategy> workerIdleStrategySupplier =
       AeronResources::defaultBackoffIdleStrategy;
-  private Aeron.Context aeronContext = new Aeron.Context();
+
+  private Aeron.Context aeronContext =
+      new Aeron.Context().errorHandler(th -> logger.warn("Aeron exception occurred: " + th, th));
+
   private MediaDriver.Context mediaContext =
-      new MediaDriver.Context().warnIfDirectoryExists(true).dirDeleteOnStart(true);
+      new MediaDriver.Context()
+          .errorHandler(th -> logger.warn("Exception occurred on MediaDriver: " + th, th))
+          .warnIfDirectoryExists(true)
+          .dirDeleteOnStart(true)
+          // explicit range of reserved session ids
+          .publicationReservedSessionIdLow(0)
+          .publicationReservedSessionIdHigh(Integer.MAX_VALUE);
 
   // State
   private Aeron aeron;
@@ -79,7 +91,7 @@ public final class AeronResources implements OnDisposable {
    * @param ac aeron context
    * @param mdc media driver context
    */
-  private AeronResources(Context ac, MediaDriver.Context mdc) {
+  private AeronResources(Aeron.Context ac, MediaDriver.Context mdc) {
     this();
     copy(ac);
     copy(mdc);
@@ -169,7 +181,7 @@ public final class AeronResources implements OnDisposable {
 
   private static BackoffIdleStrategy defaultBackoffIdleStrategy() {
     return new BackoffIdleStrategy(
-        100, 10, TimeUnit.MICROSECONDS.toNanos(1), TimeUnit.MICROSECONDS.toNanos(100));
+        IDLE_MAX_SPINS, IDLE_MAX_YIELDS, IDLE_MIN_PARK_NS, IDLE_MAX_PARK_NS);
   }
 
   private static String generateRandomTmpDirName() {
