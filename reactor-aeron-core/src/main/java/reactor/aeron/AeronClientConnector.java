@@ -144,8 +144,8 @@ final class AeronClientConnector {
           Duration retryInterval = options.connectTimeout();
 
           // outbound->Pub(endpoint, sessionId)
-          return resources
-              .publication(getOutboundChannel(), STREAM_ID, options, eventLoop)
+          return Mono.fromCallable(this::getOutboundChannel)
+              .flatMap(channel -> resources.publication(channel, STREAM_ID, options, eventLoop))
               .flatMap(mp -> mp.ensureConnected().doOnError(ex -> mp.dispose()))
               .retryBackoff(retryCount, Duration.ZERO, retryInterval)
               .doOnError(
