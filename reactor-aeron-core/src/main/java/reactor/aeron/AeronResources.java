@@ -33,6 +33,7 @@ public final class AeronResources implements OnDisposable {
   private static final Logger logger = LoggerFactory.getLogger(AeronResources.class);
 
   // Settings
+  private int pollFragmentLimit = 8192;
   private int numOfWorkers = Runtime.getRuntime().availableProcessors();
   private Supplier<IdleStrategy> workerIdleStrategySupplier =
       AeronResources::defaultBackoffIdleStrategy;
@@ -93,6 +94,7 @@ public final class AeronResources implements OnDisposable {
    */
   private AeronResources(AeronResources that, Aeron.Context ac, MediaDriver.Context mdc) {
     this();
+    this.pollFragmentLimit = that.pollFragmentLimit;
     this.numOfWorkers = that.numOfWorkers;
     this.workerIdleStrategySupplier = that.workerIdleStrategySupplier;
     copy(ac);
@@ -250,6 +252,18 @@ public final class AeronResources implements OnDisposable {
   }
 
   /**
+   * Settings fragment limit for polling.
+   *
+   * @param pollFragmentLimit fragment limit for polling
+   * @return new {@code AeronResources} object
+   */
+  public AeronResources pollFragmentLimit(int pollFragmentLimit) {
+    AeronResources c = copy();
+    c.pollFragmentLimit = pollFragmentLimit;
+    return c;
+  }
+
+  /**
    * Setter for supplier of {@code IdleStrategy} for worker thread(s).
    *
    * @param s supplier of {@code IdleStrategy} for worker thread(s)
@@ -308,7 +322,8 @@ public final class AeronResources implements OnDisposable {
     return Mono.defer(
         () -> {
           AeronEventLoop eventLoop = eventLoopGroup.next();
-          DefaultAeronInbound inbound = new DefaultAeronInbound(image, eventLoop, subscription);
+          DefaultAeronInbound inbound =
+              new DefaultAeronInbound(image, eventLoop, subscription, pollFragmentLimit);
           return eventLoop
               .registerInbound(inbound)
               .doOnError(
