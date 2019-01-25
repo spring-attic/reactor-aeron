@@ -41,62 +41,74 @@ final class AeronClientConnector {
    * @return mono result
    */
   Mono<AeronConnection> start() {
-    return tryConnect()
-        .flatMap(
-            publication -> {
-              // inbound->MDC(xor(sessionId))->Sub(control-endpoint, xor(sessionId))
-              int sessionId = publication.sessionId();
-              String inboundChannel =
-                  options
-                      .inboundUri()
-                      .uri(b -> b.sessionId(sessionId ^ Integer.MAX_VALUE))
-                      .asString();
-              logger.debug(
-                  "{}: creating client connection: {}",
-                  Integer.toHexString(sessionId),
-                  inboundChannel);
+    return Mono.defer(
+        () -> {
+          AeronEventLoop eventLoop = resources.nextEventLoop();
 
-              // setup cleanup hook to use it onwards
-              MonoProcessor<Void> disposeHook = MonoProcessor.create();
-              // setup image avaiable hook
-              MonoProcessor<Image> inboundAvailable = MonoProcessor.create();
+          return tryConnect(eventLoop)
+              .flatMap(
+                  publication -> {
+                    // inbound->MDC(xor(sessionId))->Sub(control-endpoint, xor(sessionId))
+                    int sessionId = publication.sessionId();
+                    String inboundChannel =
+                        options
+                            .inboundUri()
+                            .uri(b -> b.sessionId(sessionId ^ Integer.MAX_VALUE))
+                            .asString();
+                    logger.debug(
+                        "{}: creating client connection: {}",
+                        Integer.toHexString(sessionId),
+                        inboundChannel);
 
-              return resources
-                  .subscription(
-                      inboundChannel,
-                      STREAM_ID,
-                      image -> {
-                        logger.debug("{}: created client inbound", Integer.toHexString(sessionId));
-                        inboundAvailable.onNext(image);
-                      },
-                      image -> {
-                        logger.debug(
-                            "{}: client inbound became unavaliable",
-                            Integer.toHexString(sessionId));
-                        disposeHook.onComplete();
-                      })
-                  .doOnError(
-                      th -> {
-                        logger.warn(
-                            "{}: failed to create client inbound, cause: {}",
-                            Integer.toHexString(sessionId),
-                            th.toString());
-                        // dispose outbound resource
-                        publication.dispose();
-                      })
-                  .flatMap(
-                      subscription ->
-                          inboundAvailable.flatMap(
-                              image ->
-                                  newConnection(
-                                      sessionId, image, publication, subscription, disposeHook)))
-                  .doOnSuccess(
-                      connection ->
-                          logger.debug(
-                              "{}: created client connection: {}",
-                              Integer.toHexString(sessionId),
-                              inboundChannel));
-            });
+                    // setup cleanup hook to use it onwards
+                    MonoProcessor<Void> disposeHook = MonoProcessor.create();
+                    // setup image avaiable hook
+                    MonoProcessor<Image> inboundAvailable = MonoProcessor.create();
+
+                    return resources
+                        .subscription(
+                            inboundChannel,
+                            STREAM_ID,
+                            eventLoop,
+                            image -> {
+                              logger.debug(
+                                  "{}: created client inbound", Integer.toHexString(sessionId));
+                              inboundAvailable.onNext(image);
+                            },
+                            image -> {
+                              logger.debug(
+                                  "{}: client inbound became unavaliable",
+                                  Integer.toHexString(sessionId));
+                              disposeHook.onComplete();
+                            })
+                        .doOnError(
+                            th -> {
+                              logger.warn(
+                                  "{}: failed to create client inbound, cause: {}",
+                                  Integer.toHexString(sessionId),
+                                  th.toString());
+                              // dispose outbound resource
+                              publication.dispose();
+                            })
+                        .flatMap(
+                            subscription ->
+                                inboundAvailable.flatMap(
+                                    image ->
+                                        newConnection(
+                                            sessionId,
+                                            image,
+                                            publication,
+                                            subscription,
+                                            disposeHook,
+                                            eventLoop)))
+                        .doOnSuccess(
+                            connection ->
+                                logger.debug(
+                                    "{}: created client connection: {}",
+                                    Integer.toHexString(sessionId),
+                                    inboundChannel));
+                  });
+        });
   }
 
   private Mono<AeronConnection> newConnection(
@@ -104,10 +116,11 @@ final class AeronClientConnector {
       Image image,
       MessagePublication publication,
       MessageSubscription subscription,
-      MonoProcessor<Void> disposeHook) {
+      MonoProcessor<Void> disposeHook,
+      AeronEventLoop eventLoop) {
 
     return resources
-        .inbound(image, subscription)
+        .inbound(image, subscription, eventLoop)
         .doOnError(
             ex -> {
               subscription.dispose();
@@ -124,14 +137,15 @@ final class AeronClientConnector {
             });
   }
 
-  private Mono<MessagePublication> tryConnect() {
+  private Mono<MessagePublication> tryConnect(AeronEventLoop eventLoop) {
     return Mono.defer(
         () -> {
           int retryCount = options.connectRetryCount();
           Duration retryInterval = options.connectTimeout();
 
           // outbound->Pub(endpoint, sessionId)
-          return Mono.defer(() -> resources.publication(getOutboundChannel(), STREAM_ID, options))
+          return Mono.defer(
+                  () -> resources.publication(getOutboundChannel(), STREAM_ID, options, eventLoop))
               .flatMap(mp -> mp.ensureConnected().doOnError(ex -> mp.dispose()))
               .retryBackoff(retryCount, Duration.ZERO, retryInterval)
               .doOnError(

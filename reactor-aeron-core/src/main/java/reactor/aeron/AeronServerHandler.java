@@ -66,7 +66,11 @@ final class AeronServerHandler implements OnDisposable {
 
           return resources
               .subscription(
-                  acceptorChannel, STREAM_ID, this::onImageAvailable, this::onImageUnavailable)
+                  acceptorChannel,
+                  STREAM_ID,
+                  resources.nextEventLoop(),
+                  this::onImageAvailable,
+                  this::onImageUnavailable)
               .doOnSuccess(s -> this.acceptorSubscription = s)
               .thenReturn(this)
               .doOnSuccess(handler -> logger.debug("Started {} on: {}", this, acceptorChannel))
@@ -95,12 +99,14 @@ final class AeronServerHandler implements OnDisposable {
     logger.debug(
         "{}: creating server connection: {}", Integer.toHexString(sessionId), outboundChannel);
 
+    AeronEventLoop eventLoop = resources.nextEventLoop();
+
     resources
-        .publication(outboundChannel, STREAM_ID, options)
+        .publication(outboundChannel, STREAM_ID, options, eventLoop)
         .flatMap(
             publication ->
                 resources
-                    .inbound(image, null)
+                    .inbound(image, null /*subscription*/, eventLoop)
                     .doOnError(ex -> publication.dispose())
                     .flatMap(inbound -> newConnection(sessionId, publication, inbound)))
         .doOnSuccess(
