@@ -56,6 +56,10 @@ class AeronEventLoopGroup implements OnDisposable {
     return eventLoops[Math.abs(idx.getAndIncrement() % eventLoops.length)];
   }
 
+  AeronEventLoop first() {
+    return eventLoops[0];
+  }
+
   @Override
   public void dispose() {
     dispose.onComplete();
