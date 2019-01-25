@@ -293,15 +293,16 @@ final class AeronEventLoop implements OnDisposable {
     private static final int REPORT_INTERVAL = 1000;
 
     // Reporting
-    private long lastTotalTicks = 0;
-    private long lastTotalOutbounds = 0;
-    private long lastTotalInbounds = 0;
-    private long lastTotalIdles = 0;
-    // Reporting
+
     private long ticks;
     private double outboundRate;
     private double inboundRate;
     private double idleRate;
+
+    private long lastTotalTicks;
+    private long lastTotalOutbounds;
+    private long lastTotalInbounds;
+    private long lastTotalIdles;
 
     @Override
     public long getTicks() {
