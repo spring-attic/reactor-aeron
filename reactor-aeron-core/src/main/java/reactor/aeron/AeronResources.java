@@ -1,10 +1,5 @@
 package reactor.aeron;
 
-import static io.aeron.driver.Configuration.IDLE_MAX_PARK_NS;
-import static io.aeron.driver.Configuration.IDLE_MAX_SPINS;
-import static io.aeron.driver.Configuration.IDLE_MAX_YIELDS;
-import static io.aeron.driver.Configuration.IDLE_MIN_PARK_NS;
-
 import io.aeron.Aeron;
 import io.aeron.ExclusivePublication;
 import io.aeron.Image;
@@ -33,9 +28,9 @@ public final class AeronResources implements OnDisposable {
   private static final Logger logger = LoggerFactory.getLogger(AeronResources.class);
 
   // Settings
+
+  private int pollFragmentLimit = 8192;
   private int numOfWorkers = Runtime.getRuntime().availableProcessors();
-  private Supplier<IdleStrategy> workerIdleStrategySupplier =
-      AeronResources::defaultBackoffIdleStrategy;
 
   private Aeron.Context aeronContext =
       new Aeron.Context().errorHandler(th -> logger.warn("Aeron exception occurred: " + th, th));
@@ -48,6 +43,9 @@ public final class AeronResources implements OnDisposable {
           // explicit range of reserved session ids
           .publicationReservedSessionIdLow(0)
           .publicationReservedSessionIdHigh(Integer.MAX_VALUE);
+
+  private Supplier<IdleStrategy> workerIdleStrategySupplier =
+      () -> new BackoffIdleStrategy(1, 1, 1, 1);
 
   // State
   private Aeron aeron;
@@ -93,6 +91,7 @@ public final class AeronResources implements OnDisposable {
    */
   private AeronResources(AeronResources that, Aeron.Context ac, MediaDriver.Context mdc) {
     this();
+    this.pollFragmentLimit = that.pollFragmentLimit;
     this.numOfWorkers = that.numOfWorkers;
     this.workerIdleStrategySupplier = that.workerIdleStrategySupplier;
     copy(ac);
@@ -181,11 +180,6 @@ public final class AeronResources implements OnDisposable {
         .nanoClock(ac.nanoClock());
   }
 
-  private static BackoffIdleStrategy defaultBackoffIdleStrategy() {
-    return new BackoffIdleStrategy(
-        IDLE_MAX_SPINS, IDLE_MAX_YIELDS, IDLE_MIN_PARK_NS, IDLE_MAX_PARK_NS);
-  }
-
   private static String generateRandomTmpDirName() {
     return IoUtil.tmpDirName()
         + "aeron"
@@ -250,6 +244,18 @@ public final class AeronResources implements OnDisposable {
   }
 
   /**
+   * Settings fragment limit for polling.
+   *
+   * @param pollFragmentLimit fragment limit for polling
+   * @return new {@code AeronResources} object
+   */
+  public AeronResources pollFragmentLimit(int pollFragmentLimit) {
+    AeronResources c = copy();
+    c.pollFragmentLimit = pollFragmentLimit;
+    return c;
+  }
+
+  /**
    * Setter for supplier of {@code IdleStrategy} for worker thread(s).
    *
    * @param s supplier of {@code IdleStrategy} for worker thread(s)
@@ -308,7 +314,8 @@ public final class AeronResources implements OnDisposable {
     return Mono.defer(
         () -> {
           AeronEventLoop eventLoop = eventLoopGroup.next();
-          DefaultAeronInbound inbound = new DefaultAeronInbound(image, eventLoop, subscription);
+          DefaultAeronInbound inbound =
+              new DefaultAeronInbound(image, eventLoop, subscription, pollFragmentLimit);
           return eventLoop
               .registerInbound(inbound)
               .doOnError(
