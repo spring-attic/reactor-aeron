@@ -313,11 +313,11 @@ public final class AeronResources implements OnDisposable {
   }
 
   /**
-   * Returns already used event loop. See {@code eventLoopGroup.first()}.
+   * Returns already used first event loop. See {@code eventLoopGroup.first()}.
    *
    * @return {@code AeronEventLoop} instance
    */
-  AeronEventLoop alreadyUsedEventLoop() {
+  AeronEventLoop firstEventLoop() {
     return eventLoopGroup.first();
   }
 

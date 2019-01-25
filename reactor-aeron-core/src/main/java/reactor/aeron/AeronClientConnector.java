@@ -144,16 +144,13 @@ final class AeronClientConnector {
           Duration retryInterval = options.connectTimeout();
 
           // outbound->Pub(endpoint, sessionId)
-          return Mono.defer(() -> getPublication(eventLoop))
+          return resources
+              .publication(getOutboundChannel(), STREAM_ID, options, eventLoop)
               .flatMap(mp -> mp.ensureConnected().doOnError(ex -> mp.dispose()))
               .retryBackoff(retryCount, Duration.ZERO, retryInterval)
               .doOnError(
                   ex -> logger.warn("aeron.Publication is not connected after several retries"));
         });
-  }
-
-  private Mono<MessagePublication> getPublication(AeronEventLoop eventLoop) {
-    return resources.publication(getOutboundChannel(), STREAM_ID, options, eventLoop);
   }
 
   private String getOutboundChannel() {

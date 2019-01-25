@@ -68,7 +68,7 @@ final class AeronServerHandler implements OnDisposable {
               .subscription(
                   acceptorChannel,
                   STREAM_ID,
-                  resources.alreadyUsedEventLoop(),
+                  resources.firstEventLoop(),
                   this::onImageAvailable,
                   this::onImageUnavailable)
               .doOnSuccess(s -> this.acceptorSubscription = s)
