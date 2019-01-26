@@ -304,16 +304,35 @@ public final class AeronResources implements OnDisposable {
   }
 
   /**
+   * Shortcut method for {@code eventLoopGroup.next()}.
+   *
+   * @return {@code AeronEventLoop} instance
+   */
+  AeronEventLoop nextEventLoop() {
+    return eventLoopGroup.next();
+  }
+
+  /**
+   * Returns already used first event loop. See {@code eventLoopGroup.first()}.
+   *
+   * @return {@code AeronEventLoop} instance
+   */
+  AeronEventLoop firstEventLoop() {
+    return eventLoopGroup.first();
+  }
+
+  /**
    * Creates and registers {@link DefaultAeronInbound}.
    *
    * @param image aeron image
    * @param subscription subscription
+   * @param eventLoop aeron event lopop
    * @return mono result
    */
-  Mono<DefaultAeronInbound> inbound(Image image, MessageSubscription subscription) {
+  Mono<DefaultAeronInbound> inbound(
+      Image image, MessageSubscription subscription, AeronEventLoop eventLoop) {
     return Mono.defer(
         () -> {
-          AeronEventLoop eventLoop = eventLoopGroup.next();
           DefaultAeronInbound inbound =
               new DefaultAeronInbound(image, eventLoop, subscription, pollFragmentLimit);
           return eventLoop
@@ -332,9 +351,11 @@ public final class AeronResources implements OnDisposable {
    * @param channel aeron channel
    * @param streamId aeron stream id
    * @param options aeorn options
+   * @param eventLoop aeron event loop
    * @return mono result
    */
-  Mono<MessagePublication> publication(String channel, int streamId, AeronOptions options) {
+  Mono<MessagePublication> publication(
+      String channel, int streamId, AeronOptions options, AeronEventLoop eventLoop) {
     return Mono.defer(
         () ->
             aeronPublication(channel, streamId)
@@ -347,22 +368,20 @@ public final class AeronResources implements OnDisposable {
                             channel,
                             ex.toString()))
                 .flatMap(
-                    aeronPublication -> {
-                      AeronEventLoop eventLoop = eventLoopGroup.next();
-                      return eventLoop
-                          .registerPublication(
-                              new MessagePublication(aeronPublication, options, eventLoop))
-                          .doOnError(
-                              ex -> {
-                                logger.error(
-                                    "{} failed on registerPublication(), cause: {}",
-                                    this,
-                                    ex.toString());
-                                if (!aeronPublication.isClosed()) {
-                                  aeronPublication.close();
-                                }
-                              });
-                    }));
+                    aeronPublication ->
+                        eventLoop
+                            .registerPublication(
+                                new MessagePublication(aeronPublication, options, eventLoop))
+                            .doOnError(
+                                ex -> {
+                                  logger.error(
+                                      "{} failed on registerPublication(), cause: {}",
+                                      this,
+                                      ex.toString());
+                                  if (!aeronPublication.isClosed()) {
+                                    aeronPublication.close();
+                                  }
+                                })));
   }
 
   private Mono<Publication> aeronPublication(String channel, int streamId) {
@@ -392,6 +411,7 @@ public final class AeronResources implements OnDisposable {
    *
    * @param channel aeron channel
    * @param streamId aeron stream id
+   * @param eventLoop aeron event loop
    * @param onImageAvailable available image handler; optional
    * @param onImageUnavailable unavailable image handler; optional
    * @return mono result
@@ -399,6 +419,7 @@ public final class AeronResources implements OnDisposable {
   Mono<MessageSubscription> subscription(
       String channel,
       int streamId,
+      AeronEventLoop eventLoop,
       Consumer<Image> onImageAvailable,
       Consumer<Image> onImageUnavailable) {
 
@@ -414,22 +435,20 @@ public final class AeronResources implements OnDisposable {
                             channel,
                             ex.toString()))
                 .flatMap(
-                    aeronSubscription -> {
-                      AeronEventLoop eventLoop = eventLoopGroup.next();
-                      return eventLoop
-                          .registerSubscription(
-                              new MessageSubscription(aeronSubscription, eventLoop))
-                          .doOnError(
-                              ex -> {
-                                logger.error(
-                                    "{} failed on registerSubscription(), cause: {}",
-                                    this,
-                                    ex.toString());
-                                if (!aeronSubscription.isClosed()) {
-                                  aeronSubscription.close();
-                                }
-                              });
-                    }));
+                    aeronSubscription ->
+                        eventLoop
+                            .registerSubscription(
+                                new MessageSubscription(aeronSubscription, eventLoop))
+                            .doOnError(
+                                ex -> {
+                                  logger.error(
+                                      "{} failed on registerSubscription(), cause: {}",
+                                      this,
+                                      ex.toString());
+                                  if (!aeronSubscription.isClosed()) {
+                                    aeronSubscription.close();
+                                  }
+                                })));
   }
 
   private Mono<Subscription> aeronSubscription(
