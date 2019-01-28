@@ -29,6 +29,9 @@ public final class WorkerFlightRecorder implements WorkerMBean {
     reportTime = System.currentTimeMillis() + REPORT_INTERVAL;
   }
 
+  /**
+   * Reports.
+   */
   public void tryReport() {
     long currentTime = System.currentTimeMillis();
     if (currentTime >= reportTime) {
