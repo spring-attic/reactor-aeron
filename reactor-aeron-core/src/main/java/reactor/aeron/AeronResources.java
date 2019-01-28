@@ -270,6 +270,27 @@ public final class AeronResources implements OnDisposable {
   }
 
   /**
+   * Settings write limit.
+   *
+   * @param writeLimit write limit per eventloop tick
+   * @return @return new {@code AeronResources} object
+   */
+  public AeronResources writeLimit(int writeLimit) {
+    AeronResources c = copy();
+    c.writeLimit = writeLimit;
+    return c;
+  }
+
+  /**
+   * Gets write limit.
+   *
+   * @return write limit value
+   */
+  int writeLimit() {
+    return writeLimit;
+  }
+
+  /**
    * Starting up this resources instance if not started already.
    *
    * @return started {@code AeronResources} object
@@ -321,10 +342,6 @@ public final class AeronResources implements OnDisposable {
    */
   AeronEventLoop firstEventLoop() {
     return eventLoopGroup.first();
-  }
-
-  int writeLimit() {
-    return writeLimit;
   }
 
   /**
