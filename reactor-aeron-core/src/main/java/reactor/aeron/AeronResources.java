@@ -45,7 +45,7 @@ public final class AeronResources implements OnDisposable {
           .publicationReservedSessionIdHigh(Integer.MAX_VALUE);
 
   private Supplier<IdleStrategy> workerIdleStrategySupplier =
-      () -> new BackoffIdleStrategy(1, 1, 1, 1);
+      () -> new BackoffIdleStrategy(1, 1, 1, 100);
 
   // State
   private Aeron aeron;
