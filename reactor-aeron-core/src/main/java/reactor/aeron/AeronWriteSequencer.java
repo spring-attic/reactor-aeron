@@ -34,7 +34,7 @@ final class AeronWriteSequencer {
           }
           if (publisher instanceof Flux) {
             return Flux.from(publisher)
-                .flatMap(buffer -> publication.publish(buffer, bufferHandler), 4, 4)
+                .flatMap(buffer -> publication.publish(buffer, bufferHandler))
                 .takeUntilOther(onPublicationDispose())
                 .then();
           }

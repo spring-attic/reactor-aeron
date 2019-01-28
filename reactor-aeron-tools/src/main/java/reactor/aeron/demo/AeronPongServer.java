@@ -9,14 +9,6 @@ import reactor.aeron.AeronServer;
 
 public final class AeronPongServer {
 
-  static {
-    // see .../aeron/aeron-driver/src/main/resources/low-latency.properties
-    System.setProperty("agrona.disable.bounds.checks", "true");
-    System.setProperty("aeron.socket.so_sndbuf", "2m");
-    System.setProperty("aeron.socket.so_rcvbuf", "2m");
-    System.setProperty("aeron.rcv.initial.window.length", "2m");
-  }
-
   /**
    * Main runner.
    *
@@ -24,9 +16,7 @@ public final class AeronPongServer {
    */
   public static void main(String... args) {
 
-    Supplier<IdleStrategy> idleStrategySupplier = () -> new BackoffIdleStrategy(1, 1, 1, 1);
-    //    Supplier<IdleStrategy> idleStrategySupplier = () -> new BusySpinIdleStrategy();
-    //    Supplier<IdleStrategy> idleStrategySupplier = () -> null;
+    Supplier<IdleStrategy> idleStrategySupplier = () -> new BackoffIdleStrategy(1, 1, 1, 100);
 
     AeronResources resources =
         new AeronResources()
