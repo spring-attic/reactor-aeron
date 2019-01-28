@@ -2,8 +2,6 @@ package reactor.aeron;
 
 import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
-import io.netty.util.Recycler;
-import io.netty.util.Recycler.Handle;
 import java.time.Duration;
 import java.util.Queue;
 import org.agrona.MutableDirectBuffer;
@@ -20,7 +18,6 @@ class MessagePublication implements OnDisposable {
   private static final Logger logger = LoggerFactory.getLogger(MessagePublication.class);
 
   private static final int QUEUE_CAPACITY = 8192;
-  private static final int RECYCLER_CAPACITY_PER_THREAD = 32768;
 
   private final Publication publication;
   private final AeronEventLoop eventLoop;
@@ -260,15 +257,6 @@ class MessagePublication implements OnDisposable {
     private static final ThreadLocal<BufferClaim> bufferClaims =
         ThreadLocal.withInitial(BufferClaim::new);
 
-    private static final Recycler<PublishTask> recycler =
-        new Recycler<PublishTask>(RECYCLER_CAPACITY_PER_THREAD) {
-          protected PublishTask newObject(Recycler.Handle<PublishTask> handle) {
-            return new PublishTask(handle);
-          }
-        };
-
-    private final Handle<PublishTask> handle;
-
     private Publication publication;
     private B buffer;
     private DirectBufferHandler<B> bufferHandler;
@@ -277,18 +265,13 @@ class MessagePublication implements OnDisposable {
 
     private long start;
 
-    private PublishTask(Handle<PublishTask> handle) {
-      this.handle = handle;
-    }
-
     private static <B> PublishTask<B> newInstance(
         Publication publication,
         B buffer,
         DirectBufferHandler<B> bufferHandler,
         MonoSink<Void> sink) {
 
-      //noinspection unchecked
-      PublishTask<B> task = recycler.get();
+      PublishTask<B> task = new PublishTask<>();
 
       task.publication = publication;
       task.buffer = buffer;
@@ -348,19 +331,10 @@ class MessagePublication implements OnDisposable {
       }
     }
 
-    private void recycle() {
-      publication = null;
-      buffer = null;
-      bufferHandler = null;
-      sink = null;
-      handle.recycle(this);
-    }
-
     private void onDispose() {
       if (!isDisposed) {
         isDisposed = true;
         bufferHandler.dispose(buffer);
-        recycle();
       }
     }
   }
