@@ -1,6 +1,6 @@
 package reactor.aeron;
 
-final class WorkerFlightRecorder implements WorkerMBean {
+public final class WorkerFlightRecorder implements WorkerMBean {
 
   private static final int REPORT_INTERVAL = 1000;
 
@@ -25,11 +25,11 @@ final class WorkerFlightRecorder implements WorkerMBean {
   private long lastTotalIdleCount;
   private long lastTotalWorkCount;
 
-  void begin() {
+  public void begin() {
     reportTime = System.currentTimeMillis() + REPORT_INTERVAL;
   }
 
-  void tryReport() {
+  public void tryReport() {
     long currentTime = System.currentTimeMillis();
     if (currentTime >= reportTime) {
       reportTime = currentTime + REPORT_INTERVAL;
@@ -89,23 +89,23 @@ final class WorkerFlightRecorder implements WorkerMBean {
     lastTotalInboundCount = totalInboundCount;
   }
 
-  void countTick() {
+  public void countTick() {
     totalTickCount++;
   }
 
-  void countOutbound(int c) {
+  public void countOutbound(int c) {
     totalOutboundCount += c;
   }
 
-  void countInbound(int c) {
+  public void countInbound(int c) {
     totalInboundCount += c;
   }
 
-  void countIdle() {
+  public void countIdle() {
     totalIdleCount++;
   }
 
-  void countWork(int c) {
+  public void countWork(int c) {
     totalWorkCount += c;
   }
 }
