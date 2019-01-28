@@ -7,6 +7,7 @@ import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
 import java.io.File;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
@@ -294,7 +295,7 @@ public final class AeronResources implements OnDisposable {
 
           Runtime.getRuntime()
               .addShutdownHook(
-                  new Thread(() -> deleteAeronDirectory(aeronContext.aeronDirectory())));
+                  new Thread(() -> deleteAeronDirectory(mediaDriver.aeronDirectoryName())));
 
           logger.debug(
               "{} has initialized embedded media driver, aeron directory: {}",
@@ -521,10 +522,11 @@ public final class AeronResources implements OnDisposable {
         });
   }
 
-  private void deleteAeronDirectory(File aeronDirectory) {
+  private void deleteAeronDirectory(String aeronDirectoryName) {
+    File aeronDirectory = Paths.get(aeronDirectoryName).toFile();
     if (aeronDirectory.exists()) {
       IoUtil.delete(aeronDirectory, true);
-      logger.debug("{} deleted aeron directory {}", this, aeronDirectory);
+      logger.debug("{} deleted aeron directory {}", this, aeronDirectoryName);
     }
   }
 
