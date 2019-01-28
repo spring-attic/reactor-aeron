@@ -27,6 +27,9 @@ public final class AeronResources implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronResources.class);
 
+  private static final Supplier<IdleStrategy> defaultBackoffIdleStrategySupplier =
+      () -> new BackoffIdleStrategy(1, 1, 1, 100);
+
   // Settings
 
   private int pollFragmentLimit = 8192;
@@ -40,12 +43,16 @@ public final class AeronResources implements OnDisposable {
           .errorHandler(th -> logger.warn("Exception occurred on MediaDriver: " + th, th))
           .warnIfDirectoryExists(true)
           .dirDeleteOnStart(true)
+          // low latency settings
+          .conductorIdleStrategy(defaultBackoffIdleStrategySupplier.get())
+          .receiverIdleStrategy(defaultBackoffIdleStrategySupplier.get())
+          .senderIdleStrategy(defaultBackoffIdleStrategySupplier.get())
+          .termBufferSparseFile(false)
           // explicit range of reserved session ids
           .publicationReservedSessionIdLow(0)
           .publicationReservedSessionIdHigh(Integer.MAX_VALUE);
 
-  private Supplier<IdleStrategy> workerIdleStrategySupplier =
-      () -> new BackoffIdleStrategy(1, 1, 1, 100);
+  private Supplier<IdleStrategy> workerIdleStrategySupplier = defaultBackoffIdleStrategySupplier;
 
   // State
   private Aeron aeron;
