@@ -25,7 +25,6 @@ public class ClientThroughput {
     AeronResources aeronResources =
         new AeronResources()
             .useTmpDir()
-            .pollFragmentLimit(256)
             .singleWorker()
             .media(
                 ctx ->
