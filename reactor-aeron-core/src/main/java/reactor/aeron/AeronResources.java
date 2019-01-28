@@ -7,6 +7,7 @@ import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
 import java.io.File;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,6 +29,9 @@ public final class AeronResources implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronResources.class);
 
+  private static final Supplier<IdleStrategy> defaultBackoffIdleStrategySupplier =
+      () -> new BackoffIdleStrategy(1, 1, 1, 100);
+
   // Settings
 
   private int pollFragmentLimit = 8192;
@@ -42,12 +46,16 @@ public final class AeronResources implements OnDisposable {
           .errorHandler(th -> logger.warn("Exception occurred on MediaDriver: " + th, th))
           .warnIfDirectoryExists(true)
           .dirDeleteOnStart(true)
+          // low latency settings
+          .conductorIdleStrategy(defaultBackoffIdleStrategySupplier.get())
+          .receiverIdleStrategy(defaultBackoffIdleStrategySupplier.get())
+          .senderIdleStrategy(defaultBackoffIdleStrategySupplier.get())
+          .termBufferSparseFile(false)
           // explicit range of reserved session ids
           .publicationReservedSessionIdLow(0)
           .publicationReservedSessionIdHigh(Integer.MAX_VALUE);
 
-  private Supplier<IdleStrategy> workerIdleStrategySupplier =
-      () -> new BackoffIdleStrategy(1, 1, 1, 100);
+  private Supplier<IdleStrategy> workerIdleStrategySupplier = defaultBackoffIdleStrategySupplier;
 
   // State
   private Aeron aeron;
@@ -317,7 +325,7 @@ public final class AeronResources implements OnDisposable {
 
           Runtime.getRuntime()
               .addShutdownHook(
-                  new Thread(() -> deleteAeronDirectory(aeronContext.aeronDirectory())));
+                  new Thread(() -> deleteAeronDirectory(mediaDriver.aeronDirectoryName())));
 
           logger.debug(
               "{} has initialized embedded media driver, aeron directory: {}",
@@ -544,10 +552,11 @@ public final class AeronResources implements OnDisposable {
         });
   }
 
-  private void deleteAeronDirectory(File aeronDirectory) {
+  private void deleteAeronDirectory(String aeronDirectoryName) {
+    File aeronDirectory = Paths.get(aeronDirectoryName).toFile();
     if (aeronDirectory.exists()) {
       IoUtil.delete(aeronDirectory, true);
-      logger.debug("{} deleted aeron directory {}", this, aeronDirectory);
+      logger.debug("{} deleted aeron directory {}", this, aeronDirectoryName);
     }
   }
 

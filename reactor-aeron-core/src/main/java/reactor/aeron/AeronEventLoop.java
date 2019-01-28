@@ -67,15 +67,16 @@ final class AeronEventLoop implements OnDisposable {
   }
 
   private Worker createWorker() throws Exception {
-    String threadName = String.format("%s-%x-%d", name, groupId, workerId);
-    ThreadFactory threadFactory = defaultThreadFactory(threadName);
-    Worker worker = new Worker();
+    final String threadName = String.format("%s-%x-%d", name, groupId, workerId);
+    final ThreadFactory threadFactory = defaultThreadFactory(threadName);
 
+    WorkerFlightRecorder flightRecorder = new WorkerFlightRecorder();
     MBeanServer mbeanServer = ManagementFactory.getPlatformMBeanServer();
     ObjectName objectName = new ObjectName("reactor.aeron:name=" + threadName);
-    StandardMBean standardMBean = new StandardMBean(worker, WorkerMBean.class);
+    StandardMBean standardMBean = new StandardMBean(flightRecorder, WorkerMBean.class);
     mbeanServer.registerMBean(standardMBean, objectName);
 
+    Worker worker = new Worker(flightRecorder);
     thread = threadFactory.newThread(worker);
     thread.start();
 
@@ -265,98 +266,49 @@ final class AeronEventLoop implements OnDisposable {
   }
 
   /**
-   * JMX MBean exposer class for event loop worker thread, for {@link Worker}. Contains various
-   * runtime stats.
-   */
-  public interface WorkerMBean {
-
-    long getTicks();
-
-    double getOutboundRate();
-
-    double getInboundRate();
-
-    double getIdleRate();
-  }
-
-  /**
-   * Runnable event loop worker. Does a following:
+   * Runnable event loop worker.
    *
    * <ul>
    *   <li>runs until dispose signal obtained
    *   <li>on run iteration makes progress on: a) commands; b) publications; c) subscriptions
-   *   <li>idles on negative progress
+   *   <li>idles on zero progress
+   *   <li>collects and reports runtime stats
    * </ul>
    */
-  private class Worker implements Runnable, WorkerMBean {
+  private class Worker implements Runnable {
 
-    private static final int REPORT_INTERVAL = 1000;
+    private final WorkerFlightRecorder flightRecorder;
 
-    // Reporting
-
-    private long ticks;
-    private double outboundRate;
-    private double inboundRate;
-    private double idleRate;
-
-    private long lastTotalTicks;
-    private long lastTotalOutbounds;
-    private long lastTotalInbounds;
-    private long lastTotalIdles;
-
-    @Override
-    public long getTicks() {
-      return ticks;
-    }
-
-    @Override
-    public double getOutboundRate() {
-      return outboundRate;
-    }
-
-    @Override
-    public double getInboundRate() {
-      return inboundRate;
-    }
-
-    @Override
-    public double getIdleRate() {
-      return idleRate;
+    public Worker(WorkerFlightRecorder flightRecorder) {
+      this.flightRecorder = flightRecorder;
     }
 
     @Override
     public void run() {
-      long totalTicks = 0;
-      long totalOutbounds = 0; // % out >>
-      long totalInbounds = 0; // % receive <<
-      long totalIdles = 0; // % idle
-
-      long reportTime = System.currentTimeMillis() + REPORT_INTERVAL;
+      flightRecorder.begin();
 
       // Process commands, publications and subscriptions
       while (!dispose.isDisposed()) {
-
-        totalTicks++;
+        flightRecorder.countTick();
 
         // Commands
         processCommands();
 
-        int outCount = processOutbound();
-        totalOutbounds += outCount;
+        int i = processOutbound();
+        flightRecorder.countOutbound(i);
 
-        int inCount = processInbound();
-        totalInbounds += inCount;
+        int j = processInbound();
+        flightRecorder.countInbound(j);
 
-        int workCount = outCount + inCount;
+        int workCount = i + j;
         if (workCount < 1) {
-          totalIdles++;
+          flightRecorder.countIdle();
+        } else {
+          flightRecorder.countWork(workCount);
         }
 
-        long currentTime = System.currentTimeMillis();
-        if (currentTime >= reportTime) {
-          reportTime = currentTime + REPORT_INTERVAL;
-          processReporting(totalTicks, totalOutbounds, totalInbounds, totalIdles);
-        }
+        // Reporting
+        flightRecorder.tryReport();
 
         idleStrategy.idle(workCount);
       }
@@ -396,19 +348,6 @@ final class AeronEventLoop implements OnDisposable {
         }
       }
       return result;
-    }
-
-    private void processReporting(
-        long totalTicks, long totalOutbounds, long totalInbounds, long totalIdles) {
-      ticks = totalTicks - lastTotalTicks;
-      outboundRate = (double) (totalOutbounds - lastTotalOutbounds) / ticks;
-      inboundRate = (double) (totalInbounds - lastTotalInbounds) / ticks;
-      idleRate = (double) (totalIdles - lastTotalIdles) / ticks;
-
-      lastTotalTicks = totalTicks;
-      lastTotalOutbounds = totalOutbounds;
-      lastTotalInbounds = totalInbounds;
-      lastTotalIdles = totalIdles;
     }
 
     private void processCommands() {
