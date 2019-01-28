@@ -44,7 +44,7 @@ class MessagePublication implements OnDisposable {
     this.connectTimeout = options.connectTimeout();
     this.backpressureTimeout = options.backpressureTimeout();
     this.adminActionTimeout = options.adminActionTimeout();
-    this.writeLimit = options.writeLimit();
+    this.writeLimit = options.resources().writeLimit();
   }
 
   /**

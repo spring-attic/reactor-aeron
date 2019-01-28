@@ -110,10 +110,6 @@ public final class AeronOptions {
     return set(s -> s.sessionIdGenerator = sessionIdGenerator);
   }
 
-  public int writeLimit() {
-    return resources.writeLimit();
-  }
-
   private AeronOptions set(Consumer<AeronOptions> c) {
     AeronOptions s = new AeronOptions(this);
     c.accept(s);

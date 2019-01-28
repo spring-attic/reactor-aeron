@@ -23,7 +23,6 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.concurrent.Queues;
 
 public final class AeronResources implements OnDisposable {
 
@@ -34,8 +33,8 @@ public final class AeronResources implements OnDisposable {
 
   // Settings
 
-  private int pollFragmentLimit = 8192;
-  private int writeLimit = Queues.SMALL_BUFFER_SIZE;
+  private int pollFragmentLimit = 32;
+  private int writeLimit = 32;
   private int numOfWorkers = Runtime.getRuntime().availableProcessors();
 
   private Aeron.Context aeronContext =
