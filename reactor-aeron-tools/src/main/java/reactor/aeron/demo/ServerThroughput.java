@@ -16,11 +16,14 @@ public class ServerThroughput {
    * @param args program arguments.
    */
   public static void main(String[] args) {
+
     Supplier<IdleStrategy> idleStrategySupplier = () -> new BackoffIdleStrategy(1, 1, 1, 100);
 
     AeronResources aeronResources =
         new AeronResources()
             .useTmpDir()
+            .pollFragmentLimit(256)
+            .singleWorker()
             .media(
                 ctx ->
                     ctx.threadingMode(ThreadingMode.DEDICATED)
