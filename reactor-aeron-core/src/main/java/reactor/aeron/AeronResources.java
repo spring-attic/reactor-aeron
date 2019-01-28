@@ -33,7 +33,8 @@ public final class AeronResources implements OnDisposable {
 
   // Settings
 
-  private int pollFragmentLimit = 8192;
+  private int pollFragmentLimit = 32;
+  private int writeLimit = 32;
   private int numOfWorkers = Runtime.getRuntime().availableProcessors();
 
   private Aeron.Context aeronContext =
@@ -273,6 +274,27 @@ public final class AeronResources implements OnDisposable {
     AeronResources c = copy();
     c.workerIdleStrategySupplier = s;
     return c;
+  }
+
+  /**
+   * Settings write limit.
+   *
+   * @param writeLimit write limit per eventloop tick
+   * @return @return new {@code AeronResources} object
+   */
+  public AeronResources writeLimit(int writeLimit) {
+    AeronResources c = copy();
+    c.writeLimit = writeLimit;
+    return c;
+  }
+
+  /**
+   * Gets write limit.
+   *
+   * @return write limit value
+   */
+  int writeLimit() {
+    return writeLimit;
   }
 
   /**
