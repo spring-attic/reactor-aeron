@@ -2,9 +2,12 @@ package reactor.aeron.demo;
 
 import io.aeron.driver.ThreadingMode;
 import java.time.Duration;
+import java.util.function.Supplier;
 import org.HdrHistogram.Recorder;
 import org.agrona.DirectBuffer;
 import org.agrona.ExpandableArrayBuffer;
+import org.agrona.concurrent.BackoffIdleStrategy;
+import org.agrona.concurrent.IdleStrategy;
 import reactor.aeron.AeronClient;
 import reactor.aeron.AeronConnection;
 import reactor.aeron.AeronResources;
@@ -22,10 +25,20 @@ public final class AeronPingClient {
    */
   public static void main(String... args) {
 
+    Supplier<IdleStrategy> idleStrategySupplier = () -> new BackoffIdleStrategy(1, 1, 1, 100);
+
     AeronResources resources =
         new AeronResources()
             .useTmpDir()
-            .media(ctx -> ctx.threadingMode(ThreadingMode.SHARED))
+            .pollFragmentLimit(4)
+            .singleWorker()
+            .media(
+                ctx ->
+                    ctx.threadingMode(ThreadingMode.DEDICATED)
+                        .conductorIdleStrategy(idleStrategySupplier.get())
+                        .receiverIdleStrategy(idleStrategySupplier.get())
+                        .senderIdleStrategy(idleStrategySupplier.get())
+                        .termBufferSparseFile(false))
             .start()
             .block();
 
