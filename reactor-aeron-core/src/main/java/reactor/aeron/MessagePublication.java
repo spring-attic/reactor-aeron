@@ -24,6 +24,7 @@ class MessagePublication implements OnDisposable {
   private final Duration connectTimeout;
   private final Duration backpressureTimeout;
   private final Duration adminActionTimeout;
+  private final int writeLimit;
 
   private final Queue<PublishTask> publishTasks =
       new ManyToOneConcurrentArrayQueue<>(QUEUE_CAPACITY);
@@ -43,6 +44,7 @@ class MessagePublication implements OnDisposable {
     this.connectTimeout = options.connectTimeout();
     this.backpressureTimeout = options.backpressureTimeout();
     this.adminActionTimeout = options.adminActionTimeout();
+    this.writeLimit = options.writeLimit();
   }
 
   /**
@@ -70,9 +72,27 @@ class MessagePublication implements OnDisposable {
   /**
    * Proceed with processing of tasks.
    *
-   * @return 1 - some progress was done; 0 - denotes no progress was done
+   * @return more than or equal {@code 1} - some progress was done; {@code 0} - denotes no progress
+   *     was done
    */
   int proceed() {
+    int result = 0;
+    for (int i = 0, current; i < writeLimit; i++) {
+      current = proceed0();
+      if (current < 1) {
+        break;
+      }
+      result += current;
+    }
+    return result;
+  }
+
+  /**
+   * Proceed with processing of tasks.
+   *
+   * @return {@code 1} - some progress was done; {@code 0} - denotes no progress was done
+   */
+  private int proceed0() {
     Exception ex = null;
 
     PublishTask task = publishTasks.peek();
