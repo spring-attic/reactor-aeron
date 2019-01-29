@@ -1,10 +1,5 @@
 package reactor.aeron;
 
-import static io.aeron.driver.Configuration.IDLE_MAX_PARK_NS;
-import static io.aeron.driver.Configuration.IDLE_MAX_SPINS;
-import static io.aeron.driver.Configuration.IDLE_MAX_YIELDS;
-import static io.aeron.driver.Configuration.IDLE_MIN_PARK_NS;
-
 import io.aeron.Aeron;
 import io.aeron.ExclusivePublication;
 import io.aeron.Image;
@@ -12,6 +7,7 @@ import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
 import java.io.File;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
@@ -32,10 +28,14 @@ public final class AeronResources implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(AeronResources.class);
 
+  private static final Supplier<IdleStrategy> defaultBackoffIdleStrategySupplier =
+      () -> new BackoffIdleStrategy(1, 1, 1, 100);
+
   // Settings
+
+  private int pollFragmentLimit = 32;
+  private int writeLimit = 32;
   private int numOfWorkers = Runtime.getRuntime().availableProcessors();
-  private Supplier<IdleStrategy> workerIdleStrategySupplier =
-      AeronResources::defaultBackoffIdleStrategy;
 
   private Aeron.Context aeronContext =
       new Aeron.Context().errorHandler(th -> logger.warn("Aeron exception occurred: " + th, th));
@@ -45,9 +45,16 @@ public final class AeronResources implements OnDisposable {
           .errorHandler(th -> logger.warn("Exception occurred on MediaDriver: " + th, th))
           .warnIfDirectoryExists(true)
           .dirDeleteOnStart(true)
+          // low latency settings
+          .conductorIdleStrategy(defaultBackoffIdleStrategySupplier.get())
+          .receiverIdleStrategy(defaultBackoffIdleStrategySupplier.get())
+          .senderIdleStrategy(defaultBackoffIdleStrategySupplier.get())
+          .termBufferSparseFile(false)
           // explicit range of reserved session ids
           .publicationReservedSessionIdLow(0)
           .publicationReservedSessionIdHigh(Integer.MAX_VALUE);
+
+  private Supplier<IdleStrategy> workerIdleStrategySupplier = defaultBackoffIdleStrategySupplier;
 
   // State
   private Aeron aeron;
@@ -91,14 +98,17 @@ public final class AeronResources implements OnDisposable {
    * @param ac aeron context
    * @param mdc media driver context
    */
-  private AeronResources(Aeron.Context ac, MediaDriver.Context mdc) {
+  private AeronResources(AeronResources that, Aeron.Context ac, MediaDriver.Context mdc) {
     this();
+    this.pollFragmentLimit = that.pollFragmentLimit;
+    this.numOfWorkers = that.numOfWorkers;
+    this.workerIdleStrategySupplier = that.workerIdleStrategySupplier;
     copy(ac);
     copy(mdc);
   }
 
   private AeronResources copy() {
-    return new AeronResources(aeronContext, mediaContext);
+    return new AeronResources(this, aeronContext, mediaContext);
   }
 
   private void copy(MediaDriver.Context mdc) {
@@ -179,11 +189,6 @@ public final class AeronResources implements OnDisposable {
         .nanoClock(ac.nanoClock());
   }
 
-  private static BackoffIdleStrategy defaultBackoffIdleStrategy() {
-    return new BackoffIdleStrategy(
-        IDLE_MAX_SPINS, IDLE_MAX_YIELDS, IDLE_MIN_PARK_NS, IDLE_MAX_PARK_NS);
-  }
-
   private static String generateRandomTmpDirName() {
     return IoUtil.tmpDirName()
         + "aeron"
@@ -202,7 +207,7 @@ public final class AeronResources implements OnDisposable {
   public AeronResources aeron(UnaryOperator<Aeron.Context> o) {
     AeronResources c = copy();
     Aeron.Context ac = o.apply(c.aeronContext);
-    return new AeronResources(ac, c.mediaContext);
+    return new AeronResources(this, ac, c.mediaContext);
   }
 
   /**
@@ -214,7 +219,7 @@ public final class AeronResources implements OnDisposable {
   public AeronResources media(UnaryOperator<MediaDriver.Context> o) {
     AeronResources c = copy();
     MediaDriver.Context mdc = o.apply(c.mediaContext);
-    return new AeronResources(c.aeronContext, mdc);
+    return new AeronResources(this, c.aeronContext, mdc);
   }
 
   /**
@@ -248,6 +253,18 @@ public final class AeronResources implements OnDisposable {
   }
 
   /**
+   * Settings fragment limit for polling.
+   *
+   * @param pollFragmentLimit fragment limit for polling
+   * @return new {@code AeronResources} object
+   */
+  public AeronResources pollFragmentLimit(int pollFragmentLimit) {
+    AeronResources c = copy();
+    c.pollFragmentLimit = pollFragmentLimit;
+    return c;
+  }
+
+  /**
    * Setter for supplier of {@code IdleStrategy} for worker thread(s).
    *
    * @param s supplier of {@code IdleStrategy} for worker thread(s)
@@ -257,6 +274,27 @@ public final class AeronResources implements OnDisposable {
     AeronResources c = copy();
     c.workerIdleStrategySupplier = s;
     return c;
+  }
+
+  /**
+   * Settings write limit.
+   *
+   * @param writeLimit write limit per eventloop tick
+   * @return @return new {@code AeronResources} object
+   */
+  public AeronResources writeLimit(int writeLimit) {
+    AeronResources c = copy();
+    c.writeLimit = writeLimit;
+    return c;
+  }
+
+  /**
+   * Gets write limit.
+   *
+   * @return write limit value
+   */
+  int writeLimit() {
+    return writeLimit;
   }
 
   /**
@@ -286,7 +324,7 @@ public final class AeronResources implements OnDisposable {
 
           Runtime.getRuntime()
               .addShutdownHook(
-                  new Thread(() -> deleteAeronDirectory(aeronContext.aeronDirectory())));
+                  new Thread(() -> deleteAeronDirectory(mediaDriver.aeronDirectoryName())));
 
           logger.debug(
               "{} has initialized embedded media driver, aeron directory: {}",
@@ -296,17 +334,37 @@ public final class AeronResources implements OnDisposable {
   }
 
   /**
+   * Shortcut method for {@code eventLoopGroup.next()}.
+   *
+   * @return {@code AeronEventLoop} instance
+   */
+  AeronEventLoop nextEventLoop() {
+    return eventLoopGroup.next();
+  }
+
+  /**
+   * Returns already used first event loop. See {@code eventLoopGroup.first()}.
+   *
+   * @return {@code AeronEventLoop} instance
+   */
+  AeronEventLoop firstEventLoop() {
+    return eventLoopGroup.first();
+  }
+
+  /**
    * Creates and registers {@link DefaultAeronInbound}.
    *
    * @param image aeron image
    * @param subscription subscription
+   * @param eventLoop aeron event lopop
    * @return mono result
    */
-  Mono<DefaultAeronInbound> inbound(Image image, MessageSubscription subscription) {
+  Mono<DefaultAeronInbound> inbound(
+      Image image, MessageSubscription subscription, AeronEventLoop eventLoop) {
     return Mono.defer(
         () -> {
-          AeronEventLoop eventLoop = eventLoopGroup.next();
-          DefaultAeronInbound inbound = new DefaultAeronInbound(image, eventLoop, subscription);
+          DefaultAeronInbound inbound =
+              new DefaultAeronInbound(image, eventLoop, subscription, pollFragmentLimit);
           return eventLoop
               .registerInbound(inbound)
               .doOnError(
@@ -323,9 +381,11 @@ public final class AeronResources implements OnDisposable {
    * @param channel aeron channel
    * @param streamId aeron stream id
    * @param options aeorn options
+   * @param eventLoop aeron event loop
    * @return mono result
    */
-  Mono<MessagePublication> publication(String channel, int streamId, AeronOptions options) {
+  Mono<MessagePublication> publication(
+      String channel, int streamId, AeronOptions options, AeronEventLoop eventLoop) {
     return Mono.defer(
         () ->
             aeronPublication(channel, streamId)
@@ -338,22 +398,20 @@ public final class AeronResources implements OnDisposable {
                             channel,
                             ex.toString()))
                 .flatMap(
-                    aeronPublication -> {
-                      AeronEventLoop eventLoop = eventLoopGroup.next();
-                      return eventLoop
-                          .registerPublication(
-                              new MessagePublication(aeronPublication, options, eventLoop))
-                          .doOnError(
-                              ex -> {
-                                logger.error(
-                                    "{} failed on registerPublication(), cause: {}",
-                                    this,
-                                    ex.toString());
-                                if (!aeronPublication.isClosed()) {
-                                  aeronPublication.close();
-                                }
-                              });
-                    }));
+                    aeronPublication ->
+                        eventLoop
+                            .registerPublication(
+                                new MessagePublication(aeronPublication, options, eventLoop))
+                            .doOnError(
+                                ex -> {
+                                  logger.error(
+                                      "{} failed on registerPublication(), cause: {}",
+                                      this,
+                                      ex.toString());
+                                  if (!aeronPublication.isClosed()) {
+                                    aeronPublication.close();
+                                  }
+                                })));
   }
 
   private Mono<Publication> aeronPublication(String channel, int streamId) {
@@ -383,6 +441,7 @@ public final class AeronResources implements OnDisposable {
    *
    * @param channel aeron channel
    * @param streamId aeron stream id
+   * @param eventLoop aeron event loop
    * @param onImageAvailable available image handler; optional
    * @param onImageUnavailable unavailable image handler; optional
    * @return mono result
@@ -390,6 +449,7 @@ public final class AeronResources implements OnDisposable {
   Mono<MessageSubscription> subscription(
       String channel,
       int streamId,
+      AeronEventLoop eventLoop,
       Consumer<Image> onImageAvailable,
       Consumer<Image> onImageUnavailable) {
 
@@ -405,22 +465,20 @@ public final class AeronResources implements OnDisposable {
                             channel,
                             ex.toString()))
                 .flatMap(
-                    aeronSubscription -> {
-                      AeronEventLoop eventLoop = eventLoopGroup.next();
-                      return eventLoop
-                          .registerSubscription(
-                              new MessageSubscription(aeronSubscription, eventLoop))
-                          .doOnError(
-                              ex -> {
-                                logger.error(
-                                    "{} failed on registerSubscription(), cause: {}",
-                                    this,
-                                    ex.toString());
-                                if (!aeronSubscription.isClosed()) {
-                                  aeronSubscription.close();
-                                }
-                              });
-                    }));
+                    aeronSubscription ->
+                        eventLoop
+                            .registerSubscription(
+                                new MessageSubscription(aeronSubscription, eventLoop))
+                            .doOnError(
+                                ex -> {
+                                  logger.error(
+                                      "{} failed on registerSubscription(), cause: {}",
+                                      this,
+                                      ex.toString());
+                                  if (!aeronSubscription.isClosed()) {
+                                    aeronSubscription.close();
+                                  }
+                                })));
   }
 
   private Mono<Subscription> aeronSubscription(
@@ -493,10 +551,11 @@ public final class AeronResources implements OnDisposable {
         });
   }
 
-  private void deleteAeronDirectory(File aeronDirectory) {
+  private void deleteAeronDirectory(String aeronDirectoryName) {
+    File aeronDirectory = Paths.get(aeronDirectoryName).toFile();
     if (aeronDirectory.exists()) {
       IoUtil.delete(aeronDirectory, true);
-      logger.debug("{} deleted aeron directory {}", this, aeronDirectory);
+      logger.debug("{} deleted aeron directory {}", this, aeronDirectoryName);
     }
   }
 

@@ -2,8 +2,6 @@ package reactor.aeron;
 
 import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
-import io.netty.util.Recycler;
-import io.netty.util.Recycler.Handle;
 import java.time.Duration;
 import java.util.Queue;
 import org.agrona.MutableDirectBuffer;
@@ -20,13 +18,13 @@ class MessagePublication implements OnDisposable {
   private static final Logger logger = LoggerFactory.getLogger(MessagePublication.class);
 
   private static final int QUEUE_CAPACITY = 8192;
-  private static final int RECYCLER_CAPACITY_PER_THREAD = 32768;
 
   private final Publication publication;
   private final AeronEventLoop eventLoop;
   private final Duration connectTimeout;
   private final Duration backpressureTimeout;
   private final Duration adminActionTimeout;
+  private final int writeLimit;
 
   private final Queue<PublishTask> publishTasks =
       new ManyToOneConcurrentArrayQueue<>(QUEUE_CAPACITY);
@@ -46,6 +44,7 @@ class MessagePublication implements OnDisposable {
     this.connectTimeout = options.connectTimeout();
     this.backpressureTimeout = options.backpressureTimeout();
     this.adminActionTimeout = options.adminActionTimeout();
+    this.writeLimit = options.resources().writeLimit();
   }
 
   /**
@@ -73,9 +72,27 @@ class MessagePublication implements OnDisposable {
   /**
    * Proceed with processing of tasks.
    *
-   * @return 1 - some progress was done; 0 - denotes no progress was done
+   * @return more than or equal {@code 1} - some progress was done; {@code 0} - denotes no progress
+   *     was done
    */
   int proceed() {
+    int result = 0;
+    for (int i = 0, current; i < writeLimit; i++) {
+      current = proceed0();
+      if (current < 1) {
+        break;
+      }
+      result += current;
+    }
+    return result;
+  }
+
+  /**
+   * Proceed with processing of tasks.
+   *
+   * @return {@code 1} - some progress was done; {@code 0} - denotes no progress was done
+   */
+  private int proceed0() {
     Exception ex = null;
 
     PublishTask task = publishTasks.peek();
@@ -260,15 +277,6 @@ class MessagePublication implements OnDisposable {
     private static final ThreadLocal<BufferClaim> bufferClaims =
         ThreadLocal.withInitial(BufferClaim::new);
 
-    private static final Recycler<PublishTask> recycler =
-        new Recycler<PublishTask>(RECYCLER_CAPACITY_PER_THREAD) {
-          protected PublishTask newObject(Recycler.Handle<PublishTask> handle) {
-            return new PublishTask(handle);
-          }
-        };
-
-    private final Handle<PublishTask> handle;
-
     private Publication publication;
     private B buffer;
     private DirectBufferHandler<B> bufferHandler;
@@ -277,18 +285,13 @@ class MessagePublication implements OnDisposable {
 
     private long start;
 
-    private PublishTask(Handle<PublishTask> handle) {
-      this.handle = handle;
-    }
-
     private static <B> PublishTask<B> newInstance(
         Publication publication,
         B buffer,
         DirectBufferHandler<B> bufferHandler,
         MonoSink<Void> sink) {
 
-      //noinspection unchecked
-      PublishTask<B> task = recycler.get();
+      PublishTask<B> task = new PublishTask<>();
 
       task.publication = publication;
       task.buffer = buffer;
@@ -340,27 +343,19 @@ class MessagePublication implements OnDisposable {
       if (!isDisposed) {
         sink.success();
       }
+      bufferHandler.dispose(buffer);
     }
 
     private void error(Throwable ex) {
       if (!isDisposed) {
         sink.error(ex);
       }
-    }
-
-    private void recycle() {
-      publication = null;
-      buffer = null;
-      bufferHandler = null;
-      sink = null;
-      handle.recycle(this);
+      bufferHandler.dispose(buffer);
     }
 
     private void onDispose() {
       if (!isDisposed) {
         isDisposed = true;
-        bufferHandler.dispose(buffer);
-        recycle();
       }
     }
   }

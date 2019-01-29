@@ -1,5 +1,6 @@
 package reactor.aeron;
 
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -7,6 +8,9 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.function.Consumer;
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
+import javax.management.StandardMBean;
 import org.agrona.concurrent.IdleStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,13 +66,21 @@ final class AeronEventLoop implements OnDisposable {
     };
   }
 
-  private Worker createWorker() {
-    String threadName = String.format("%s-%x-%d", name, groupId, workerId);
-    ThreadFactory threadFactory = defaultThreadFactory(threadName);
-    Worker w = new Worker();
-    thread = threadFactory.newThread(w);
+  private Worker createWorker() throws Exception {
+    final String threadName = String.format("%s-%x-%d", name, groupId, workerId);
+    final ThreadFactory threadFactory = defaultThreadFactory(threadName);
+
+    WorkerFlightRecorder flightRecorder = new WorkerFlightRecorder();
+    MBeanServer mbeanServer = ManagementFactory.getPlatformMBeanServer();
+    ObjectName objectName = new ObjectName("reactor.aeron:name=" + threadName);
+    StandardMBean standardMBean = new StandardMBean(flightRecorder, WorkerMBean.class);
+    mbeanServer.registerMBean(standardMBean, objectName);
+
+    Worker worker = new Worker(flightRecorder);
+    thread = threadFactory.newThread(worker);
     thread.start();
-    return w;
+
+    return worker;
   }
 
   /**
@@ -254,44 +266,51 @@ final class AeronEventLoop implements OnDisposable {
   }
 
   /**
-   * Runnable event loop worker. Does a following:
+   * Runnable event loop worker.
    *
    * <ul>
    *   <li>runs until dispose signal obtained
    *   <li>on run iteration makes progress on: a) commands; b) publications; c) subscriptions
-   *   <li>idles on negative progress
+   *   <li>idles on zero progress
+   *   <li>collects and reports runtime stats
    * </ul>
    */
   private class Worker implements Runnable {
 
+    private final WorkerFlightRecorder flightRecorder;
+
+    public Worker(WorkerFlightRecorder flightRecorder) {
+      this.flightRecorder = flightRecorder;
+    }
+
     @Override
     public void run() {
+      flightRecorder.start();
+
       // Process commands, publications and subscriptions
       while (!dispose.isDisposed()) {
+        flightRecorder.countTick();
 
         // Commands
         processCommands();
 
-        int result = 0;
-        //noinspection ForLoopReplaceableByForEach
-        for (int i = 0, n = publications.size(); i < n; i++) {
-          try {
-            result += publications.get(i).proceed();
-          } catch (Exception ex) {
-            logger.error("Unexpected exception occurred on publication.proceed(): ", ex);
-          }
+        int i = processOutbound();
+        flightRecorder.countOutbound(i);
+
+        int j = processInbound();
+        flightRecorder.countInbound(j);
+
+        int workCount = i + j;
+        if (workCount < 1) {
+          flightRecorder.countIdle();
+        } else {
+          flightRecorder.countWork(workCount);
         }
 
-        //noinspection ForLoopReplaceableByForEach
-        for (int i = 0, n = inbounds.size(); i < n; i++) {
-          try {
-            result += inbounds.get(i).poll();
-          } catch (Exception ex) {
-            logger.error("Unexpected exception occurred on inbound.poll(): ", ex);
-          }
-        }
+        // Reporting
+        flightRecorder.tryReport();
 
-        idleStrategy.idle(result);
+        idleStrategy.idle(workCount);
       }
 
       // Dispose publications, subscriptions, inbounds and commands
@@ -303,6 +322,32 @@ final class AeronEventLoop implements OnDisposable {
       } finally {
         onDispose.onComplete();
       }
+    }
+
+    private int processInbound() {
+      int result = 0;
+      //noinspection ForLoopReplaceableByForEach
+      for (int i = 0, n = inbounds.size(); i < n; i++) {
+        try {
+          result += inbounds.get(i).poll();
+        } catch (Exception ex) {
+          logger.error("Unexpected exception occurred on inbound.poll(): ", ex);
+        }
+      }
+      return result;
+    }
+
+    private int processOutbound() {
+      int result = 0;
+      //noinspection ForLoopReplaceableByForEach
+      for (int i = 0, n = publications.size(); i < n; i++) {
+        try {
+          result += publications.get(i).proceed();
+        } catch (Exception ex) {
+          logger.error("Unexpected exception occurred on publication.proceed(): ", ex);
+        }
+      }
+      return result;
     }
 
     private void processCommands() {
