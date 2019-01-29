@@ -30,7 +30,7 @@ abstract class RawAeronServer {
   private static final String address = "localhost";
   private static final int port = 13000;
   private static final int controlPort = 13001;
-  private static final String acceptUri =
+  private static final String acceptorChannel =
       new ChannelUriStringBuilder()
           .endpoint(address + ':' + port)
           .reliable(Boolean.TRUE)
@@ -62,42 +62,45 @@ abstract class RawAeronServer {
   }
 
   final void start() {
-    scheduler.schedule(
-        () -> {
-          acceptSubscription =
-              aeron.addSubscription(
-                  acceptUri,
-                  STREAM_ID,
-                  this::onAcceptImageAvailable,
-                  this::onAcceptImageUnavailable);
+    Schedulers.single()
+        .schedule(
+            () -> {
+              logger.info("bind on " + acceptorChannel);
 
-          scheduler.schedule(
-              () -> {
-                flightRecorder.begin();
+              acceptSubscription =
+                  aeron.addSubscription(
+                      acceptorChannel,
+                      STREAM_ID,
+                      this::onAcceptImageAvailable,
+                      this::onAcceptImageUnavailable);
 
-                while (true) {
-                  flightRecorder.countTick();
+              scheduler.schedule(
+                  () -> {
+                    flightRecorder.begin();
 
-                  int i = processOutbound(publications);
-                  flightRecorder.countOutbound(i);
+                    while (true) {
+                      flightRecorder.countTick();
 
-                  int j = processInbound(acceptSubscription.images());
-                  flightRecorder.countInbound(j);
+                      int i = processOutbound(publications);
+                      flightRecorder.countOutbound(i);
 
-                  int workCount = i + j;
-                  if (workCount < 1) {
-                    flightRecorder.countIdle();
-                  } else {
-                    flightRecorder.countWork(workCount);
-                  }
+                      int j = processInbound(acceptSubscription.images());
+                      flightRecorder.countInbound(j);
 
-                  // Reporting
-                  flightRecorder.tryReport();
+                      int workCount = i + j;
+                      if (workCount < 1) {
+                        flightRecorder.countIdle();
+                      } else {
+                        flightRecorder.countWork(workCount);
+                      }
 
-                  idleStrategy.idle(workCount);
-                }
-              });
-        });
+                      // Reporting
+                      flightRecorder.tryReport();
+
+                      idleStrategy.idle(workCount);
+                    }
+                  });
+            });
   }
 
   private void onAcceptImageAvailable(Image image) {
@@ -107,30 +110,31 @@ abstract class RawAeronServer {
 
     logger.debug(
         "onImageAvailable: {} {}, create outbound {}",
-        Integer.toHexString(image.sessionId()),
+        image.sessionId(),
         image.sourceIdentity(),
         outboundChannel);
 
-    scheduler.schedule(
-        () -> {
-          Publication publication = aeron.addExclusivePublication(outboundChannel, STREAM_ID);
-          publications.put(sessionId, publication);
-        });
+    Schedulers.single()
+        .schedule(
+            () -> {
+              Publication publication = aeron.addExclusivePublication(outboundChannel, STREAM_ID);
+              publications.put(sessionId, publication);
+            });
   }
 
   private void onAcceptImageUnavailable(Image image) {
     int sessionId = image.sessionId();
 
-    logger.debug(
-        "onImageUnavailable: {} {}", Integer.toHexString(sessionId), image.sourceIdentity());
+    logger.debug("onImageUnavailable: {} {}", sessionId, image.sourceIdentity());
 
-    scheduler.schedule(
-        () -> {
-          Publication publication = publications.remove(sessionId);
-          if (publication != null) {
-            publication.close();
-          }
-        });
+    Schedulers.single()
+        .schedule(
+            () -> {
+              Publication publication = publications.remove(sessionId);
+              if (publication != null) {
+                publication.close();
+              }
+            });
   }
 
   int processInbound(List<Image> images) {

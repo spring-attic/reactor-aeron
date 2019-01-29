@@ -59,53 +59,54 @@ abstract class RawAeronClient {
   }
 
   final void start() {
-    scheduler.schedule(
-        () -> {
-          String outboundChannel = outboundChannelBuilder.build();
+    Schedulers.single()
+        .schedule(
+            () -> {
+              String outboundChannel = outboundChannelBuilder.build();
 
-          Publication publication = aeron.addExclusivePublication(outboundChannel, STREAM_ID);
+              Publication publication = aeron.addExclusivePublication(outboundChannel, STREAM_ID);
 
-          int sessionId = publication.sessionId();
+              int sessionId = publication.sessionId();
 
-          String inboundChannel =
-              inboundChannelBuilder.sessionId(sessionId ^ Integer.MAX_VALUE).build();
+              String inboundChannel =
+                  inboundChannelBuilder.sessionId(sessionId ^ Integer.MAX_VALUE).build();
 
-          Subscription subscription =
-              aeron.addSubscription(
-                  inboundChannel,
-                  STREAM_ID,
-                  this::onClientImageAvailable,
-                  this::onClientImageUnavailable);
+              Subscription subscription =
+                  aeron.addSubscription(
+                      inboundChannel,
+                      STREAM_ID,
+                      this::onClientImageAvailable,
+                      this::onClientImageUnavailable);
 
-          MsgPublication msgPublication = new MsgPublication(publication, writeLimit);
+              MsgPublication msgPublication = new MsgPublication(publication, writeLimit);
 
-          scheduler.schedule(
-              () -> {
-                flightRecorder.begin();
+              scheduler.schedule(
+                  () -> {
+                    flightRecorder.begin();
 
-                while (true) {
-                  flightRecorder.countTick();
+                    while (true) {
+                      flightRecorder.countTick();
 
-                  int i = processOutbound(msgPublication);
-                  flightRecorder.countOutbound(i);
+                      int i = processOutbound(msgPublication);
+                      flightRecorder.countOutbound(i);
 
-                  int j = processInbound(subscription);
-                  flightRecorder.countInbound(j);
+                      int j = processInbound(subscription);
+                      flightRecorder.countInbound(j);
 
-                  int workCount = i + j;
-                  if (workCount < 1) {
-                    flightRecorder.countIdle();
-                  } else {
-                    flightRecorder.countWork(workCount);
-                  }
+                      int workCount = i + j;
+                      if (workCount < 1) {
+                        flightRecorder.countIdle();
+                      } else {
+                        flightRecorder.countWork(workCount);
+                      }
 
-                  // Reporting
-                  flightRecorder.tryReport();
+                      // Reporting
+                      flightRecorder.tryReport();
 
-                  idleStrategy.idle(workCount);
-                }
-              });
-        });
+                      idleStrategy.idle(workCount);
+                    }
+                  });
+            });
   }
 
   private void onClientImageAvailable(Image image) {
