@@ -36,7 +36,7 @@ public class RawAeronServerThroughput {
       for (Image image : images) {
         try {
           result +=
-              image.poll((buffer, offset, length, header) -> reporter.onMessage(1, length), 8);
+              image.poll((buffer, offset, length, header) -> reporter.onMessage(1, length), 32);
         } catch (Exception ex) {
           logger.error("Unexpected exception occurred on inbound.poll(): ", ex);
         }

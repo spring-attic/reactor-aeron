@@ -45,7 +45,7 @@ abstract class RawAeronClient {
 
   private final IdleStrategy idleStrategy = new BackoffIdleStrategy(1, 1, 1, 100);
   private final WorkerFlightRecorder flightRecorder;
-  private final int writeLimit = 8;
+  private final int writeLimit = 32;
   private Scheduler scheduler;
 
   RawAeronClient(Aeron aeron) throws Exception {
