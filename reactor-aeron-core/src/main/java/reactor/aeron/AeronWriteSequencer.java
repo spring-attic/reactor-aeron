@@ -10,6 +10,9 @@ import reactor.core.publisher.Mono;
 
 final class AeronWriteSequencer {
 
+  private static final int CONCURRENCY = 1;
+  private static final int PREFETCH = 1;
+
   private final MessagePublication publication;
 
   AeronWriteSequencer(MessagePublication publication) {
@@ -34,7 +37,8 @@ final class AeronWriteSequencer {
           }
           if (publisher instanceof Flux) {
             return Flux.from(publisher)
-                .flatMap(buffer -> publication.publish(buffer, bufferHandler))
+                .flatMap(
+                    buffer -> publication.publish(buffer, bufferHandler), CONCURRENCY, PREFETCH)
                 .takeUntilOther(onPublicationDispose())
                 .then();
           }

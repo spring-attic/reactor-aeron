@@ -25,12 +25,13 @@ public final class WorkerFlightRecorder implements WorkerMBean {
   private long lastTotalIdleCount;
   private long lastTotalWorkCount;
 
-  public void begin() {
+  public void start() {
     reportTime = System.currentTimeMillis() + REPORT_INTERVAL;
   }
 
   /**
-   * Reports.
+   * Make reporting if it's time for it. For details see method: {@link #processReporting(long,
+   * long, long, long, long)}
    */
   public void tryReport() {
     long currentTime = System.currentTimeMillis();

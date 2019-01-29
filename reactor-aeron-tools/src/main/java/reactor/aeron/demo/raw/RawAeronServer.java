@@ -76,7 +76,7 @@ abstract class RawAeronServer {
 
               scheduler.schedule(
                   () -> {
-                    flightRecorder.begin();
+                    flightRecorder.start();
 
                     while (true) {
                       flightRecorder.countTick();
