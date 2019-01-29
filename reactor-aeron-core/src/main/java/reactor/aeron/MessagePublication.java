@@ -343,18 +343,19 @@ class MessagePublication implements OnDisposable {
       if (!isDisposed) {
         sink.success();
       }
+      bufferHandler.dispose(buffer);
     }
 
     private void error(Throwable ex) {
       if (!isDisposed) {
         sink.error(ex);
       }
+      bufferHandler.dispose(buffer);
     }
 
     private void onDispose() {
       if (!isDisposed) {
         isDisposed = true;
-        bufferHandler.dispose(buffer);
       }
     }
   }
