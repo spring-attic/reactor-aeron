@@ -25,10 +25,11 @@ abstract class RawAeronServer {
 
   private static final Logger logger = LoggerFactory.getLogger(RawAeronServer.class);
 
+  private static final int STREAM_ID = 0xcafe0000;
+
   private static final String address = "localhost";
   private static final int port = 13000;
   private static final int controlPort = 13001;
-  private static final int STREAM_ID = 0xcafe0000;
   private static final String acceptUri =
       new ChannelUriStringBuilder()
           .endpoint(address + ':' + port)
@@ -101,7 +102,8 @@ abstract class RawAeronServer {
 
   private void onAcceptImageAvailable(Image image) {
     int sessionId = image.sessionId();
-    String outboundChannel = outboundChannelBuilder.sessionId(sessionId).build();
+    String outboundChannel =
+        outboundChannelBuilder.sessionId(sessionId ^ Integer.MAX_VALUE).build();
 
     logger.debug(
         "onImageAvailable: {} {}, create outbound {}",

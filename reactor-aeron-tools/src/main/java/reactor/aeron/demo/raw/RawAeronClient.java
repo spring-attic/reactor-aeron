@@ -67,7 +67,8 @@ abstract class RawAeronClient {
 
           int sessionId = publication.sessionId();
 
-          String inboundChannel = inboundChannelBuilder.sessionId(sessionId).build();
+          String inboundChannel =
+              inboundChannelBuilder.sessionId(sessionId ^ Integer.MAX_VALUE).build();
 
           Subscription subscription =
               aeron.addSubscription(
