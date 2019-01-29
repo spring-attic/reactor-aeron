@@ -43,14 +43,14 @@ abstract class RawAeronClient {
 
   private final Aeron aeron;
 
-  private final Scheduler scheduler = Schedulers.newSingle("client@" + this);
   private final IdleStrategy idleStrategy = new BackoffIdleStrategy(1, 1, 1, 100);
   private final WorkerFlightRecorder flightRecorder;
   private final int writeLimit = 8;
+  private Scheduler scheduler;
 
   RawAeronClient(Aeron aeron) throws Exception {
     this.aeron = aeron;
-
+    this.scheduler = Schedulers.newSingle(this.toString());
     this.flightRecorder = new WorkerFlightRecorder();
     MBeanServer mbeanServer = ManagementFactory.getPlatformMBeanServer();
     ObjectName objectName = new ObjectName("reactor.aeron:name=" + "server@" + this);
@@ -59,54 +59,50 @@ abstract class RawAeronClient {
   }
 
   final void start() {
-    Schedulers.single()
-        .schedule(
-            () -> {
-              String outboundChannel = outboundChannelBuilder.build();
+    scheduler.schedule(
+        () -> {
+          String outboundChannel = outboundChannelBuilder.build();
 
-              Publication publication = aeron.addExclusivePublication(outboundChannel, STREAM_ID);
+          Publication publication = aeron.addExclusivePublication(outboundChannel, STREAM_ID);
 
-              int sessionId = publication.sessionId();
+          int sessionId = publication.sessionId();
 
-              String inboundChannel =
-                  inboundChannelBuilder.sessionId(sessionId ^ Integer.MAX_VALUE).build();
+          String inboundChannel =
+              inboundChannelBuilder.sessionId(sessionId ^ Integer.MAX_VALUE).build();
 
-              Subscription subscription =
-                  aeron.addSubscription(
-                      inboundChannel,
-                      STREAM_ID,
-                      this::onClientImageAvailable,
-                      this::onClientImageUnavailable);
+          Subscription subscription =
+              aeron.addSubscription(
+                  inboundChannel,
+                  STREAM_ID,
+                  this::onClientImageAvailable,
+                  this::onClientImageUnavailable);
 
-              MsgPublication msgPublication = new MsgPublication(publication, writeLimit);
+          MsgPublication msgPublication = new MsgPublication(publication, writeLimit);
 
-              scheduler.schedule(
-                  () -> {
-                    flightRecorder.start();
+          flightRecorder.start();
 
-                    while (true) {
-                      flightRecorder.countTick();
+          while (true) {
+            flightRecorder.countTick();
 
-                      int i = processOutbound(msgPublication);
-                      flightRecorder.countOutbound(i);
+            int i = processOutbound(msgPublication);
+            flightRecorder.countOutbound(i);
 
-                      int j = processInbound(subscription);
-                      flightRecorder.countInbound(j);
+            int j = processInbound(subscription);
+            flightRecorder.countInbound(j);
 
-                      int workCount = i + j;
-                      if (workCount < 1) {
-                        flightRecorder.countIdle();
-                      } else {
-                        flightRecorder.countWork(workCount);
-                      }
+            int workCount = i + j;
+            if (workCount < 1) {
+              flightRecorder.countIdle();
+            } else {
+              flightRecorder.countWork(workCount);
+            }
 
-                      // Reporting
-                      flightRecorder.tryReport();
+            // Reporting
+            flightRecorder.tryReport();
 
-                      idleStrategy.idle(workCount);
-                    }
-                  });
-            });
+            idleStrategy.idle(workCount);
+          }
+        });
   }
 
   private void onClientImageAvailable(Image image) {

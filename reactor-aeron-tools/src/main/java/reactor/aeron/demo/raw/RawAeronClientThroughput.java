@@ -1,7 +1,6 @@
 package reactor.aeron.demo.raw;
 
 import io.aeron.Aeron;
-import io.aeron.Subscription;
 import java.nio.ByteBuffer;
 import org.agrona.DirectBuffer;
 import org.agrona.concurrent.UnsafeBuffer;

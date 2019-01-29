@@ -47,7 +47,7 @@ abstract class RawAeronServer {
   private volatile Subscription acceptSubscription;
   private final Map<Integer, Publication> publications = new ConcurrentHashMap<>();
 
-  private final Scheduler scheduler = Schedulers.newSingle("server@" + this);
+  private final Scheduler scheduler = Schedulers.newSingle(this.toString());
   private final IdleStrategy idleStrategy = new BackoffIdleStrategy(1, 1, 1, 100);
   private final WorkerFlightRecorder flightRecorder;
 
@@ -62,45 +62,41 @@ abstract class RawAeronServer {
   }
 
   final void start() {
-    Schedulers.single()
-        .schedule(
-            () -> {
-              logger.info("bind on " + acceptorChannel);
+    logger.info("bind on " + acceptorChannel);
 
-              acceptSubscription =
-                  aeron.addSubscription(
-                      acceptorChannel,
-                      STREAM_ID,
-                      this::onAcceptImageAvailable,
-                      this::onAcceptImageUnavailable);
+    acceptSubscription =
+        aeron.addSubscription(
+            acceptorChannel,
+            STREAM_ID,
+            this::onAcceptImageAvailable,
+            this::onAcceptImageUnavailable);
 
-              scheduler.schedule(
-                  () -> {
-                    flightRecorder.start();
+    scheduler.schedule(
+        () -> {
+          flightRecorder.start();
 
-                    while (true) {
-                      flightRecorder.countTick();
+          while (true) {
+            flightRecorder.countTick();
 
-                      int i = processOutbound(publications);
-                      flightRecorder.countOutbound(i);
+            int i = processOutbound(publications);
+            flightRecorder.countOutbound(i);
 
-                      int j = processInbound(acceptSubscription.images());
-                      flightRecorder.countInbound(j);
+            int j = processInbound(acceptSubscription.images());
+            flightRecorder.countInbound(j);
 
-                      int workCount = i + j;
-                      if (workCount < 1) {
-                        flightRecorder.countIdle();
-                      } else {
-                        flightRecorder.countWork(workCount);
-                      }
+            int workCount = i + j;
+            if (workCount < 1) {
+              flightRecorder.countIdle();
+            } else {
+              flightRecorder.countWork(workCount);
+            }
 
-                      // Reporting
-                      flightRecorder.tryReport();
+            // Reporting
+            flightRecorder.tryReport();
 
-                      idleStrategy.idle(workCount);
-                    }
-                  });
-            });
+            idleStrategy.idle(workCount);
+          }
+        });
   }
 
   private void onAcceptImageAvailable(Image image) {
