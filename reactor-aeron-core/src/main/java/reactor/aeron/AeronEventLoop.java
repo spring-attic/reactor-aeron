@@ -285,7 +285,7 @@ final class AeronEventLoop implements OnDisposable {
 
     @Override
     public void run() {
-      flightRecorder.begin();
+      flightRecorder.start();
 
       // Process commands, publications and subscriptions
       while (!dispose.isDisposed()) {

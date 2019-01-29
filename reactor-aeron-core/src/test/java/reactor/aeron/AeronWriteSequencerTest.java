@@ -23,13 +23,12 @@ import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
-import reactor.util.concurrent.Queues;
 
 class AeronWriteSequencerTest {
 
   private static final Duration TIMEOUT = Duration.ofSeconds(2);
 
-  private static final int PREFETCH = Queues.SMALL_BUFFER_SIZE;
+  private static final int PREFETCH = 1;
   private static final int FLUX_REQUESTS = PREFETCH * 4;
 
   private AeronWriteSequencer aeronWriteSequencer;
