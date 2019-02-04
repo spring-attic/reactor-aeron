@@ -9,9 +9,9 @@ import io.aeron.driver.MediaDriver;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.agrona.CloseHelper;
 import org.agrona.DirectBuffer;
-import org.agrona.concurrent.BusySpinIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.SigInt;
+import org.agrona.concurrent.YieldingIdleStrategy;
 
 /**
  * Pong component of Ping-Pong.
@@ -47,7 +47,7 @@ public class MdcPong {
   private static final boolean EMBEDDED_MEDIA_DRIVER = Configurations.EMBEDDED_MEDIA_DRIVER;
   private static final boolean EXCLUSIVE_PUBLICATIONS = Configurations.EXCLUSIVE_PUBLICATIONS;
 
-  private static final IdleStrategy PING_HANDLER_IDLE_STRATEGY = new BusySpinIdleStrategy();
+  private static final IdleStrategy PING_HANDLER_IDLE_STRATEGY = new YieldingIdleStrategy();
 
   public static void main(final String[] args) {
     final MediaDriver driver = EMBEDDED_MEDIA_DRIVER ? MediaDriver.launchEmbedded() : null;
@@ -62,7 +62,7 @@ public class MdcPong {
       ctx.unavailableImageHandler(Configurations::printUnavailableImage);
     }
 
-    final IdleStrategy idleStrategy = new BusySpinIdleStrategy();
+    final IdleStrategy idleStrategy = new YieldingIdleStrategy();
 
     System.out.println(
         "Subscribing Ping at " + INBOUND_CHANNEL + " on stream Id " + INBOUND_STREAM_ID);

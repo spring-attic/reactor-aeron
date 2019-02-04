@@ -17,9 +17,9 @@ import org.agrona.BitUtil;
 import org.agrona.BufferUtil;
 import org.agrona.CloseHelper;
 import org.agrona.DirectBuffer;
-import org.agrona.concurrent.BusySpinIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.UnsafeBuffer;
+import org.agrona.concurrent.YieldingIdleStrategy;
 import org.agrona.console.ContinueBarrier;
 
 /**
@@ -64,7 +64,7 @@ public class MdcPingNoWaitingWithSimpleBackpressure {
       new UnsafeBuffer(BufferUtil.allocateDirectAligned(MESSAGE_LENGTH, BitUtil.CACHE_LINE_LENGTH));
   private static final Histogram HISTOGRAM = new Histogram(TimeUnit.SECONDS.toNanos(10), 3);
   private static final CountDownLatch LATCH = new CountDownLatch(1);
-  private static final IdleStrategy POLLING_IDLE_STRATEGY = new BusySpinIdleStrategy();
+  private static final IdleStrategy POLLING_IDLE_STRATEGY = new YieldingIdleStrategy();
 
   public static void main(final String[] args) throws Exception {
     final MediaDriver driver = EMBEDDED_MEDIA_DRIVER ? MediaDriver.launchEmbedded() : null;
