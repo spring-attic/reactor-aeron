@@ -2,6 +2,13 @@ package reactor.aeron.demo.pure;
 
 import io.aeron.Image;
 import io.aeron.Subscription;
+import org.agrona.concurrent.BackoffIdleStrategy;
+import org.agrona.concurrent.BusySpinIdleStrategy;
+import org.agrona.concurrent.IdleStrategy;
+import org.agrona.concurrent.NoOpIdleStrategy;
+import org.agrona.concurrent.SleepingIdleStrategy;
+import org.agrona.concurrent.SleepingMillisIdleStrategy;
+import org.agrona.concurrent.YieldingIdleStrategy;
 
 /** Configuration used for samples with defaults which can be overridden by system properties. */
 public interface Configurations {
@@ -19,13 +26,54 @@ public interface Configurations {
   String PING_CHANNEL =
       System.getProperty("reactor.aeron.sample.ping.channel", "aeron:udp?endpoint=localhost:40123");
   String PONG_CHANNEL =
-      System.getProperty("reactor.aeron.sample.pong.channel", "aeron:udp?endpoint=localhost:40123");
+      System.getProperty("reactor.aeron.sample.pong.channel", "aeron:udp?endpoint=localhost:40124");
   String MDC_ADDRESS = System.getProperty("reactor.aeron.sample.mdc.address", "localhost");
   int MDC_PORT = Integer.getInteger("reactor.aeron.sample.mdc.port", 13000);
   int MDC_CONTROL_PORT = Integer.getInteger("reactor.aeron.sample.mdc.control.port", 13001);
   int MDC_STREAM_ID = Integer.getInteger("reactor.aeron.sample.mdc.stream.id", 0xcafe0000);
   int MDC_SESSION_ID = Integer.getInteger("reactor.aeron.sample.mdc.session.id", 1001);
   int REQUESTED = Integer.getInteger("reactor.aeron.sample.request", 8);
+  String IDLE_STRATEGY = System.getProperty("reactor.aeron.sample.idle.strategy", "busyspin");
+
+  /**
+   * Returns idle strategy.
+   *
+   * <p>Examples:
+   *
+   * <ul>
+   *   <li>{@link BackoffIdleStrategy} - backoff/1/1/1/100
+   *   <li>{@link BusySpinIdleStrategy} - busyspin
+   *   <li>{@link SleepingIdleStrategy} - sleeping/100
+   *   <li>{@link SleepingMillisIdleStrategy} - sleepingmillis/1
+   *   <li>{@link YieldingIdleStrategy} - yielding
+   *   <li>{@link NoOpIdleStrategy} - noop
+   * </ul>
+   *
+   * @return idle strategy, {@link BusySpinIdleStrategy} - by default
+   */
+  static IdleStrategy idleStrategy() {
+    String[] chunks = IDLE_STRATEGY.split("/");
+    switch (chunks[0].toLowerCase()) {
+      case "backoff":
+        return new BackoffIdleStrategy(
+            Long.parseLong(chunks[1]),
+            Long.parseLong(chunks[2]),
+            Long.parseLong(chunks[3]),
+            Long.parseLong(chunks[4]));
+      case "busyspin":
+        return new BusySpinIdleStrategy();
+      case "sleeping":
+        return new SleepingIdleStrategy(Long.parseLong(chunks[1]));
+      case "sleepingmillis":
+        return new SleepingMillisIdleStrategy(Long.parseLong(chunks[1]));
+      case "yielding":
+        return new YieldingIdleStrategy();
+      case "noop":
+        return new NoOpIdleStrategy();
+      default:
+        return new BusySpinIdleStrategy();
+    }
+  }
 
   /**
    * Print the information for an available image to stdout.

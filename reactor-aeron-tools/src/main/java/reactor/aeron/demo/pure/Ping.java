@@ -5,6 +5,7 @@ import io.aeron.FragmentAssembler;
 import io.aeron.Image;
 import io.aeron.Publication;
 import io.aeron.Subscription;
+import io.aeron.driver.Configuration;
 import io.aeron.driver.MediaDriver;
 import io.aeron.logbuffer.FragmentHandler;
 import io.aeron.logbuffer.Header;
@@ -15,7 +16,6 @@ import org.agrona.BitUtil;
 import org.agrona.BufferUtil;
 import org.agrona.CloseHelper;
 import org.agrona.DirectBuffer;
-import org.agrona.concurrent.BusySpinIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.agrona.console.ContinueBarrier;
@@ -44,7 +44,7 @@ public class Ping {
       new UnsafeBuffer(BufferUtil.allocateDirectAligned(MESSAGE_LENGTH, BitUtil.CACHE_LINE_LENGTH));
   private static final Histogram HISTOGRAM = new Histogram(TimeUnit.SECONDS.toNanos(10), 3);
   private static final CountDownLatch LATCH = new CountDownLatch(1);
-  private static final IdleStrategy POLLING_IDLE_STRATEGY = new BusySpinIdleStrategy();
+  private static final IdleStrategy POLLING_IDLE_STRATEGY = Configurations.idleStrategy();
 
   /**
    * Main runner.
@@ -61,10 +61,17 @@ public class Ping {
       ctx.aeronDirectoryName(driver.aeronDirectoryName());
     }
 
+    System.out.println("MediaDriver THREADING_MODE: " + Configuration.THREADING_MODE_DEFAULT);
     System.out.println("Publishing Ping at " + PING_CHANNEL + " on stream Id " + PING_STREAM_ID);
     System.out.println("Subscribing Pong at " + PONG_CHANNEL + " on stream Id " + PONG_STREAM_ID);
     System.out.println("Message length of " + MESSAGE_LENGTH + " bytes");
     System.out.println("Using exclusive publications " + EXCLUSIVE_PUBLICATIONS);
+    System.out.println(
+        "Using poling idle strategy "
+            + POLLING_IDLE_STRATEGY.getClass()
+            + "("
+            + Configurations.IDLE_STRATEGY
+            + ")");
 
     try (Aeron aeron = Aeron.connect(ctx);
         Subscription subscription = aeron.addSubscription(PONG_CHANNEL, PONG_STREAM_ID);

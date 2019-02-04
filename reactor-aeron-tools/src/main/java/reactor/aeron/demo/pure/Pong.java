@@ -4,11 +4,11 @@ import io.aeron.Aeron;
 import io.aeron.FragmentAssembler;
 import io.aeron.Publication;
 import io.aeron.Subscription;
+import io.aeron.driver.Configuration;
 import io.aeron.driver.MediaDriver;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.agrona.CloseHelper;
 import org.agrona.DirectBuffer;
-import org.agrona.concurrent.BusySpinIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.SigInt;
 
@@ -29,7 +29,7 @@ public class Pong {
   private static final boolean EMBEDDED_MEDIA_DRIVER = Configurations.EMBEDDED_MEDIA_DRIVER;
   private static final boolean EXCLUSIVE_PUBLICATIONS = Configurations.EXCLUSIVE_PUBLICATIONS;
 
-  private static final IdleStrategy PING_HANDLER_IDLE_STRATEGY = new BusySpinIdleStrategy();
+  private static final IdleStrategy PING_HANDLER_IDLE_STRATEGY = Configurations.idleStrategy();
 
   /**
    * Main runner.
@@ -49,11 +49,18 @@ public class Pong {
       ctx.unavailableImageHandler(Configurations::printUnavailableImage);
     }
 
-    final IdleStrategy idleStrategy = new BusySpinIdleStrategy();
+    final IdleStrategy idleStrategy = Configurations.idleStrategy();
 
+    System.out.println("MediaDriver THREADING_MODE: " + Configuration.THREADING_MODE_DEFAULT);
     System.out.println("Subscribing Ping at " + PING_CHANNEL + " on stream Id " + PING_STREAM_ID);
     System.out.println("Publishing Pong at " + PONG_CHANNEL + " on stream Id " + PONG_STREAM_ID);
     System.out.println("Using exclusive publications " + EXCLUSIVE_PUBLICATIONS);
+    System.out.println(
+        "Using ping handler idle strategy "
+            + PING_HANDLER_IDLE_STRATEGY.getClass()
+            + "("
+            + Configurations.IDLE_STRATEGY
+            + ")");
 
     final AtomicBoolean running = new AtomicBoolean(true);
     SigInt.register(() -> running.set(false));

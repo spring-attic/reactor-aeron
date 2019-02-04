@@ -8,7 +8,9 @@ ${JAVA_HOME}/bin/java \
     -cp ${TARGET_DIR}/${JAR_FILE}:${TARGET_DIR}/lib/* \
     -XX:+UnlockDiagnosticVMOptions \
     -XX:GuaranteedSafepointInterval=300000 \
+    -Daeron.threading.mode=SHARED \
     -Dagrona.disable.bounds.checks=true \
     -Dreactor.aeron.sample.embeddedMediaDriver=true \
     -Dreactor.aeron.sample.exclusive.publications=true \
+    -Dreactor.aeron.sample.idle.strategy=yielding \
     ${JVM_OPTS} reactor.aeron.demo.pure.Pong

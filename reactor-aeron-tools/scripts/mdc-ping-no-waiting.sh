@@ -8,9 +8,11 @@ ${JAVA_HOME}/bin/java \
     -cp ${TARGET_DIR}/${JAR_FILE}:${TARGET_DIR}/lib/* \
     -XX:+UnlockDiagnosticVMOptions \
     -XX:GuaranteedSafepointInterval=300000 \
-    -Dreactor.aeron.sample.messages=10000000 \
-    -Dreactor.aeron.sample.embeddedMediaDriver=true \
-    -Dreactor.aeron.sample.messageLength=32 \
+    -Daeron.threading.mode=SHARED \
     -Dagrona.disable.bounds.checks=true \
+    -Dreactor.aeron.sample.embeddedMediaDriver=true \
     -Dreactor.aeron.sample.exclusive.publications=true \
+    -Dreactor.aeron.sample.messages=10000000 \
+    -Dreactor.aeron.sample.messageLength=32 \
+    -Dreactor.aeron.sample.idle.strategy=yielding \
     ${JVM_OPTS} reactor.aeron.demo.pure.MdcPingNoWaiting
