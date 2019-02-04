@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+${JAVA_HOME}/bin/java \
+    -cp ../build/libs/samples.jar \
+    -XX:+UnlockDiagnosticVMOptions \
+    -XX:GuaranteedSafepointInterval=300000 \
+    -Dagrona.disable.bounds.checks=true \
+    -Daeron.sample.embeddedMediaDriver=true \
+    -Daeron.sample.exclusive.publications=true \
+    ${JVM_OPTS} reactor.aeron.demo.raw.Pong
