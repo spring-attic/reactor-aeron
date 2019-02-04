@@ -43,7 +43,7 @@ public class MdcPingNoWaitingWithSimpleBackpressure {
           .build();
   private static final String INBOUND_CHANNEL =
       new ChannelUriStringBuilder()
-          .controlEndpoint("localhost:" + CONTROL_PORT)
+          .controlEndpoint(Configurations.MDC_ADDRESS + ':' + CONTROL_PORT)
           .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
           .sessionId(SESSION_ID ^ Integer.MAX_VALUE)
           .reliable(Boolean.TRUE)

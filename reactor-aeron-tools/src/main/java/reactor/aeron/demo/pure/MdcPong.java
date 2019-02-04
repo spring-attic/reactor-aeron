@@ -35,7 +35,7 @@ public class MdcPong {
           .build();
   private static final String INBOUND_CHANNEL =
       new ChannelUriStringBuilder()
-          .endpoint("localhost:" + PORT)
+          .endpoint(Configurations.MDC_ADDRESS + ':' + PORT)
           .sessionId(SESSION_ID)
           .reliable(Boolean.TRUE)
           .media("udp")
