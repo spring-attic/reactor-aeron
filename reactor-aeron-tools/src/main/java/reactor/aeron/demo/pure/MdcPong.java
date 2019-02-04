@@ -22,14 +22,13 @@ import org.agrona.concurrent.YieldingIdleStrategy;
  */
 public class MdcPong {
 
-  private static final int INBOUND_STREAM_ID = 0xcafe0000;
-  private static final int OUTBOUND_STREAM_ID = 0xcafe0000;
-  private static final int PORT = 13000;
-  private static final int CONTROL_PORT = 13001;
-  private static final int SESSION_ID = 1001;
+  private static final int STREAM_ID = Configurations.MDC_STREAM_ID;
+  private static final int PORT = Configurations.MDC_PORT;
+  private static final int CONTROL_PORT = Configurations.MDC_CONTROL_PORT;
+  private static final int SESSION_ID = Configurations.MDC_SESSION_ID;
   private static final String OUTBOUND_CHANNEL =
       new ChannelUriStringBuilder()
-          .controlEndpoint("localhost:" + CONTROL_PORT)
+          .controlEndpoint(Configurations.MDC_ADDRESS + ':' + CONTROL_PORT)
           .sessionId(SESSION_ID ^ Integer.MAX_VALUE)
           .media("udp")
           .reliable(Boolean.TRUE)
@@ -49,6 +48,11 @@ public class MdcPong {
 
   private static final IdleStrategy PING_HANDLER_IDLE_STRATEGY = new YieldingIdleStrategy();
 
+  /**
+   * Main runner.
+   *
+   * @param args program arguments.
+   */
   public static void main(final String[] args) {
     final MediaDriver driver = EMBEDDED_MEDIA_DRIVER ? MediaDriver.launchEmbedded() : null;
 
@@ -64,21 +68,19 @@ public class MdcPong {
 
     final IdleStrategy idleStrategy = new YieldingIdleStrategy();
 
-    System.out.println(
-        "Subscribing Ping at " + INBOUND_CHANNEL + " on stream Id " + INBOUND_STREAM_ID);
-    System.out.println(
-        "Publishing Pong at " + OUTBOUND_CHANNEL + " on stream Id " + OUTBOUND_STREAM_ID);
+    System.out.println("Subscribing Ping at " + INBOUND_CHANNEL + " on stream Id " + STREAM_ID);
+    System.out.println("Publishing Pong at " + OUTBOUND_CHANNEL + " on stream Id " + STREAM_ID);
     System.out.println("Using exclusive publications " + EXCLUSIVE_PUBLICATIONS);
 
     final AtomicBoolean running = new AtomicBoolean(true);
     SigInt.register(() -> running.set(false));
 
     try (Aeron aeron = Aeron.connect(ctx);
-        Subscription subscription = aeron.addSubscription(INBOUND_CHANNEL, INBOUND_STREAM_ID);
+        Subscription subscription = aeron.addSubscription(INBOUND_CHANNEL, STREAM_ID);
         Publication publication =
             EXCLUSIVE_PUBLICATIONS
-                ? aeron.addExclusivePublication(OUTBOUND_CHANNEL, OUTBOUND_STREAM_ID)
-                : aeron.addPublication(OUTBOUND_CHANNEL, OUTBOUND_STREAM_ID)) {
+                ? aeron.addExclusivePublication(OUTBOUND_CHANNEL, STREAM_ID)
+                : aeron.addPublication(OUTBOUND_CHANNEL, STREAM_ID)) {
       final FragmentAssembler dataHandler =
           new FragmentAssembler(
               (buffer, offset, length, header) -> pingHandler(publication, buffer, offset, length));
@@ -93,7 +95,7 @@ public class MdcPong {
     CloseHelper.quietClose(driver);
   }
 
-  public static void pingHandler(
+  private static void pingHandler(
       final Publication pongPublication,
       final DirectBuffer buffer,
       final int offset,

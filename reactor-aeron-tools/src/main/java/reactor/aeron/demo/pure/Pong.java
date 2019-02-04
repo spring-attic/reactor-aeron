@@ -31,6 +31,11 @@ public class Pong {
 
   private static final IdleStrategy PING_HANDLER_IDLE_STRATEGY = new BusySpinIdleStrategy();
 
+  /**
+   * Main runner.
+   *
+   * @param args program arguments.
+   */
   public static void main(final String[] args) {
     final MediaDriver driver = EMBEDDED_MEDIA_DRIVER ? MediaDriver.launchEmbedded() : null;
 
@@ -73,7 +78,7 @@ public class Pong {
     CloseHelper.quietClose(driver);
   }
 
-  public static void pingHandler(
+  private static void pingHandler(
       final Publication pongPublication,
       final DirectBuffer buffer,
       final int offset,

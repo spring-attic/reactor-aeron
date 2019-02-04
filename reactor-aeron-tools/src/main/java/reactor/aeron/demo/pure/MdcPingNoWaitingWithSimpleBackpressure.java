@@ -30,14 +30,13 @@ import org.agrona.console.ContinueBarrier;
  * @see MdcPong
  */
 public class MdcPingNoWaitingWithSimpleBackpressure {
-  private static final int INBOUND_STREAM_ID = 0xcafe0000;
-  private static final int OUTBOUND_STREAM_ID = 0xcafe0000;
-  private static final int PORT = 13000;
-  private static final int CONTROL_PORT = 13001;
-  private static final int SESSION_ID = 1001;
+  private static final int STREAM_ID = Configurations.MDC_STREAM_ID;
+  private static final int PORT = Configurations.MDC_PORT;
+  private static final int CONTROL_PORT = Configurations.MDC_CONTROL_PORT;
+  private static final int SESSION_ID = Configurations.MDC_SESSION_ID;
   private static final String OUTBOUND_CHANNEL =
       new ChannelUriStringBuilder()
-          .endpoint("localhost:" + PORT)
+          .endpoint(Configurations.MDC_ADDRESS + ':' + PORT)
           .sessionId(SESSION_ID)
           .media("udp")
           .reliable(Boolean.TRUE)
@@ -50,7 +49,6 @@ public class MdcPingNoWaitingWithSimpleBackpressure {
           .reliable(Boolean.TRUE)
           .media("udp")
           .build();
-  private static final int REQUESTED = Integer.getInteger("aeron.sample.request", 8);
 
   private static final long NUMBER_OF_MESSAGES = Configurations.NUMBER_OF_MESSAGES;
   private static final long WARMUP_NUMBER_OF_MESSAGES = Configurations.WARMUP_NUMBER_OF_MESSAGES;
@@ -59,6 +57,7 @@ public class MdcPingNoWaitingWithSimpleBackpressure {
   private static final int FRAGMENT_COUNT_LIMIT = Configurations.FRAGMENT_COUNT_LIMIT;
   private static final boolean EMBEDDED_MEDIA_DRIVER = Configurations.EMBEDDED_MEDIA_DRIVER;
   private static final boolean EXCLUSIVE_PUBLICATIONS = Configurations.EXCLUSIVE_PUBLICATIONS;
+  private static final int REQUESTED = Configurations.REQUESTED;
 
   private static final UnsafeBuffer OFFER_BUFFER =
       new UnsafeBuffer(BufferUtil.allocateDirectAligned(MESSAGE_LENGTH, BitUtil.CACHE_LINE_LENGTH));
@@ -66,6 +65,11 @@ public class MdcPingNoWaitingWithSimpleBackpressure {
   private static final CountDownLatch LATCH = new CountDownLatch(1);
   private static final IdleStrategy POLLING_IDLE_STRATEGY = new YieldingIdleStrategy();
 
+  /**
+   * Main runner.
+   *
+   * @param args program arguments.
+   */
   public static void main(final String[] args) throws Exception {
     final MediaDriver driver = EMBEDDED_MEDIA_DRIVER ? MediaDriver.launchEmbedded() : null;
     final Aeron.Context ctx =
@@ -79,20 +83,18 @@ public class MdcPingNoWaitingWithSimpleBackpressure {
       ctx.aeronDirectoryName(driver.aeronDirectoryName());
     }
 
-    System.out.println(
-        "Publishing Ping at " + OUTBOUND_CHANNEL + " on stream Id " + OUTBOUND_STREAM_ID);
-    System.out.println(
-        "Subscribing Pong at " + INBOUND_CHANNEL + " on stream Id " + INBOUND_STREAM_ID);
+    System.out.println("Publishing Ping at " + OUTBOUND_CHANNEL + " on stream Id " + STREAM_ID);
+    System.out.println("Subscribing Pong at " + INBOUND_CHANNEL + " on stream Id " + STREAM_ID);
     System.out.println("Message length of " + MESSAGE_LENGTH + " bytes");
     System.out.println("Using exclusive publications " + EXCLUSIVE_PUBLICATIONS);
     System.out.println("Request " + REQUESTED);
 
     try (Aeron aeron = Aeron.connect(ctx);
-        Subscription subscription = aeron.addSubscription(INBOUND_CHANNEL, INBOUND_STREAM_ID);
+        Subscription subscription = aeron.addSubscription(INBOUND_CHANNEL, STREAM_ID);
         Publication publication =
             EXCLUSIVE_PUBLICATIONS
-                ? aeron.addExclusivePublication(OUTBOUND_CHANNEL, OUTBOUND_STREAM_ID)
-                : aeron.addPublication(OUTBOUND_CHANNEL, OUTBOUND_STREAM_ID)) {
+                ? aeron.addExclusivePublication(OUTBOUND_CHANNEL, STREAM_ID)
+                : aeron.addPublication(OUTBOUND_CHANNEL, STREAM_ID)) {
       System.out.println("Waiting for new image from Pong...");
       LATCH.await();
 
@@ -135,14 +137,13 @@ public class MdcPingNoWaitingWithSimpleBackpressure {
 
     final Image image = subscription.imageAtIndex(0);
 
-    final int requested = REQUESTED;
     int produced = 0;
     int received = 0;
 
     for (long i = 0; i < count; ) {
       int workCount = 0;
 
-      if (produced < requested) {
+      if (produced < REQUESTED) {
         OFFER_BUFFER.putLong(0, System.nanoTime());
 
         final long offeredPosition = publication.offer(OFFER_BUFFER, 0, MESSAGE_LENGTH);
@@ -184,8 +185,7 @@ public class MdcPingNoWaitingWithSimpleBackpressure {
         "Available image: channel=%s streamId=%d session=%d%n",
         subscription.channel(), subscription.streamId(), image.sessionId());
 
-    if (INBOUND_STREAM_ID == subscription.streamId()
-        && INBOUND_CHANNEL.equals(subscription.channel())) {
+    if (STREAM_ID == subscription.streamId() && INBOUND_CHANNEL.equals(subscription.channel())) {
       LATCH.countDown();
     }
   }

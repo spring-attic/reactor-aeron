@@ -20,6 +20,12 @@ public interface Configurations {
       System.getProperty("reactor.aeron.sample.ping.channel", "aeron:udp?endpoint=localhost:40123");
   String PONG_CHANNEL =
       System.getProperty("reactor.aeron.sample.pong.channel", "aeron:udp?endpoint=localhost:40123");
+  String MDC_ADDRESS = System.getProperty("reactor.aeron.sample.mdc.address", "localhost");
+  int MDC_PORT = Integer.getInteger("reactor.aeron.sample.mdc.port", 13000);
+  int MDC_CONTROL_PORT = Integer.getInteger("reactor.aeron.sample.mdc.control.port", 13001);
+  int MDC_STREAM_ID = Integer.getInteger("reactor.aeron.sample.mdc.stream.id", 0xcafe0000);
+  int MDC_SESSION_ID = Integer.getInteger("reactor.aeron.sample.mdc.session.id", 1001);
+  int REQUESTED = Integer.getInteger("reactor.aeron.sample.request", 8);
 
   /**
    * Print the information for an available image to stdout.

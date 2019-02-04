@@ -46,6 +46,11 @@ public class Ping {
   private static final CountDownLatch LATCH = new CountDownLatch(1);
   private static final IdleStrategy POLLING_IDLE_STRATEGY = new BusySpinIdleStrategy();
 
+  /**
+   * Main runner.
+   *
+   * @param args program arguments.
+   */
   public static void main(final String[] args) throws Exception {
     final MediaDriver driver = EMBEDDED_MEDIA_DRIVER ? MediaDriver.launchEmbedded() : null;
     final Aeron.Context ctx =
