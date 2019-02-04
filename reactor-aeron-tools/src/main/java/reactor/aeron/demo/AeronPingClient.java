@@ -11,10 +11,8 @@ import org.agrona.concurrent.IdleStrategy;
 import reactor.aeron.AeronClient;
 import reactor.aeron.AeronConnection;
 import reactor.aeron.AeronResources;
-import reactor.core.publisher.DirectProcessor;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.FluxSink;
-import reactor.core.publisher.FluxSink.OverflowStrategy;
+import reactor.core.publisher.Mono;
 
 public final class AeronPingClient {
 
@@ -60,25 +58,14 @@ public final class AeronPingClient {
             })
         .subscribe();
 
-
-
-
-    DirectProcessor<Integer> processor = DirectProcessor.create();
-    FluxSink<Integer> sink = processor.sink();
-
     // send current nano time as body
-    int prefetch = 8;
     connection
         .outbound()
-        .send(processor.map(i -> generatePayload()))
+        .send(Mono.fromCallable(AeronPingClient::generatePayload).repeat(Integer.MAX_VALUE))
         .then()
         .doOnTerminate(connection::dispose)
         .doOnError(Throwable::printStackTrace)
         .subscribe();
-
-    Flux.range(0, prefetch).subscribe(sink::next);
-
-    sink.next(1);
 
     // receive back sent start time and update the histogram
     connection
@@ -89,7 +76,6 @@ public final class AeronPingClient {
               long start = buffer.getLong(0);
               long diff = System.nanoTime() - start;
               histogram.recordValue(diff);
-              sink.next(1);
             })
         .doOnError(Throwable::printStackTrace)
         .subscribe();
