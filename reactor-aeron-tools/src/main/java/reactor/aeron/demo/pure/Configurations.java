@@ -1,11 +1,10 @@
-package reactor.aeron.demo.raw;
+package reactor.aeron.demo.pure;
 
 import io.aeron.Image;
 import io.aeron.Subscription;
 
 /** Configuration used for samples with defaults which can be overridden by system properties. */
-public interface Configurations
-{
+public interface Configurations {
   int FRAGMENT_COUNT_LIMIT = Integer.getInteger("reactor.aeron.sample.frameCountLimit", 10);
   int MESSAGE_LENGTH = Integer.getInteger("reactor.aeron.sample.messageLength", 32);
   int WARMUP_NUMBER_OF_ITERATIONS = Integer.getInteger("reactor.aeron.sample.warmup.iterations", 5);
@@ -14,13 +13,13 @@ public interface Configurations
   boolean EXCLUSIVE_PUBLICATIONS =
       Boolean.getBoolean("reactor.aeron.sample.exclusive.publications");
   boolean EMBEDDED_MEDIA_DRIVER = Boolean.getBoolean("reactor.aeron.sample.embeddedMediaDriver");
-  boolean INFO_FLAG = Boolean.getBoolean("aeron.sample.info");
-  int PING_STREAM_ID = Integer.getInteger("aeron.sample.ping.streamId", 10);
-  int PONG_STREAM_ID = Integer.getInteger("aeron.sample.pong.streamId", 10);
+  boolean INFO_FLAG = Boolean.getBoolean("reactor.aeron.sample.info");
+  int PING_STREAM_ID = Integer.getInteger("reactor.aeron.sample.ping.streamId", 10);
+  int PONG_STREAM_ID = Integer.getInteger("reactor.aeron.sample.pong.streamId", 10);
   String PING_CHANNEL =
-      System.getProperty("aeron.sample.ping.channel", "aeron:udp?endpoint=localhost:40123");
+      System.getProperty("reactor.aeron.sample.ping.channel", "aeron:udp?endpoint=localhost:40123");
   String PONG_CHANNEL =
-      System.getProperty("aeron.sample.pong.channel", "aeron:udp?endpoint=localhost:40123");
+      System.getProperty("reactor.aeron.sample.pong.channel", "aeron:udp?endpoint=localhost:40123");
 
   /**
    * Print the information for an available image to stdout.

@@ -1,4 +1,4 @@
-package reactor.aeron.demo.raw;
+package reactor.aeron.demo.pure;
 
 import io.aeron.Aeron;
 import java.nio.ByteBuffer;
@@ -6,7 +6,7 @@ import org.agrona.DirectBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.aeron.demo.raw.RawAeronResources.MsgPublication;
+import reactor.aeron.demo.pure.RawAeronResources.MsgPublication;
 
 public class RawAeronClientThroughput {
 

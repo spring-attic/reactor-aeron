@@ -1,49 +1,30 @@
-package reactor.aeron.demo.raw;
+package reactor.aeron.demo.pure;
 
 import io.aeron.Aeron;
-import io.aeron.ChannelUriStringBuilder;
 import io.aeron.FragmentAssembler;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.agrona.CloseHelper;
 import org.agrona.DirectBuffer;
 import org.agrona.concurrent.BusySpinIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.SigInt;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
 /**
  * Pong component of Ping-Pong.
  *
- * <p>Echoes back messages from {@link MdcPing}.
+ * <p>Echoes back messages from {@link Ping}.
  *
- * @see MdcPong
+ * @see Ping
  */
-public class MdcPong {
-
-  private static final int INBOUND_STREAM_ID = 0xcafe0000;
-  private static final int OUTBOUND_STREAM_ID = 0xcafe0000;
-  private static final int PORT = 13000;
-  private static final int CONTROL_PORT = 13001;
-  private static final int SESSION_ID = 1001;
-  private static final String OUTBOUND_CHANNEL =
-      new ChannelUriStringBuilder()
-          .controlEndpoint("localhost:" + CONTROL_PORT)
-          .sessionId(SESSION_ID ^ Integer.MAX_VALUE)
-          .media("udp")
-          .reliable(Boolean.TRUE)
-          .build();
-  private static final String INBOUND_CHANNEL =
-      new ChannelUriStringBuilder()
-          .endpoint("localhost:" + PORT)
-          .sessionId(SESSION_ID)
-          .reliable(Boolean.TRUE)
-          .media("udp")
-          .build();
-
+public class Pong {
+  private static final int PING_STREAM_ID = Configurations.PING_STREAM_ID;
+  private static final int PONG_STREAM_ID = Configurations.PONG_STREAM_ID;
   private static final int FRAME_COUNT_LIMIT = Configurations.FRAGMENT_COUNT_LIMIT;
+  private static final String PING_CHANNEL = Configurations.PING_CHANNEL;
+  private static final String PONG_CHANNEL = Configurations.PONG_CHANNEL;
   private static final boolean INFO_FLAG = Configurations.INFO_FLAG;
   private static final boolean EMBEDDED_MEDIA_DRIVER = Configurations.EMBEDDED_MEDIA_DRIVER;
   private static final boolean EXCLUSIVE_PUBLICATIONS = Configurations.EXCLUSIVE_PUBLICATIONS;
@@ -65,21 +46,19 @@ public class MdcPong {
 
     final IdleStrategy idleStrategy = new BusySpinIdleStrategy();
 
-    System.out.println(
-        "Subscribing Ping at " + INBOUND_CHANNEL + " on stream Id " + INBOUND_STREAM_ID);
-    System.out.println(
-        "Publishing Pong at " + OUTBOUND_CHANNEL + " on stream Id " + OUTBOUND_STREAM_ID);
+    System.out.println("Subscribing Ping at " + PING_CHANNEL + " on stream Id " + PING_STREAM_ID);
+    System.out.println("Publishing Pong at " + PONG_CHANNEL + " on stream Id " + PONG_STREAM_ID);
     System.out.println("Using exclusive publications " + EXCLUSIVE_PUBLICATIONS);
 
     final AtomicBoolean running = new AtomicBoolean(true);
     SigInt.register(() -> running.set(false));
 
     try (Aeron aeron = Aeron.connect(ctx);
-        Subscription subscription = aeron.addSubscription(INBOUND_CHANNEL, INBOUND_STREAM_ID);
+        Subscription subscription = aeron.addSubscription(PING_CHANNEL, PING_STREAM_ID);
         Publication publication =
             EXCLUSIVE_PUBLICATIONS
-                ? aeron.addExclusivePublication(OUTBOUND_CHANNEL, OUTBOUND_STREAM_ID)
-                : aeron.addPublication(OUTBOUND_CHANNEL, OUTBOUND_STREAM_ID)) {
+                ? aeron.addExclusivePublication(PONG_CHANNEL, PONG_STREAM_ID)
+                : aeron.addPublication(PONG_CHANNEL, PONG_STREAM_ID)) {
       final FragmentAssembler dataHandler =
           new FragmentAssembler(
               (buffer, offset, length, header) -> pingHandler(publication, buffer, offset, length));

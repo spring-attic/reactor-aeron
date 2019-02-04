@@ -4,9 +4,9 @@ ${JAVA_HOME}/bin/java \
     -cp ../build/libs/samples.jar \
     -XX:+UnlockDiagnosticVMOptions \
     -XX:GuaranteedSafepointInterval=300000 \
-    -Daeron.sample.messages=1000000 \
-    -Daeron.sample.embeddedMediaDriver=true \
-    -Daeron.sample.messageLength=32 \
+    -Dreactor.aeron.sample.messages=1000000 \
+    -Dreactor.aeron.sample.embeddedMediaDriver=true \
+    -Dreactor.aeron.sample.messageLength=32 \
     -Dagrona.disable.bounds.checks=true \
-    -Daeron.sample.exclusive.publications=true \
-    ${JVM_OPTS} reactor.aeron.demo.raw.Ping
+    -Dreactor.aeron.sample.exclusive.publications=true \
+    ${JVM_OPTS} reactor.aeron.demo.pure.Ping

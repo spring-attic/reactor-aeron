@@ -1,4 +1,4 @@
-package reactor.aeron.demo.raw;
+package reactor.aeron.demo.pure;
 
 import io.aeron.Aeron;
 import io.aeron.ChannelUriStringBuilder;
@@ -10,6 +10,8 @@ import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
 import io.aeron.logbuffer.FragmentHandler;
 import io.aeron.logbuffer.Header;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.HdrHistogram.Histogram;
 import org.agrona.BitUtil;
 import org.agrona.BufferUtil;
@@ -19,9 +21,6 @@ import org.agrona.concurrent.BusySpinIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.agrona.console.ContinueBarrier;
-
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Ping component of Ping-Pong latency test recorded to a histogram to capture full distribution..
@@ -53,10 +52,8 @@ public class MdcPing {
           .build();
 
   private static final long NUMBER_OF_MESSAGES = Configurations.NUMBER_OF_MESSAGES;
-  private static final long WARMUP_NUMBER_OF_MESSAGES =
-      Configurations.WARMUP_NUMBER_OF_MESSAGES;
-  private static final int WARMUP_NUMBER_OF_ITERATIONS =
-      Configurations.WARMUP_NUMBER_OF_ITERATIONS;
+  private static final long WARMUP_NUMBER_OF_MESSAGES = Configurations.WARMUP_NUMBER_OF_MESSAGES;
+  private static final int WARMUP_NUMBER_OF_ITERATIONS = Configurations.WARMUP_NUMBER_OF_ITERATIONS;
   private static final int MESSAGE_LENGTH = Configurations.MESSAGE_LENGTH;
   private static final int FRAGMENT_COUNT_LIMIT = Configurations.FRAGMENT_COUNT_LIMIT;
   private static final boolean EMBEDDED_MEDIA_DRIVER = Configurations.EMBEDDED_MEDIA_DRIVER;

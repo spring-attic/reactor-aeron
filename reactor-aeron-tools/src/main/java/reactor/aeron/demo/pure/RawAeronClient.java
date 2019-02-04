@@ -1,14 +1,12 @@
-package reactor.aeron.demo.raw;
+package reactor.aeron.demo.pure;
 
 import io.aeron.Aeron;
 import io.aeron.ChannelUriStringBuilder;
+import io.aeron.CommonContext;
 import io.aeron.Image;
 import io.aeron.Publication;
 import io.aeron.Subscription;
 import java.lang.management.ManagementFactory;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 import javax.management.StandardMBean;
@@ -18,42 +16,41 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.aeron.WorkerFlightRecorder;
 import reactor.aeron.WorkerMBean;
+import reactor.aeron.demo.pure.RawAeronResources.MsgPublication;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
-abstract class RawAeronServer {
+abstract class RawAeronClient {
 
-  private static final Logger logger = LoggerFactory.getLogger(RawAeronServer.class);
+  private static final Logger logger = LoggerFactory.getLogger(RawAeronClient.class);
 
   private static final int STREAM_ID = 0xcafe0000;
 
   private static final String address = "localhost";
   private static final int port = 13000;
   private static final int controlPort = 13001;
-  private static final String acceptorChannel =
+  private static final ChannelUriStringBuilder outboundChannelBuilder =
       new ChannelUriStringBuilder()
           .endpoint(address + ':' + port)
           .reliable(Boolean.TRUE)
-          .media("udp")
-          .build();
-  private static final ChannelUriStringBuilder outboundChannelBuilder =
+          .media("udp");
+  private static final ChannelUriStringBuilder inboundChannelBuilder =
       new ChannelUriStringBuilder()
           .controlEndpoint(address + ':' + controlPort)
+          .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
           .reliable(Boolean.TRUE)
           .media("udp");
 
   private final Aeron aeron;
 
-  private volatile Subscription acceptSubscription;
-  private final Map<Integer, Publication> publications = new ConcurrentHashMap<>();
-
-  private final Scheduler scheduler = Schedulers.newSingle(this.toString());
   private final IdleStrategy idleStrategy = new BackoffIdleStrategy(1, 1, 1, 100);
   private final WorkerFlightRecorder flightRecorder;
+  private final int writeLimit = 32;
+  private Scheduler scheduler;
 
-  RawAeronServer(Aeron aeron) throws Exception {
+  RawAeronClient(Aeron aeron) throws Exception {
     this.aeron = aeron;
-
+    this.scheduler = Schedulers.newSingle(this.toString());
     this.flightRecorder = new WorkerFlightRecorder();
     MBeanServer mbeanServer = ManagementFactory.getPlatformMBeanServer();
     ObjectName objectName = new ObjectName("reactor.aeron:name=" + "server@" + this);
@@ -62,26 +59,35 @@ abstract class RawAeronServer {
   }
 
   final void start() {
-    logger.info("bind on " + acceptorChannel);
-
-    acceptSubscription =
-        aeron.addSubscription(
-            acceptorChannel,
-            STREAM_ID,
-            this::onAcceptImageAvailable,
-            this::onAcceptImageUnavailable);
-
     scheduler.schedule(
         () -> {
+          String outboundChannel = outboundChannelBuilder.build();
+
+          Publication publication = aeron.addExclusivePublication(outboundChannel, STREAM_ID);
+
+          int sessionId = publication.sessionId();
+
+          String inboundChannel =
+              inboundChannelBuilder.sessionId(sessionId ^ Integer.MAX_VALUE).build();
+
+          Subscription subscription =
+              aeron.addSubscription(
+                  inboundChannel,
+                  STREAM_ID,
+                  this::onClientImageAvailable,
+                  this::onClientImageUnavailable);
+
+          MsgPublication msgPublication = new MsgPublication(publication, writeLimit);
+
           flightRecorder.start();
 
           while (true) {
             flightRecorder.countTick();
 
-            int i = processOutbound(publications);
+            int i = processOutbound(msgPublication);
             flightRecorder.countOutbound(i);
 
-            int j = processInbound(acceptSubscription.images());
+            int j = processInbound(subscription);
             flightRecorder.countInbound(j);
 
             int workCount = i + j;
@@ -99,45 +105,25 @@ abstract class RawAeronServer {
         });
   }
 
-  private void onAcceptImageAvailable(Image image) {
-    int sessionId = image.sessionId();
-    String outboundChannel =
-        outboundChannelBuilder.sessionId(sessionId ^ Integer.MAX_VALUE).build();
-
+  private void onClientImageAvailable(Image image) {
     logger.debug(
-        "onImageAvailable: {} {}, create outbound {}",
-        image.sessionId(),
-        image.sourceIdentity(),
-        outboundChannel);
-
-    Schedulers.single()
-        .schedule(
-            () -> {
-              Publication publication = aeron.addExclusivePublication(outboundChannel, STREAM_ID);
-              publications.put(sessionId, publication);
-            });
+        "onClientImageAvailable: {} {}",
+        Integer.toHexString(image.sessionId()),
+        image.sourceIdentity());
   }
 
-  private void onAcceptImageUnavailable(Image image) {
-    int sessionId = image.sessionId();
-
-    logger.debug("onImageUnavailable: {} {}", sessionId, image.sourceIdentity());
-
-    Schedulers.single()
-        .schedule(
-            () -> {
-              Publication publication = publications.remove(sessionId);
-              if (publication != null) {
-                publication.close();
-              }
-            });
+  private void onClientImageUnavailable(Image image) {
+    logger.debug(
+        "onClientImageUnavailable: {} {}",
+        Integer.toHexString(image.sessionId()),
+        image.sourceIdentity());
   }
 
-  int processInbound(List<Image> images) {
+  int processInbound(Subscription subscription) {
     return 0;
   }
 
-  int processOutbound(Map<Integer, Publication> publications) {
+  int processOutbound(MsgPublication msgPublication) {
     return 0;
   }
 }
