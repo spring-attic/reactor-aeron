@@ -120,12 +120,15 @@ public final class AeronPingClient {
   }
 
   private static Disposable startReport(boolean warmup) {
-    return warmup
-        ? () -> {}
-        : Flux.interval(Duration.ofSeconds(Configurations.REPORT_INTERVAL))
-            .doOnNext(AeronPingClient::report)
-            .doFinally(AeronPingClient::report)
-            .subscribe();
+    if (warmup) {
+      return () -> {
+        // no-op
+      };
+    }
+    return Flux.interval(Duration.ofSeconds(Configurations.REPORT_INTERVAL))
+        .doOnNext(AeronPingClient::report)
+        .doFinally(AeronPingClient::report)
+        .subscribe();
   }
 
   private static void report(Object ignored) {

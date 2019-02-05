@@ -12,6 +12,7 @@ public final class AeronPongServer {
    * @param args program arguments.
    */
   public static void main(String... args) {
+    printSettings();
 
     AeronResources resources =
         new AeronResources()
@@ -21,22 +22,6 @@ public final class AeronPongServer {
             .workerIdleStrategySupplier(Configurations::idleStrategy)
             .start()
             .block();
-
-    System.out.println(
-        "address: "
-            + Configurations.MDC_ADDRESS
-            + ", port: "
-            + Configurations.MDC_PORT
-            + ", controlPort: "
-            + Configurations.MDC_CONTROL_PORT);
-    System.out.println("MediaDriver THREADING_MODE: " + Configuration.THREADING_MODE_DEFAULT);
-    System.out.println("pollFragmentLimit of " + Configurations.FRAGMENT_COUNT_LIMIT);
-    System.out.println(
-        "Using worker idle strategy "
-            + Configurations.idleStrategy().getClass()
-            + "("
-            + Configurations.IDLE_STRATEGY
-            + ")");
 
     AeronServer.create(resources)
         .options(
@@ -52,5 +37,23 @@ public final class AeronPongServer {
         .onDispose(resources)
         .onDispose()
         .block();
+  }
+
+  private static void printSettings() {
+    System.out.println(
+        "address: "
+            + Configurations.MDC_ADDRESS
+            + ", port: "
+            + Configurations.MDC_PORT
+            + ", controlPort: "
+            + Configurations.MDC_CONTROL_PORT);
+    System.out.println("MediaDriver THREADING_MODE: " + Configuration.THREADING_MODE_DEFAULT);
+    System.out.println("pollFragmentLimit of " + Configurations.FRAGMENT_COUNT_LIMIT);
+    System.out.println(
+        "Using worker idle strategy "
+            + Configurations.idleStrategy().getClass()
+            + "("
+            + Configurations.IDLE_STRATEGY
+            + ")");
   }
 }
