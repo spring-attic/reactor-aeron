@@ -5,12 +5,14 @@ import java.time.Duration;
 import java.util.function.Supplier;
 import org.HdrHistogram.Recorder;
 import org.agrona.DirectBuffer;
-import org.agrona.ExpandableArrayBuffer;
+import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.BackoffIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
+import org.agrona.concurrent.UnsafeBuffer;
 import reactor.aeron.AeronClient;
 import reactor.aeron.AeronConnection;
 import reactor.aeron.AeronResources;
+import reactor.aeron.DirectBufferHandler;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -58,10 +60,12 @@ public final class AeronPingClient {
             })
         .subscribe();
 
+    NanoTimeGeneratorHandler handler = new NanoTimeGeneratorHandler();
+
     // send current nano time as body
     connection
         .outbound()
-        .send(Mono.fromCallable(AeronPingClient::generatePayload).repeat(Integer.MAX_VALUE))
+        .send(Mono.just(1).repeat(Integer.MAX_VALUE), handler)
         .then()
         .doOnTerminate(connection::dispose)
         .doOnError(Throwable::printStackTrace)
@@ -83,9 +87,25 @@ public final class AeronPingClient {
     connection.onDispose(resources).onDispose().block();
   }
 
-  private static DirectBuffer generatePayload() {
-    ExpandableArrayBuffer buffer = new ExpandableArrayBuffer(Long.BYTES);
-    buffer.putLong(0, System.nanoTime());
-    return buffer;
+  private static class NanoTimeGeneratorHandler implements DirectBufferHandler<Integer> {
+    @Override
+    public int estimateLength(Integer ignore) {
+      return Long.BYTES;
+    }
+
+    @Override
+    public void write(MutableDirectBuffer dstBuffer, int index, Integer ignore, int length) {
+      dstBuffer.putLong(index, System.nanoTime());
+    }
+
+    @Override
+    public DirectBuffer map(Integer ignore, int length) {
+      UnsafeBuffer buffer = new UnsafeBuffer(new byte[length]);
+      buffer.putLong(0, System.nanoTime());
+      return buffer;
+    }
+
+    @Override
+    public void dispose(Integer ignore) {}
   }
 }
