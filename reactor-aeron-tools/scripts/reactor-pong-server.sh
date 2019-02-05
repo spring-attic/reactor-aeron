@@ -10,5 +10,5 @@ ${JAVA_HOME}/bin/java \
     -XX:GuaranteedSafepointInterval=300000 \
     -Daeron.threading.mode=SHARED \
     -Dagrona.disable.bounds.checks=true \
-    -Dreactor.aeron.sample.idle.strategy=yielding \
+    -Dreactor.aeron.sample.idle.strategy=backoff/0/0/0/1 \
     ${JVM_OPTS} reactor.aeron.demo.AeronPongServer
