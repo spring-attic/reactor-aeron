@@ -6,6 +6,7 @@ import org.HdrHistogram.Recorder;
 import org.agrona.DirectBuffer;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
+import org.agrona.console.ContinueBarrier;
 import reactor.aeron.AeronClient;
 import reactor.aeron.AeronConnection;
 import reactor.aeron.AeronResources;
@@ -72,23 +73,12 @@ public final class AeronPingClient {
       roundTripMessages(connection, histogram, Configurations.WARMUP_NUMBER_OF_MESSAGES);
     }
 
-    Disposable histrogramDisposable =
-        Flux.interval(Duration.ofSeconds(Configurations.REPORT_INTERVAL))
-            .doOnNext(
-                i -> {
-                  System.out.println("---- PING/PONG HISTO ----");
-                  histogram
-                      .getIntervalHistogram()
-                      .outputPercentileDistribution(System.out, 5, 1000.0, false);
-                  System.out.println("---- PING/PONG HISTO ----");
-                })
-            .subscribe();
-
-    System.out.println("Pinging " + Configurations.NUMBER_OF_MESSAGES + " messages");
-    roundTripMessages(connection, histogram, Configurations.NUMBER_OF_MESSAGES);
-    System.out.println("Histogram of RTT latencies in microseconds.");
-
-    histrogramDisposable.dispose();
+    ContinueBarrier barrier = new ContinueBarrier("Execute again?");
+    do {
+      System.out.println("Pinging " + Configurations.NUMBER_OF_MESSAGES + " messages");
+      roundTripMessages(connection, histogram, Configurations.NUMBER_OF_MESSAGES);
+      System.out.println("Histogram of RTT latencies in microseconds.");
+    } while (barrier.await());
 
     connection.dispose();
 
@@ -99,6 +89,18 @@ public final class AeronPingClient {
       AeronConnection connection, Recorder histogram, long count) {
 
     histogram.reset();
+
+    Disposable reporter =
+        Flux.interval(Duration.ofSeconds(Configurations.REPORT_INTERVAL))
+            .doOnNext(
+                i -> {
+                  System.out.println("---- PING/PONG HISTO ----");
+                  histogram
+                      .getIntervalHistogram()
+                      .outputPercentileDistribution(System.out, 5, 1000.0, false);
+                  System.out.println("---- PING/PONG HISTO ----");
+                })
+            .subscribe();
 
     NanoTimeGeneratorHandler handler = new NanoTimeGeneratorHandler();
 
@@ -119,6 +121,7 @@ public final class AeronPingClient {
                     }),
             handler)
         .then()
+        .doFinally(s -> reporter.dispose())
         .block();
   }
 
