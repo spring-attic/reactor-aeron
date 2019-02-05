@@ -14,6 +14,7 @@ import reactor.aeron.AeronResources;
 import reactor.aeron.DirectBufferHandler;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 public final class AeronPingClient {
 
@@ -70,13 +71,13 @@ public final class AeronPingClient {
             + " messages");
 
     for (int i = 0; i < Configurations.WARMUP_NUMBER_OF_ITERATIONS; i++) {
-      roundTripMessages(connection, Configurations.WARMUP_NUMBER_OF_MESSAGES);
+      roundTripMessages(connection, Configurations.WARMUP_NUMBER_OF_MESSAGES, true);
     }
 
     ContinueBarrier barrier = new ContinueBarrier("Execute again?");
     do {
       System.out.println("Pinging " + Configurations.NUMBER_OF_MESSAGES + " messages");
-      roundTripMessages(connection, Configurations.NUMBER_OF_MESSAGES);
+      roundTripMessages(connection, Configurations.NUMBER_OF_MESSAGES, false);
       System.out.println("Histogram of RTT latencies in microseconds.");
     } while (barrier.await());
 
@@ -85,20 +86,10 @@ public final class AeronPingClient {
     connection.onDispose(resources).onDispose().block();
   }
 
-  private static void roundTripMessages(AeronConnection connection, long count) {
+  private static void roundTripMessages(AeronConnection connection, long count, boolean warmup) {
     HISTOGRAM.reset();
 
-    Disposable reporter =
-        Flux.interval(Duration.ofSeconds(Configurations.REPORT_INTERVAL))
-            .doOnNext(
-                i -> {
-                  System.out.println("---- PING/PONG HISTO ----");
-                  HISTOGRAM
-                      .getIntervalHistogram()
-                      .outputPercentileDistribution(System.out, 5, 1000.0, false);
-                  System.out.println("---- PING/PONG HISTO ----");
-                })
-            .subscribe();
+    Disposable reporter = startReport(warmup);
 
     NanoTimeGeneratorHandler handler = new NanoTimeGeneratorHandler();
 
@@ -118,9 +109,29 @@ public final class AeronPingClient {
                       HISTOGRAM.recordValue(diff);
                     }),
             handler)
+        .then(
+            Mono.defer(
+                () ->
+                    Mono.delay(Duration.ofMillis(100))
+                        .doOnSubscribe(s -> reporter.dispose())
+                        .then()))
         .then()
-        .doFinally(s -> reporter.dispose())
         .block();
+  }
+
+  private static Disposable startReport(boolean warmup) {
+    return warmup
+        ? () -> {}
+        : Flux.interval(Duration.ofSeconds(Configurations.REPORT_INTERVAL))
+            .doOnNext(AeronPingClient::report)
+            .doFinally(AeronPingClient::report)
+            .subscribe();
+  }
+
+  private static void report(Object ignored) {
+    System.out.println("---- PING/PONG HISTO ----");
+    HISTOGRAM.getIntervalHistogram().outputPercentileDistribution(System.out, 5, 1000.0, false);
+    System.out.println("---- PING/PONG HISTO ----");
   }
 
   private static class NanoTimeGeneratorHandler implements DirectBufferHandler<Object> {
