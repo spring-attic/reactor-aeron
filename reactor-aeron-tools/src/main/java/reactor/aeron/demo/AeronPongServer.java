@@ -1,9 +1,6 @@
 package reactor.aeron.demo;
 
 import io.aeron.driver.ThreadingMode;
-import java.util.function.Supplier;
-import org.agrona.concurrent.BackoffIdleStrategy;
-import org.agrona.concurrent.IdleStrategy;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronServer;
 
@@ -16,20 +13,13 @@ public final class AeronPongServer {
    */
   public static void main(String... args) {
 
-    Supplier<IdleStrategy> idleStrategySupplier = () -> new BackoffIdleStrategy(1, 1, 1, 100);
-
     AeronResources resources =
         new AeronResources()
             .useTmpDir()
             .pollFragmentLimit(4)
             .singleWorker()
-            .media(
-                ctx ->
-                    ctx.threadingMode(ThreadingMode.DEDICATED)
-                        .conductorIdleStrategy(idleStrategySupplier.get())
-                        .receiverIdleStrategy(idleStrategySupplier.get())
-                        .senderIdleStrategy(idleStrategySupplier.get())
-                        .termBufferSparseFile(false))
+            // .workerIdleStrategySupplier(YieldingIdleStrategy::new)
+            .media(ctx -> ctx.threadingMode(ThreadingMode.SHARED))
             .start()
             .block();
 
