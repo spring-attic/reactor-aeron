@@ -2,6 +2,7 @@ package reactor.aeron.demo;
 
 import io.aeron.driver.Configuration;
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 import org.HdrHistogram.Recorder;
 import org.agrona.DirectBuffer;
 import org.agrona.MutableDirectBuffer;
@@ -15,6 +16,8 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 
 public final class AeronPingClient {
+
+  private static final Recorder HISTOGRAM = new Recorder(TimeUnit.SECONDS.toNanos(10), 3);
 
   /**
    * Main runner.
@@ -59,9 +62,6 @@ public final class AeronPingClient {
             + ")");
     System.out.println("Request " + Configurations.REQUESTED);
 
-    // start reporter
-    Recorder histogram = new Recorder(3600000000000L, 3);
-
     System.out.println(
         "Warming up... "
             + Configurations.WARMUP_NUMBER_OF_ITERATIONS
@@ -70,13 +70,13 @@ public final class AeronPingClient {
             + " messages");
 
     for (int i = 0; i < Configurations.WARMUP_NUMBER_OF_ITERATIONS; i++) {
-      roundTripMessages(connection, histogram, Configurations.WARMUP_NUMBER_OF_MESSAGES);
+      roundTripMessages(connection, Configurations.WARMUP_NUMBER_OF_MESSAGES);
     }
 
     ContinueBarrier barrier = new ContinueBarrier("Execute again?");
     do {
       System.out.println("Pinging " + Configurations.NUMBER_OF_MESSAGES + " messages");
-      roundTripMessages(connection, histogram, Configurations.NUMBER_OF_MESSAGES);
+      roundTripMessages(connection, Configurations.NUMBER_OF_MESSAGES);
       System.out.println("Histogram of RTT latencies in microseconds.");
     } while (barrier.await());
 
@@ -85,17 +85,15 @@ public final class AeronPingClient {
     connection.onDispose(resources).onDispose().block();
   }
 
-  private static void roundTripMessages(
-      AeronConnection connection, Recorder histogram, long count) {
-
-    histogram.reset();
+  private static void roundTripMessages(AeronConnection connection, long count) {
+    HISTOGRAM.reset();
 
     Disposable reporter =
         Flux.interval(Duration.ofSeconds(Configurations.REPORT_INTERVAL))
             .doOnNext(
                 i -> {
                   System.out.println("---- PING/PONG HISTO ----");
-                  histogram
+                  HISTOGRAM
                       .getIntervalHistogram()
                       .outputPercentileDistribution(System.out, 5, 1000.0, false);
                   System.out.println("---- PING/PONG HISTO ----");
@@ -117,7 +115,7 @@ public final class AeronPingClient {
                     buffer -> {
                       long start = buffer.getLong(0);
                       long diff = System.nanoTime() - start;
-                      histogram.recordValue(diff);
+                      HISTOGRAM.recordValue(diff);
                     }),
             handler)
         .then()
