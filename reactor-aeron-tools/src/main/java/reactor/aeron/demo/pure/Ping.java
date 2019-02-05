@@ -142,9 +142,9 @@ public class Ping {
           POLLING_IDLE_STRATEGY.idle();
         }
       } while (image.position() < offeredPosition);
-
-      Mono.delay(Duration.ofMillis(100)).doOnSubscribe(s -> reporter.dispose()).then().subscribe();
     }
+
+    Mono.delay(Duration.ofMillis(100)).doOnSubscribe(s -> reporter.dispose()).then().subscribe();
   }
 
   private static void pongHandler(
