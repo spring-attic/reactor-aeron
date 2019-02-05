@@ -1,6 +1,6 @@
 package reactor.aeron.demo;
 
-import io.aeron.driver.ThreadingMode;
+import io.aeron.driver.Configuration;
 import java.time.Duration;
 import org.HdrHistogram.Recorder;
 import org.agrona.DirectBuffer;
@@ -10,11 +10,10 @@ import reactor.aeron.AeronClient;
 import reactor.aeron.AeronConnection;
 import reactor.aeron.AeronResources;
 import reactor.aeron.DirectBufferHandler;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 
 public final class AeronPingClient {
-
-  private static final Duration REPORT_INTERVAL = Duration.ofSeconds(1);
 
   /**
    * Main runner.
@@ -26,32 +25,84 @@ public final class AeronPingClient {
     AeronResources resources =
         new AeronResources()
             .useTmpDir()
-            .pollFragmentLimit(4)
+            .pollFragmentLimit(Configurations.FRAGMENT_COUNT_LIMIT)
             .singleWorker()
-            // .workerIdleStrategySupplier(YieldingIdleStrategy::new)
-            .media(ctx -> ctx.threadingMode(ThreadingMode.SHARED))
+            .workerIdleStrategySupplier(Configurations::idleStrategy)
             .start()
             .block();
 
     AeronConnection connection =
-        AeronClient.create(resources).options("localhost", 13000, 13001).connect().block();
+        AeronClient.create(resources)
+            .options(
+                Configurations.MDC_ADDRESS,
+                Configurations.MDC_PORT,
+                Configurations.MDC_CONTROL_PORT)
+            .connect()
+            .block();
+
+    System.out.println(
+        "address: "
+            + Configurations.MDC_ADDRESS
+            + ", port: "
+            + Configurations.MDC_PORT
+            + ", controlPort: "
+            + Configurations.MDC_CONTROL_PORT);
+    System.out.println("MediaDriver THREADING_MODE: " + Configuration.THREADING_MODE_DEFAULT);
+    System.out.println("Message length of " + Configurations.MESSAGE_LENGTH + " bytes");
+    System.out.println("pollFragmentLimit of " + Configurations.FRAGMENT_COUNT_LIMIT);
+    System.out.println(
+        "Using worker idle strategy "
+            + Configurations.idleStrategy().getClass()
+            + "("
+            + Configurations.IDLE_STRATEGY
+            + ")");
+    System.out.println("Request " + Configurations.REQUESTED);
 
     // start reporter
     Recorder histogram = new Recorder(3600000000000L, 3);
-    Flux.interval(REPORT_INTERVAL)
-        .doOnNext(
-            i -> {
-              System.out.println("---- PING/PONG HISTO ----");
-              histogram
-                  .getIntervalHistogram()
-                  .outputPercentileDistribution(System.out, 5, 1000.0, false);
-              System.out.println("---- PING/PONG HISTO ----");
-            })
-        .subscribe();
+
+    System.out.println(
+        "Warming up... "
+            + Configurations.WARMUP_NUMBER_OF_ITERATIONS
+            + " iterations of "
+            + Configurations.WARMUP_NUMBER_OF_MESSAGES
+            + " messages");
+
+    for (int i = 0; i < Configurations.WARMUP_NUMBER_OF_ITERATIONS; i++) {
+      roundTripMessages(connection, histogram, Configurations.WARMUP_NUMBER_OF_MESSAGES);
+    }
+
+    Disposable histrogramDisposable =
+        Flux.interval(Duration.ofSeconds(Configurations.REPORT_INTERVAL))
+            .doOnNext(
+                i -> {
+                  System.out.println("---- PING/PONG HISTO ----");
+                  histogram
+                      .getIntervalHistogram()
+                      .outputPercentileDistribution(System.out, 5, 1000.0, false);
+                  System.out.println("---- PING/PONG HISTO ----");
+                })
+            .subscribe();
+
+    System.out.println("Pinging " + Configurations.NUMBER_OF_MESSAGES + " messages");
+    roundTripMessages(connection, histogram, Configurations.NUMBER_OF_MESSAGES);
+    System.out.println("Histogram of RTT latencies in microseconds.");
+
+    histrogramDisposable.dispose();
+
+    connection.dispose();
+
+    connection.onDispose(resources).onDispose().block();
+  }
+
+  private static void roundTripMessages(
+      AeronConnection connection, Recorder histogram, long count) {
+
+    histogram.reset();
 
     NanoTimeGeneratorHandler handler = new NanoTimeGeneratorHandler();
 
-    connection.outbound().send(Flux.range(0, 8), handler).then().subscribe();
+    connection.outbound().send(Flux.range(0, Configurations.REQUESTED), handler).then().subscribe();
 
     connection
         .outbound()
@@ -59,6 +110,7 @@ public final class AeronPingClient {
             connection
                 .inbound()
                 .receive()
+                .take(count)
                 .doOnNext(
                     buffer -> {
                       long start = buffer.getLong(0);
@@ -67,15 +119,13 @@ public final class AeronPingClient {
                     }),
             handler)
         .then()
-        .subscribe();
-
-    connection.onDispose(resources).onDispose().block();
+        .block();
   }
 
   private static class NanoTimeGeneratorHandler implements DirectBufferHandler<Object> {
     @Override
     public int estimateLength(Object ignore) {
-      return Long.BYTES;
+      return Configurations.MESSAGE_LENGTH;
     }
 
     @Override

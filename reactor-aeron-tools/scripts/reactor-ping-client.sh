@@ -12,5 +12,6 @@ ${JAVA_HOME}/bin/java \
     -Dagrona.disable.bounds.checks=true \
     -Dreactor.aeron.sample.messages=1000000 \
     -Dreactor.aeron.sample.messageLength=32 \
+    -Dreactor.aeron.sample.frameCountLimit=4 \
     -Dreactor.aeron.sample.request=8 \
     ${JVM_OPTS} reactor.aeron.demo.AeronPingClient

@@ -11,6 +11,7 @@ import org.agrona.CloseHelper;
 import org.agrona.DirectBuffer;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.SigInt;
+import reactor.aeron.demo.Configurations;
 
 /**
  * Pong component of Ping-Pong.

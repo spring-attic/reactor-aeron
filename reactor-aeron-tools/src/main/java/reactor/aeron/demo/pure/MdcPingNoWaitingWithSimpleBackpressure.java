@@ -21,6 +21,7 @@ import org.agrona.DirectBuffer;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.agrona.console.ContinueBarrier;
+import reactor.aeron.demo.Configurations;
 
 /**
  * Ping component of Ping-Pong latency test recorded to a histogram to capture full distribution..

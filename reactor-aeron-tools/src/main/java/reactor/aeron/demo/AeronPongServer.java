@@ -1,6 +1,6 @@
 package reactor.aeron.demo;
 
-import io.aeron.driver.ThreadingMode;
+import io.aeron.driver.Configuration;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronServer;
 
@@ -16,15 +16,31 @@ public final class AeronPongServer {
     AeronResources resources =
         new AeronResources()
             .useTmpDir()
-            .pollFragmentLimit(4)
+            .pollFragmentLimit(Configurations.FRAGMENT_COUNT_LIMIT)
             .singleWorker()
-            // .workerIdleStrategySupplier(YieldingIdleStrategy::new)
-            .media(ctx -> ctx.threadingMode(ThreadingMode.SHARED))
+            .workerIdleStrategySupplier(Configurations::idleStrategy)
             .start()
             .block();
 
+    System.out.println(
+        "address: "
+            + Configurations.MDC_ADDRESS
+            + ", port: "
+            + Configurations.MDC_PORT
+            + ", controlPort: "
+            + Configurations.MDC_CONTROL_PORT);
+    System.out.println("MediaDriver THREADING_MODE: " + Configuration.THREADING_MODE_DEFAULT);
+    System.out.println("pollFragmentLimit of " + Configurations.FRAGMENT_COUNT_LIMIT);
+    System.out.println(
+        "Using worker idle strategy "
+            + Configurations.idleStrategy().getClass()
+            + "("
+            + Configurations.IDLE_STRATEGY
+            + ")");
+
     AeronServer.create(resources)
-        .options("localhost", 13000, 13001)
+        .options(
+            Configurations.MDC_ADDRESS, Configurations.MDC_PORT, Configurations.MDC_CONTROL_PORT)
         .handle(
             connection ->
                 connection
