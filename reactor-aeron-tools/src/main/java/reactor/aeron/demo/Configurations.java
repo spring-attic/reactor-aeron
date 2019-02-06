@@ -1,4 +1,4 @@
-package reactor.aeron.demo.pure;
+package reactor.aeron.demo;
 
 import io.aeron.Image;
 import io.aeron.Subscription;
@@ -34,6 +34,7 @@ public interface Configurations {
   int MDC_SESSION_ID = Integer.getInteger("reactor.aeron.sample.mdc.session.id", 1001);
   int REQUESTED = Integer.getInteger("reactor.aeron.sample.request", 8);
   String IDLE_STRATEGY = System.getProperty("reactor.aeron.sample.idle.strategy", "busyspin");
+  long REPORT_INTERVAL = Long.getLong("reactor.aeron.sample.report.interval", 1);
 
   /**
    * Returns idle strategy.

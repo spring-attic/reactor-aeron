@@ -10,9 +10,9 @@ ${JAVA_HOME}/bin/java \
     -XX:GuaranteedSafepointInterval=300000 \
     -Daeron.threading.mode=SHARED \
     -Dagrona.disable.bounds.checks=true \
-    -Dreactor.aeron.sample.embeddedMediaDriver=true \
-    -Dreactor.aeron.sample.exclusive.publications=true \
     -Dreactor.aeron.sample.messages=100000000 \
     -Dreactor.aeron.sample.messageLength=32 \
     -Dreactor.aeron.sample.idle.strategy=yielding \
-    ${JVM_OPTS} reactor.aeron.demo.pure.MdcPing
+    -Dreactor.aeron.sample.frameCountLimit=4 \
+    -Dreactor.aeron.sample.request=8 \
+    ${JVM_OPTS} reactor.aeron.demo.AeronPingClient

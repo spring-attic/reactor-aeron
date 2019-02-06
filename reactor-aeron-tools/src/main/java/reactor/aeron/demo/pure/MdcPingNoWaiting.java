@@ -11,9 +11,10 @@ import io.aeron.driver.Configuration;
 import io.aeron.driver.MediaDriver;
 import io.aeron.logbuffer.FragmentHandler;
 import io.aeron.logbuffer.Header;
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import org.HdrHistogram.Histogram;
+import org.HdrHistogram.Recorder;
 import org.agrona.BitUtil;
 import org.agrona.BufferUtil;
 import org.agrona.CloseHelper;
@@ -21,6 +22,10 @@ import org.agrona.DirectBuffer;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.agrona.console.ContinueBarrier;
+import reactor.aeron.demo.Configurations;
+import reactor.core.Disposable;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 /**
  * Ping component of Ping-Pong latency test recorded to a histogram to capture full distribution..
@@ -60,7 +65,7 @@ public class MdcPingNoWaiting {
 
   private static final UnsafeBuffer OFFER_BUFFER =
       new UnsafeBuffer(BufferUtil.allocateDirectAligned(MESSAGE_LENGTH, BitUtil.CACHE_LINE_LENGTH));
-  private static final Histogram HISTOGRAM = new Histogram(TimeUnit.SECONDS.toNanos(10), 3);
+  private static final Recorder HISTOGRAM = new Recorder(TimeUnit.SECONDS.toNanos(10), 3);
   private static final CountDownLatch LATCH = new CountDownLatch(1);
   private static final IdleStrategy POLLING_IDLE_STRATEGY = Configurations.idleStrategy();
 
@@ -108,20 +113,17 @@ public class MdcPingNoWaiting {
               + " messages");
 
       for (int i = 0; i < WARMUP_NUMBER_OF_ITERATIONS; i++) {
-        roundTripMessages(fragmentHandler, publication, subscription, WARMUP_NUMBER_OF_MESSAGES);
+        roundTripMessages(
+            fragmentHandler, publication, subscription, WARMUP_NUMBER_OF_MESSAGES, false);
       }
 
       Thread.sleep(100);
       final ContinueBarrier barrier = new ContinueBarrier("Execute again?");
 
       do {
-        HISTOGRAM.reset();
         System.out.println("Pinging " + NUMBER_OF_MESSAGES + " messages");
-
-        roundTripMessages(fragmentHandler, publication, subscription, NUMBER_OF_MESSAGES);
+        roundTripMessages(fragmentHandler, publication, subscription, NUMBER_OF_MESSAGES, false);
         System.out.println("Histogram of RTT latencies in microseconds.");
-
-        HISTOGRAM.outputPercentileDistribution(System.out, 1000.0);
       } while (barrier.await());
     }
 
@@ -132,10 +134,15 @@ public class MdcPingNoWaiting {
       final FragmentHandler fragmentHandler,
       final Publication publication,
       final Subscription subscription,
-      final long count) {
+      final long count,
+      final boolean warmup) {
     while (!subscription.isConnected()) {
       Thread.yield();
     }
+
+    HISTOGRAM.reset();
+
+    Disposable reporter = startReport(warmup);
 
     final Image image = subscription.imageAtIndex(0);
 
@@ -166,6 +173,8 @@ public class MdcPingNoWaiting {
       received += poll;
       POLLING_IDLE_STRATEGY.idle(poll);
     }
+
+    Mono.delay(Duration.ofMillis(100)).doOnSubscribe(s -> reporter.dispose()).then().subscribe();
   }
 
   private static void pongHandler(
@@ -185,5 +194,23 @@ public class MdcPingNoWaiting {
     if (STREAM_ID == subscription.streamId() && INBOUND_CHANNEL.equals(subscription.channel())) {
       LATCH.countDown();
     }
+  }
+
+  private static Disposable startReport(boolean warmup) {
+    if (warmup) {
+      return () -> {
+        // no-op
+      };
+    }
+    return Flux.interval(Duration.ofSeconds(Configurations.REPORT_INTERVAL))
+        .doOnNext(MdcPingNoWaiting::report)
+        .doFinally(MdcPingNoWaiting::report)
+        .subscribe();
+  }
+
+  private static void report(Object ignored) {
+    System.out.println("---- PING/PONG HISTO ----");
+    HISTOGRAM.getIntervalHistogram().outputPercentileDistribution(System.out, 5, 1000.0, false);
+    System.out.println("---- PING/PONG HISTO ----");
   }
 }

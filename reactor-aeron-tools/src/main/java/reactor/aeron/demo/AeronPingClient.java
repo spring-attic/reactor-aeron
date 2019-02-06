@@ -1,22 +1,26 @@
 package reactor.aeron.demo;
 
-import io.aeron.driver.ThreadingMode;
+import io.aeron.driver.Configuration;
 import java.time.Duration;
-import java.util.function.Supplier;
+import java.util.concurrent.TimeUnit;
 import org.HdrHistogram.Recorder;
+import org.agrona.BitUtil;
+import org.agrona.BufferUtil;
 import org.agrona.DirectBuffer;
-import org.agrona.ExpandableArrayBuffer;
-import org.agrona.concurrent.BackoffIdleStrategy;
-import org.agrona.concurrent.IdleStrategy;
+import org.agrona.MutableDirectBuffer;
+import org.agrona.concurrent.UnsafeBuffer;
+import org.agrona.console.ContinueBarrier;
 import reactor.aeron.AeronClient;
 import reactor.aeron.AeronConnection;
 import reactor.aeron.AeronResources;
+import reactor.aeron.DirectBufferHandler;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public final class AeronPingClient {
 
-  private static final Duration REPORT_INTERVAL = Duration.ofSeconds(1);
+  private static final Recorder HISTOGRAM = new Recorder(TimeUnit.SECONDS.toNanos(10), 3);
 
   /**
    * Main runner.
@@ -25,67 +29,123 @@ public final class AeronPingClient {
    */
   public static void main(String... args) {
 
-    Supplier<IdleStrategy> idleStrategySupplier = () -> new BackoffIdleStrategy(1, 1, 1, 100);
-
     AeronResources resources =
         new AeronResources()
             .useTmpDir()
-            .pollFragmentLimit(4)
+            .pollFragmentLimit(Configurations.FRAGMENT_COUNT_LIMIT)
             .singleWorker()
-            .media(
-                ctx ->
-                    ctx.threadingMode(ThreadingMode.DEDICATED)
-                        .conductorIdleStrategy(idleStrategySupplier.get())
-                        .receiverIdleStrategy(idleStrategySupplier.get())
-                        .senderIdleStrategy(idleStrategySupplier.get())
-                        .termBufferSparseFile(false))
+            .workerIdleStrategySupplier(Configurations::idleStrategy)
             .start()
             .block();
 
     AeronConnection connection =
-        AeronClient.create(resources).options("localhost", 13000, 13001).connect().block();
+        AeronClient.create(resources)
+            .options(
+                Configurations.MDC_ADDRESS,
+                Configurations.MDC_PORT,
+                Configurations.MDC_CONTROL_PORT)
+            .connect()
+            .block();
 
-    // start reporter
-    Recorder histogram = new Recorder(3600000000000L, 3);
-    Flux.interval(REPORT_INTERVAL)
-        .doOnNext(
-            i -> {
-              System.out.println("---- PING/PONG HISTO ----");
-              histogram
-                  .getIntervalHistogram()
-                  .outputPercentileDistribution(System.out, 5, 1000.0, false);
-              System.out.println("---- PING/PONG HISTO ----");
-            })
-        .subscribe();
+    System.out.println(
+        "address: "
+            + Configurations.MDC_ADDRESS
+            + ", port: "
+            + Configurations.MDC_PORT
+            + ", controlPort: "
+            + Configurations.MDC_CONTROL_PORT);
+    System.out.println("MediaDriver THREADING_MODE: " + Configuration.THREADING_MODE_DEFAULT);
+    System.out.println("Message length of " + Configurations.MESSAGE_LENGTH + " bytes");
+    System.out.println("pollFragmentLimit of " + Configurations.FRAGMENT_COUNT_LIMIT);
+    System.out.println(
+        "Using worker idle strategy "
+            + Configurations.idleStrategy().getClass()
+            + "("
+            + Configurations.IDLE_STRATEGY
+            + ")");
+    System.out.println("Request " + Configurations.REQUESTED);
 
-    // send current nano time as body
-    connection
-        .outbound()
-        .send(Mono.fromCallable(AeronPingClient::generatePayload).repeat(Integer.MAX_VALUE))
-        .then()
-        .doOnTerminate(connection::dispose)
-        .doOnError(Throwable::printStackTrace)
-        .subscribe();
+    ContinueBarrier barrier = new ContinueBarrier("Execute again?");
+    do {
+      System.out.println("Pinging " + Configurations.NUMBER_OF_MESSAGES + " messages");
+      roundTripMessages(connection, Configurations.NUMBER_OF_MESSAGES);
+      System.out.println("Histogram of RTT latencies in microseconds.");
+    } while (barrier.await());
 
-    // receive back sent start time and update the histogram
-    connection
-        .inbound()
-        .receive()
-        .doOnNext(
-            buffer -> {
-              long start = buffer.getLong(0);
-              long diff = System.nanoTime() - start;
-              histogram.recordValue(diff);
-            })
-        .doOnError(Throwable::printStackTrace)
-        .subscribe();
+    connection.dispose();
 
     connection.onDispose(resources).onDispose().block();
   }
 
-  private static DirectBuffer generatePayload() {
-    ExpandableArrayBuffer buffer = new ExpandableArrayBuffer(Long.BYTES);
-    buffer.putLong(0, System.nanoTime());
-    return buffer;
+  private static void roundTripMessages(AeronConnection connection, long count) {
+    HISTOGRAM.reset();
+
+    Disposable reporter = startReport();
+
+    NanoTimeGeneratorHandler handler = new NanoTimeGeneratorHandler();
+
+    connection.outbound().send(Flux.range(0, Configurations.REQUESTED), handler).then().subscribe();
+
+    connection
+        .outbound()
+        .send(
+            connection
+                .inbound()
+                .receive()
+                .take(count)
+                .doOnNext(
+                    buffer -> {
+                      long start = buffer.getLong(0);
+                      long diff = System.nanoTime() - start;
+                      HISTOGRAM.recordValue(diff);
+                    }),
+            handler)
+        .then(
+            Mono.defer(
+                () ->
+                    Mono.delay(Duration.ofMillis(100))
+                        .doOnSubscribe(s -> reporter.dispose())
+                        .then()))
+        .then()
+        .block();
+  }
+
+  private static Disposable startReport() {
+    return Flux.interval(Duration.ofSeconds(Configurations.REPORT_INTERVAL))
+        .doOnNext(AeronPingClient::report)
+        .doFinally(AeronPingClient::report)
+        .subscribe();
+  }
+
+  private static void report(Object ignored) {
+    System.out.println("---- PING/PONG HISTO ----");
+    HISTOGRAM.getIntervalHistogram().outputPercentileDistribution(System.out, 5, 1000.0, false);
+    System.out.println("---- PING/PONG HISTO ----");
+  }
+
+  private static class NanoTimeGeneratorHandler implements DirectBufferHandler<Object> {
+    private static final UnsafeBuffer OFFER_BUFFER =
+        new UnsafeBuffer(
+            BufferUtil.allocateDirectAligned(
+                Configurations.MESSAGE_LENGTH, BitUtil.CACHE_LINE_LENGTH));
+
+    @Override
+    public int estimateLength(Object ignore) {
+      return Configurations.MESSAGE_LENGTH;
+    }
+
+    @Override
+    public void write(MutableDirectBuffer dstBuffer, int index, Object ignore, int length) {
+      dstBuffer.putLong(index, System.nanoTime());
+    }
+
+    @Override
+    public DirectBuffer map(Object ignore, int length) {
+      OFFER_BUFFER.putLong(0, System.nanoTime());
+      return OFFER_BUFFER;
+    }
+
+    @Override
+    public void dispose(Object ignore) {}
   }
 }
