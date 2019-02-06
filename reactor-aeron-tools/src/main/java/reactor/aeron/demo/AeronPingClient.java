@@ -65,21 +65,10 @@ public final class AeronPingClient {
             + ")");
     System.out.println("Request " + Configurations.REQUESTED);
 
-    System.out.println(
-        "Warming up... "
-            + Configurations.WARMUP_NUMBER_OF_ITERATIONS
-            + " iterations of "
-            + Configurations.WARMUP_NUMBER_OF_MESSAGES
-            + " messages");
-
-    for (int i = 0; i < Configurations.WARMUP_NUMBER_OF_ITERATIONS; i++) {
-      roundTripMessages(connection, Configurations.WARMUP_NUMBER_OF_MESSAGES, true);
-    }
-
     ContinueBarrier barrier = new ContinueBarrier("Execute again?");
     do {
       System.out.println("Pinging " + Configurations.NUMBER_OF_MESSAGES + " messages");
-      roundTripMessages(connection, Configurations.NUMBER_OF_MESSAGES, false);
+      roundTripMessages(connection, Configurations.NUMBER_OF_MESSAGES);
       System.out.println("Histogram of RTT latencies in microseconds.");
     } while (barrier.await());
 
@@ -88,10 +77,10 @@ public final class AeronPingClient {
     connection.onDispose(resources).onDispose().block();
   }
 
-  private static void roundTripMessages(AeronConnection connection, long count, boolean warmup) {
+  private static void roundTripMessages(AeronConnection connection, long count) {
     HISTOGRAM.reset();
 
-    Disposable reporter = startReport(warmup);
+    Disposable reporter = startReport();
 
     NanoTimeGeneratorHandler handler = new NanoTimeGeneratorHandler();
 
@@ -121,12 +110,7 @@ public final class AeronPingClient {
         .block();
   }
 
-  private static Disposable startReport(boolean warmup) {
-    if (warmup) {
-      return () -> {
-        // no-op
-      };
-    }
+  private static Disposable startReport() {
     return Flux.interval(Duration.ofSeconds(Configurations.REPORT_INTERVAL))
         .doOnNext(AeronPingClient::report)
         .doFinally(AeronPingClient::report)
