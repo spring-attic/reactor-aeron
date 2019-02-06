@@ -4,6 +4,8 @@ import io.aeron.driver.Configuration;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import org.HdrHistogram.Recorder;
+import org.agrona.BitUtil;
+import org.agrona.BufferUtil;
 import org.agrona.DirectBuffer;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
@@ -138,6 +140,11 @@ public final class AeronPingClient {
   }
 
   private static class NanoTimeGeneratorHandler implements DirectBufferHandler<Object> {
+    private static final UnsafeBuffer OFFER_BUFFER =
+        new UnsafeBuffer(
+            BufferUtil.allocateDirectAligned(
+                Configurations.MESSAGE_LENGTH, BitUtil.CACHE_LINE_LENGTH));
+
     @Override
     public int estimateLength(Object ignore) {
       return Configurations.MESSAGE_LENGTH;
@@ -150,9 +157,8 @@ public final class AeronPingClient {
 
     @Override
     public DirectBuffer map(Object ignore, int length) {
-      UnsafeBuffer buffer = new UnsafeBuffer(new byte[length]);
-      buffer.putLong(0, System.nanoTime());
-      return buffer;
+      OFFER_BUFFER.putLong(0, System.nanoTime());
+      return OFFER_BUFFER;
     }
 
     @Override
