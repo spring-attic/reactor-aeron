@@ -8,4 +8,7 @@ ${JAVA_HOME}/bin/java \
     -cp ${TARGET_DIR}/${JAR_FILE}:${TARGET_DIR}/lib/* \
     -XX:+UnlockDiagnosticVMOptions \
     -XX:GuaranteedSafepointInterval=300000 \
-    ${JVM_OPTS} reactor.aeron.demo.tcp.rsocket.TcpRsocketPong
+    -Daeron.threading.mode=SHARED \
+    -Dagrona.disable.bounds.checks=true \
+    -Dreactor.aeron.sample.idle.strategy=yielding \
+    ${JVM_OPTS} reactor.aeron.demo.rsocket.RsocketAeronPong

@@ -12,4 +12,4 @@ ${JAVA_HOME}/bin/java \
     -Dreactor.aeron.sample.messageLength=64 \
     -Dreactor.aeron.sample.report.delay=2 \
     -Dreactor.aeron.sample.report.interval=2 \
-    ${JVM_OPTS} reactor.aeron.demo.tcp.rsocket.TcpRsocketPing
+    ${JVM_OPTS} reactor.aeron.demo.rsocket.RsocketTcpPing

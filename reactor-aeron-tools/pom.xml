@@ -4,6 +4,7 @@
 
   <properties>
     <rsocket.version>0.11.15</rsocket.version>
+    <rsocket-transport-aeron.version>0.1.11</rsocket-transport-aeron.version>
   </properties>
 
   <parent>
@@ -57,6 +58,22 @@
         <exclusion>
           <groupId>io.netty</groupId>
           <artifactId>netty-common</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>io.scalecube</groupId>
+      <artifactId>rsocket-transport-aeron</artifactId>
+      <version>${rsocket-transport-aeron.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>io.rsocket</groupId>
+          <artifactId>rsocket-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>io.scalecube</groupId>
+          <artifactId>reactor-aeron-core</artifactId>
         </exclusion>
       </exclusions>
     </dependency>

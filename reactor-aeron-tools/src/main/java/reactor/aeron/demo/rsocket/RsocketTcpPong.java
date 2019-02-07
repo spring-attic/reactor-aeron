@@ -1,4 +1,4 @@
-package reactor.aeron.demo.tcp.rsocket;
+package reactor.aeron.demo.rsocket;
 
 import io.rsocket.AbstractRSocket;
 import io.rsocket.Frame;
@@ -10,7 +10,7 @@ import reactor.core.publisher.Mono;
 import reactor.netty.resources.LoopResources;
 import reactor.netty.tcp.TcpServer;
 
-public final class TcpRsocketPong {
+public final class RsocketTcpPong {
 
   /**
    * Main runner.
