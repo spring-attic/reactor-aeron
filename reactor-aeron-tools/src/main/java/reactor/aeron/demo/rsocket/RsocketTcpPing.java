@@ -45,9 +45,7 @@ public final class RsocketTcpPing {
 
     Disposable report = startReport();
 
-    int count = 1_000_000_000;
-
-    Flux.range(1, count)
+    Flux.range(1, (int) Configurations.NUMBER_OF_MESSAGES)
         .flatMap(
             i -> {
               long start = System.nanoTime();
@@ -62,7 +60,8 @@ public final class RsocketTcpPing {
             },
             64)
         .doOnError(Throwable::printStackTrace)
-        .doOnTerminate(() -> System.out.println("Sent " + count + " messages."))
+        .doOnTerminate(
+            () -> System.out.println("Sent " + Configurations.NUMBER_OF_MESSAGES + " messages."))
         .doFinally(s -> report.dispose())
         .then()
         .block();

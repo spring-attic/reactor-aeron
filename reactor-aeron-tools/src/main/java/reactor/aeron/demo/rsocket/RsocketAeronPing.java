@@ -29,7 +29,7 @@ public final class RsocketAeronPing {
    * @param args program arguments.
    */
   public static void main(String... args) {
-    int count = 1_000_000_000;
+    printSettings();
 
     AeronResources resources =
         new AeronResources()
@@ -54,26 +54,9 @@ public final class RsocketAeronPing {
             .start()
             .block();
 
-    System.out.println(
-        "address: "
-            + Configurations.MDC_ADDRESS
-            + ", port: "
-            + Configurations.MDC_PORT
-            + ", controlPort: "
-            + Configurations.MDC_CONTROL_PORT);
-    System.out.println("MediaDriver THREADING_MODE: " + Configuration.THREADING_MODE_DEFAULT);
-    System.out.println("Message length of " + Configurations.MESSAGE_LENGTH + " bytes");
-    System.out.println("pollFragmentLimit of " + Configurations.FRAGMENT_COUNT_LIMIT);
-    System.out.println(
-        "Using worker idle strategy "
-            + Configurations.idleStrategy().getClass()
-            + "("
-            + Configurations.IDLE_STRATEGY
-            + ")");
-
     Disposable report = startReport();
 
-    Flux.range(1, count)
+    Flux.range(1, (int) Configurations.NUMBER_OF_MESSAGES)
         .flatMap(
             i -> {
               long start = System.nanoTime();
@@ -88,7 +71,8 @@ public final class RsocketAeronPing {
             },
             64)
         .doOnError(Throwable::printStackTrace)
-        .doOnTerminate(() -> System.out.println("Sent " + count + " messages."))
+        .doOnTerminate(
+            () -> System.out.println("Sent " + Configurations.NUMBER_OF_MESSAGES + " messages."))
         .doFinally(s -> report.dispose())
         .then()
         .doFinally(s -> resources.dispose())
@@ -109,5 +93,24 @@ public final class RsocketAeronPing {
     System.out.println("---- PING/PONG HISTO ----");
     HISTOGRAM.getIntervalHistogram().outputPercentileDistribution(System.out, 5, 1000.0, false);
     System.out.println("---- PING/PONG HISTO ----");
+  }
+
+  private static void printSettings() {
+    System.out.println(
+        "address: "
+            + Configurations.MDC_ADDRESS
+            + ", port: "
+            + Configurations.MDC_PORT
+            + ", controlPort: "
+            + Configurations.MDC_CONTROL_PORT);
+    System.out.println("MediaDriver THREADING_MODE: " + Configuration.THREADING_MODE_DEFAULT);
+    System.out.println("Message length of " + Configurations.MESSAGE_LENGTH + " bytes");
+    System.out.println("pollFragmentLimit of " + Configurations.FRAGMENT_COUNT_LIMIT);
+    System.out.println(
+        "Using worker idle strategy "
+            + Configurations.idleStrategy().getClass()
+            + "("
+            + Configurations.IDLE_STRATEGY
+            + ")");
   }
 }
