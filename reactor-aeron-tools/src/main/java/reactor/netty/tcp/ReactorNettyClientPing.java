@@ -98,19 +98,15 @@ public class ReactorNettyClientPing {
             connection
                 .inbound()
                 .receive()
-                // .retain()
+                .retain()
                 .take(count)
                 .doOnNext(
                     buffer -> {
                       long start = buffer.readLong();
-                      System.out.println(buffer.readBytes(Configurations.MESSAGE_LENGTH));
-                      //                      if (buffer.readableBytes() !=
-                      // Configurations.MESSAGE_LENGTH) {
-                      //                        throw new RuntimeException("Assertrion error!");
-                      //                      }
+                      buffer.readerIndex(Configurations.MESSAGE_LENGTH);
                       long diff = System.nanoTime() - start;
                       HISTOGRAM.recordValue(diff);
-                      // buffer.release();
+                      buffer.release();
                     })
                 .map(buffer -> 1))
         .then(
@@ -152,7 +148,7 @@ public class ReactorNettyClientPing {
           @Override
           protected void encode(ChannelHandlerContext ctx, Integer msg, ByteBuf out) {
             out.writeLong(System.nanoTime());
-            out.writeBytes(PAYLOAD);
+            out.writeBytes(PAYLOAD.slice());
           }
         });
   }
