@@ -1,23 +1,46 @@
 package reactor.netty.tcp;
 
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPipeline;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
 import java.net.InetSocketAddress;
+import reactor.aeron.demo.Configurations;
 import reactor.netty.NettyPipeline.SendOptions;
+import reactor.netty.channel.BootstrapHandlers;
 import reactor.netty.resources.LoopResources;
 
 public class ReactorNettyServerPong {
 
-  private static final InetSocketAddress ADDRESS = new InetSocketAddress(7071);
-
+  /**
+   * Main runner.
+   *
+   * @param args program arguments.
+   */
   public static void main(String[] args) {
-    LoopResources loopResources = LoopResources.create("server", 1, 4, true);
+    System.out.println(
+        "address: " + Configurations.MDC_ADDRESS + ", port: " + Configurations.MDC_PORT);
+
+    LoopResources loopResources = LoopResources.create("reactor-netty-pong");
 
     TcpServer.create()
         .runOn(loopResources)
         .option(ChannelOption.TCP_NODELAY, true)
         .option(ChannelOption.SO_KEEPALIVE, true)
         .option(ChannelOption.SO_REUSEADDR, true)
-        .addressSupplier(() -> ADDRESS)
+        .addressSupplier(
+            () ->
+                InetSocketAddress.createUnresolved(
+                    Configurations.MDC_ADDRESS, Configurations.MDC_PORT))
+        .bootstrap(
+            b ->
+                BootstrapHandlers.updateConfiguration(
+                    b,
+                    "channel",
+                    (connectionObserver, channel) -> {
+                      setupChannel(channel);
+                    }))
         .handle(
             (inbound, outbound) ->
                 outbound.options(SendOptions::flushOnEach).send(inbound.receive().retain()))
@@ -29,5 +52,16 @@ public class ReactorNettyServerPong {
         .onDispose(loopResources)
         .onDispose()
         .block();
+  }
+
+  private static void setupChannel(Channel channel) {
+    final int maxFrameLength = 1024 * 1024;
+    final int lengthFieldLength = 2;
+
+    ChannelPipeline pipeline = channel.pipeline();
+    pipeline.addLast(new LengthFieldPrepender(lengthFieldLength));
+    pipeline.addLast(
+        new LengthFieldBasedFrameDecoder(
+            maxFrameLength, 0, lengthFieldLength, 0, lengthFieldLength));
   }
 }
