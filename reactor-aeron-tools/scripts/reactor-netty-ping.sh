@@ -10,6 +10,6 @@ ${JAVA_HOME}/bin/java \
     -XX:GuaranteedSafepointInterval=300000 \
     -Dreactor.aeron.sample.messages=100000000 \
     -Dreactor.aeron.sample.messageLength=64 \
-    -Dreactor.aeron.sample.report.delay=2 \
-    -Dreactor.aeron.sample.report.interval=2 \
-    ${JVM_OPTS} reactor.netty.tcp.ReactorNettyClientPing
+    -Dreactor.aeron.sample.report.delay=5 \
+    -Dreactor.aeron.sample.report.interval=3 \
+    ${JVM_OPTS} reactor.aeron.demo.netty.ReactorNettyClientPing

@@ -8,4 +8,4 @@ ${JAVA_HOME}/bin/java \
     -cp ${TARGET_DIR}/${JAR_FILE}:${TARGET_DIR}/lib/* \
     -XX:+UnlockDiagnosticVMOptions \
     -XX:GuaranteedSafepointInterval=300000 \
-    ${JVM_OPTS} reactor.netty.tcp.ReactorNettyServerPong
+    ${JVM_OPTS} reactor.aeron.demo.netty.ReactorNettyServerPong

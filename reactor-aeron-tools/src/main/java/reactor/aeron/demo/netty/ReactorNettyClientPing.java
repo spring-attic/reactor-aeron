@@ -1,4 +1,4 @@
-package reactor.netty.tcp;
+package reactor.aeron.demo.netty;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -23,6 +23,7 @@ import reactor.netty.NettyPipeline.SendOptions;
 import reactor.netty.channel.BootstrapHandlers;
 import reactor.netty.resources.ConnectionProvider;
 import reactor.netty.resources.LoopResources;
+import reactor.netty.tcp.TcpClient;
 
 public class ReactorNettyClientPing {
 
