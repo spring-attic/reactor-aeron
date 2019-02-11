@@ -20,22 +20,22 @@ public class RateReporter implements Runnable, Disposable {
   private long lastTotalMessages;
   private long lastTimestamp;
 
-  public RateReporter(Duration reportInterval) {
-    this(reportInterval, RateReporter::printRate);
+  public RateReporter() {
+    this(RateReporter::printRate);
   }
 
   /**
    * Create rate reporter.
    *
-   * @param reportInterval reporter interval
    * @param reporter reporter function
    */
-  public RateReporter(Duration reportInterval, Reporter reporter) {
-    this.reportIntervalNs = reportInterval.toNanos();
+  public RateReporter(Reporter reporter) {
+    long reportDelayNs = Duration.ofSeconds(Configurations.WARMUP_REPORT_DELAY).toNanos();
+    this.reportIntervalNs = Duration.ofSeconds(Configurations.REPORT_INTERVAL).toNanos();
     this.reporter = reporter;
     disposable =
         Schedulers.single()
-            .schedulePeriodically(this, reportIntervalNs, reportIntervalNs, TimeUnit.NANOSECONDS);
+            .schedulePeriodically(this, reportDelayNs, reportIntervalNs, TimeUnit.NANOSECONDS);
   }
 
   @Override
