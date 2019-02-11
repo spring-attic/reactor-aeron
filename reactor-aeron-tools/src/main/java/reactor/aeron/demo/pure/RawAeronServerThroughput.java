@@ -1,4 +1,4 @@
-package reactor.aeron.demo.raw;
+package reactor.aeron.demo.pure;
 
 import io.aeron.Aeron;
 import io.aeron.Image;

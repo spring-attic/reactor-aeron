@@ -1,10 +1,17 @@
-package reactor.aeron.demo;
+package reactor.aeron.demo.rsocket;
 
 import io.aeron.driver.Configuration;
+import io.rsocket.AbstractRSocket;
+import io.rsocket.Frame;
+import io.rsocket.Payload;
+import io.rsocket.RSocketFactory;
+import io.rsocket.reactor.aeron.AeronServerTransport;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronServer;
+import reactor.aeron.demo.Configurations;
+import reactor.core.publisher.Mono;
 
-public final class AeronPongServer {
+public final class RsocketAeronPong {
 
   /**
    * Main runner.
@@ -23,19 +30,29 @@ public final class AeronPongServer {
             .start()
             .block();
 
-    AeronServer.create(resources)
-        .options(
-            Configurations.MDC_ADDRESS, Configurations.MDC_PORT, Configurations.MDC_CONTROL_PORT)
-        .handle(
-            connection ->
-                connection
-                    .outbound()
-                    .send(connection.inbound().receive())
-                    .then(connection.onDispose()))
-        .bind()
+    RSocketFactory.receive()
+        .frameDecoder(Frame::retain)
+        .acceptor(
+            (setupPayload, rsocket) ->
+                Mono.just(
+                    new AbstractRSocket() {
+                      @Override
+                      public Mono<Payload> requestResponse(Payload payload) {
+                        return Mono.just(payload.retain());
+                      }
+                    }))
+        .transport(
+            new AeronServerTransport(
+                AeronServer.create(resources)
+                    .options(
+                        Configurations.MDC_ADDRESS,
+                        Configurations.MDC_PORT,
+                        Configurations.MDC_CONTROL_PORT)))
+        .start()
         .block()
-        .onDispose(resources)
-        .onDispose()
+        .onClose()
+        .doFinally(s -> resources.dispose())
+        .then(resources.onDispose())
         .block();
   }
 

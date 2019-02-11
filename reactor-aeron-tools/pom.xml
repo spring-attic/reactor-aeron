@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
   <properties>
-    <reactor-netty.version>0.8.4.RELEASE</reactor-netty.version>
+    <rsocket.version>0.11.15</rsocket.version>
+    <rsocket-transport-aeron.version>0.1.12</rsocket-transport-aeron.version>
   </properties>
 
   <parent>
@@ -29,12 +28,6 @@
     </dependency>
 
     <dependency>
-      <groupId>io.projectreactor.netty</groupId>
-      <artifactId>reactor-netty</artifactId>
-      <version>${reactor-netty.version}</version>
-    </dependency>
-
-    <dependency>
       <groupId>org.apache.logging.log4j</groupId>
       <artifactId>log4j-slf4j-impl</artifactId>
     </dependency>
@@ -51,6 +44,51 @@
       <artifactId>netty-buffer</artifactId>
       <version>${netty.version}</version>
     </dependency>
+
+    <dependency>
+      <groupId>io.rsocket</groupId>
+      <artifactId>rsocket-core</artifactId>
+      <version>${rsocket.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.rsocket</groupId>
+      <artifactId>rsocket-transport-netty</artifactId>
+      <version>${rsocket.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>io.netty</groupId>
+          <artifactId>netty-common</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>io.scalecube</groupId>
+      <artifactId>rsocket-transport-aeron</artifactId>
+      <version>${rsocket-transport-aeron.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>io.rsocket</groupId>
+          <artifactId>rsocket-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>io.scalecube</groupId>
+          <artifactId>reactor-aeron-core</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <artifactId>maven-jar-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <artifactId>maven-dependency-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
 
 </project>
