@@ -1,17 +1,19 @@
 package reactor.aeron.demo;
 
-import io.aeron.driver.ThreadingMode;
-import java.nio.ByteBuffer;
-import java.util.function.Supplier;
-import org.agrona.DirectBuffer;
-import org.agrona.concurrent.BackoffIdleStrategy;
-import org.agrona.concurrent.IdleStrategy;
+import io.aeron.driver.Configuration;
+import org.agrona.BitUtil;
+import org.agrona.BufferUtil;
 import org.agrona.concurrent.UnsafeBuffer;
 import reactor.aeron.AeronClient;
 import reactor.aeron.AeronResources;
 import reactor.core.publisher.Flux;
 
 public class ClientThroughput {
+
+  private static final UnsafeBuffer OFFER_BUFFER =
+      new UnsafeBuffer(
+          BufferUtil.allocateDirectAligned(
+              Configurations.MESSAGE_LENGTH, BitUtil.CACHE_LINE_LENGTH));
 
   /**
    * Main runner.
@@ -20,31 +22,43 @@ public class ClientThroughput {
    */
   public static void main(String[] args) {
 
-    Supplier<IdleStrategy> idleStrategySupplier = () -> new BackoffIdleStrategy(1, 1, 1, 100);
+    System.out.println(
+        "address: "
+            + Configurations.MDC_ADDRESS
+            + ", port: "
+            + Configurations.MDC_PORT
+            + ", controlPort: "
+            + Configurations.MDC_CONTROL_PORT);
+    System.out.println("MediaDriver THREADING_MODE: " + Configuration.THREADING_MODE_DEFAULT);
+    System.out.println("Message length of " + Configurations.MESSAGE_LENGTH + " bytes");
+    System.out.println("pollFragmentLimit of " + Configurations.FRAGMENT_COUNT_LIMIT);
+    System.out.println(
+        "Using worker idle strategy "
+            + Configurations.idleStrategy().getClass()
+            + "("
+            + Configurations.IDLE_STRATEGY
+            + ")");
 
     AeronResources aeronResources =
         new AeronResources()
             .useTmpDir()
+            .pollFragmentLimit(Configurations.FRAGMENT_COUNT_LIMIT)
             .singleWorker()
-            .media(
-                ctx ->
-                    ctx.threadingMode(ThreadingMode.DEDICATED)
-                        .conductorIdleStrategy(idleStrategySupplier.get())
-                        .receiverIdleStrategy(idleStrategySupplier.get())
-                        .senderIdleStrategy(idleStrategySupplier.get())
-                        .termBufferSparseFile(false))
+            .workerIdleStrategySupplier(Configurations::idleStrategy)
             .start()
             .block();
 
-    DirectBuffer buffer = new UnsafeBuffer(ByteBuffer.allocate(1024));
-
     AeronClient.create(aeronResources)
-        .options("localhost", 13000, 13001)
+        .options(
+            Configurations.MDC_ADDRESS, Configurations.MDC_PORT, Configurations.MDC_CONTROL_PORT)
         .handle(
             connection ->
                 connection
                     .outbound()
-                    .send(Flux.range(0, Integer.MAX_VALUE).map(i -> buffer))
+                    .send(
+                        Flux.range(0, Byte.MAX_VALUE)
+                            .repeat(Integer.MAX_VALUE)
+                            .map(i -> OFFER_BUFFER))
                     .then(connection.onDispose()))
         .connect()
         .block()

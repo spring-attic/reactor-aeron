@@ -24,7 +24,7 @@ public class RawAeronServerThroughput {
 
   private static class Server extends RawAeronServer {
 
-    private final RateReporter reporter = new RateReporter(Duration.ofSeconds(1));
+    private final RateReporter reporter = new RateReporter();
 
     Server(Aeron aeron) throws Exception {
       super(aeron);

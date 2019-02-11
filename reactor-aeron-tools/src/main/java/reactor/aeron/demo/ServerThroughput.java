@@ -1,10 +1,6 @@
 package reactor.aeron.demo;
 
-import io.aeron.driver.ThreadingMode;
-import java.time.Duration;
-import java.util.function.Supplier;
-import org.agrona.concurrent.BackoffIdleStrategy;
-import org.agrona.concurrent.IdleStrategy;
+import io.aeron.driver.Configuration;
 import reactor.aeron.AeronResources;
 import reactor.aeron.AeronServer;
 
@@ -16,27 +12,22 @@ public class ServerThroughput {
    * @param args program arguments.
    */
   public static void main(String[] args) {
-
-    Supplier<IdleStrategy> idleStrategySupplier = () -> new BackoffIdleStrategy(1, 1, 1, 100);
+    printSettings();
 
     AeronResources aeronResources =
         new AeronResources()
             .useTmpDir()
+            .pollFragmentLimit(Configurations.FRAGMENT_COUNT_LIMIT)
             .singleWorker()
-            .media(
-                ctx ->
-                    ctx.threadingMode(ThreadingMode.DEDICATED)
-                        .conductorIdleStrategy(idleStrategySupplier.get())
-                        .receiverIdleStrategy(idleStrategySupplier.get())
-                        .senderIdleStrategy(idleStrategySupplier.get())
-                        .termBufferSparseFile(false))
+            .workerIdleStrategySupplier(Configurations::idleStrategy)
             .start()
             .block();
 
-    RateReporter reporter = new RateReporter(Duration.ofSeconds(1));
+    RateReporter reporter = new RateReporter();
 
     AeronServer.create(aeronResources)
-        .options("localhost", 13000, 13001)
+        .options(
+            Configurations.MDC_ADDRESS, Configurations.MDC_PORT, Configurations.MDC_CONTROL_PORT)
         .handle(
             connection ->
                 connection
@@ -54,5 +45,23 @@ public class ServerThroughput {
             })
         .then(aeronResources.onDispose())
         .block();
+  }
+
+  private static void printSettings() {
+    System.out.println(
+        "address: "
+            + Configurations.MDC_ADDRESS
+            + ", port: "
+            + Configurations.MDC_PORT
+            + ", controlPort: "
+            + Configurations.MDC_CONTROL_PORT);
+    System.out.println("MediaDriver THREADING_MODE: " + Configuration.THREADING_MODE_DEFAULT);
+    System.out.println("pollFragmentLimit of " + Configurations.FRAGMENT_COUNT_LIMIT);
+    System.out.println(
+        "Using worker idle strategy "
+            + Configurations.idleStrategy().getClass()
+            + "("
+            + Configurations.IDLE_STRATEGY
+            + ")");
   }
 }
