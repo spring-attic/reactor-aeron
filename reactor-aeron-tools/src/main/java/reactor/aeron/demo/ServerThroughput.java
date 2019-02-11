@@ -37,13 +37,9 @@ public class ServerThroughput {
                     .then(connection.onDispose()))
         .bind()
         .block()
+        .onDispose(reporter)
+        .onDispose(aeronResources)
         .onDispose()
-        .doFinally(
-            s -> {
-              reporter.dispose();
-              aeronResources.dispose();
-            })
-        .then(aeronResources.onDispose())
         .block();
   }
 
