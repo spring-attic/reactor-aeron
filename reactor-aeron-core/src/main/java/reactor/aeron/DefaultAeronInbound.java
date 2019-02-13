@@ -28,8 +28,8 @@ final class DefaultAeronInbound implements AeronInbound {
           AtomicReferenceFieldUpdater.newUpdater(
               DefaultAeronInbound.class, CoreSubscriber.class, "destinationSubscriber");
 
-  private static final CoreSubscriber<? super DirectBuffer> CANCELED_SUBSCRIBER =
-      new CanceledSubscriber();
+  private static final CoreSubscriber<? super DirectBuffer> CANCELLED_SUBSCRIBER =
+      new CancelledSubscriber();
 
   private final int fragmentLimit;
   private final Image image;
@@ -66,7 +66,7 @@ final class DefaultAeronInbound implements AeronInbound {
   }
 
   int poll() {
-    if (destinationSubscriber == CANCELED_SUBSCRIBER) {
+    if (destinationSubscriber == CANCELLED_SUBSCRIBER) {
       return 0;
     }
     if (fastpath) {
@@ -135,10 +135,13 @@ final class DefaultAeronInbound implements AeronInbound {
     @Override
     public void cancel() {
       CoreSubscriber destination =
-          DESTINATION_SUBSCRIBER.getAndSet(DefaultAeronInbound.this, CANCELED_SUBSCRIBER);
+          DESTINATION_SUBSCRIBER.getAndSet(DefaultAeronInbound.this, CANCELLED_SUBSCRIBER);
       if (destination != null) {
         destination.onComplete();
       }
+      LOGGER.debug(
+          "Destination subscriber on aeron inbound has been cancelled, session id {}"
+              + Integer.toHexString(image.sessionId()));
     }
 
     @Override
@@ -155,7 +158,7 @@ final class DefaultAeronInbound implements AeronInbound {
     }
   }
 
-  private static class CanceledSubscriber implements CoreSubscriber<DirectBuffer> {
+  private static class CancelledSubscriber implements CoreSubscriber<DirectBuffer> {
 
     @Override
     public void onSubscribe(Subscription s) {
@@ -164,7 +167,9 @@ final class DefaultAeronInbound implements AeronInbound {
 
     @Override
     public void onNext(DirectBuffer directBuffer) {
-      LOGGER.debug("was received buffer in the already canceled subscriber, {}", directBuffer);
+      LOGGER.warn(
+          "Received buffer(len={}) which will be dropped immediately due cancelled aeron inbound",
+          directBuffer.capacity());
     }
 
     @Override
