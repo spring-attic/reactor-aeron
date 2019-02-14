@@ -9,12 +9,16 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import org.agrona.DirectBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.reactivestreams.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.CoreSubscriber;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Operators;
 
 final class DefaultAeronInbound implements AeronInbound {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(DefaultAeronInbound.class);
 
   private static final AtomicLongFieldUpdater<DefaultAeronInbound> REQUESTED =
       AtomicLongFieldUpdater.newUpdater(DefaultAeronInbound.class, "requested");
@@ -23,6 +27,9 @@ final class DefaultAeronInbound implements AeronInbound {
       DESTINATION_SUBSCRIBER =
           AtomicReferenceFieldUpdater.newUpdater(
               DefaultAeronInbound.class, CoreSubscriber.class, "destinationSubscriber");
+
+  private static final CoreSubscriber<? super DirectBuffer> CANCELLED_SUBSCRIBER =
+      new CancelledSubscriber();
 
   private final int fragmentLimit;
   private final Image image;
@@ -59,6 +66,9 @@ final class DefaultAeronInbound implements AeronInbound {
   }
 
   int poll() {
+    if (destinationSubscriber == CANCELLED_SUBSCRIBER) {
+      return 0;
+    }
     if (fastpath) {
       return image.poll(fragmentHandler, fragmentLimit);
     }
@@ -124,13 +134,14 @@ final class DefaultAeronInbound implements AeronInbound {
 
     @Override
     public void cancel() {
-      REQUESTED.set(DefaultAeronInbound.this, 0);
-      // TODO think again whether re-subscribtion is allowed; or we have to should emit cancel
-      // signal upper to some conneciton shutdown hook
-      CoreSubscriber destination = DESTINATION_SUBSCRIBER.getAndSet(DefaultAeronInbound.this, null);
+      CoreSubscriber destination =
+          DESTINATION_SUBSCRIBER.getAndSet(DefaultAeronInbound.this, CANCELLED_SUBSCRIBER);
       if (destination != null) {
         destination.onComplete();
       }
+      LOGGER.debug(
+          "Destination subscriber on aeron inbound has been cancelled, session id {}"
+              + Integer.toHexString(image.sessionId()));
     }
 
     @Override
@@ -144,6 +155,31 @@ final class DefaultAeronInbound implements AeronInbound {
         // only subscriber is allowed on receive()
         Operators.error(destinationSubscriber, Exceptions.duplicateOnSubscribeException());
       }
+    }
+  }
+
+  private static class CancelledSubscriber implements CoreSubscriber<DirectBuffer> {
+
+    @Override
+    public void onSubscribe(Subscription s) {
+      // no-op
+    }
+
+    @Override
+    public void onNext(DirectBuffer directBuffer) {
+      LOGGER.warn(
+          "Received buffer(len={}) which will be dropped immediately due cancelled aeron inbound",
+          directBuffer.capacity());
+    }
+
+    @Override
+    public void onError(Throwable t) {
+      // no-op
+    }
+
+    @Override
+    public void onComplete() {
+      // no-op
     }
   }
 }
