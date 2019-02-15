@@ -6,6 +6,8 @@
     <netty.version>4.1.32.Final</netty.version>
     <rsocket.version>0.11.15</rsocket.version>
     <rsocket-transport-aeron.version>0.1.12</rsocket-transport-aeron.version>
+    <hdrhistogram.version>2.1.10</hdrhistogram.version>
+    <jmh.version>1.21</jmh.version>
   </properties>
 
   <parent>
@@ -26,6 +28,18 @@
     <dependency>
       <groupId>org.hdrhistogram</groupId>
       <artifactId>HdrHistogram</artifactId>
+      <version>${hdrhistogram.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.openjdk.jmh</groupId>
+      <artifactId>jmh-core</artifactId>
+      <version>${jmh.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.openjdk.jmh</groupId>
+      <artifactId>jmh-generator-annprocess</artifactId>
+      <version>${jmh.version}</version>
     </dependency>
 
     <dependency>
@@ -142,7 +156,6 @@
         </exclusion>
       </exclusions>
     </dependency>
-
   </dependencies>
 
   <build>
