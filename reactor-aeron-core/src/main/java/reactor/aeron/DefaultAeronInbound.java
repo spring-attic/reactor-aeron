@@ -140,8 +140,8 @@ final class DefaultAeronInbound implements AeronInbound {
         destination.onComplete();
       }
       LOGGER.debug(
-          "Destination subscriber on aeron inbound has been cancelled, session id {}"
-              + Integer.toHexString(image.sessionId()));
+          "Destination subscriber on aeron inbound has been cancelled, session id {}",
+          Integer.toHexString(image.sessionId()));
     }
 
     @Override
