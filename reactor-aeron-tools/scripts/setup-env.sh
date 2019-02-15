@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-declare -a addresses=("ip1" "ip2")
+declare -a addresses=("10.200.5.44")
 
-CERT_PATH=
-SRC_PATH=
-USER_NAME=
+CERT_PATH=/home/artemvysochyn/Documents/ec2_private_key
+SRC_PATH=/home/artemvysochyn/Workspace/scalecube-reactor-aeron
+USER_NAME=ubuntu
 
 cd $SRC_PATH
 
