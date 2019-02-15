@@ -8,8 +8,9 @@ ${JAVA_HOME}/bin/java \
     -cp ${TARGET_DIR}/${JAR_FILE}:${TARGET_DIR}/lib/* \
     -XX:+UnlockDiagnosticVMOptions \
     -XX:GuaranteedSafepointInterval=300000 \
-    -Dreactor.aeron.sample.messages=100000000 \
-    -Dreactor.aeron.sample.messageLength=64 \
-    -Dreactor.aeron.sample.report.delay=5 \
-    -Dreactor.aeron.sample.report.interval=3 \
-    ${JVM_OPTS} reactor.aeron.demo.netty.ReactorNettyClientPing
+    -Daeron.threading.mode=SHARED \
+    -Dagrona.disable.bounds.checks=true \
+    -Dreactor.aeron.sample.idle.strategy=yielding \
+    -Dreactor.aeron.sample.frameCountLimit=16384 \
+    -Daeron.mtu.length=16k \
+    ${JVM_OPTS} reactor.aeron.demo.AeronPongServer

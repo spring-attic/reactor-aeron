@@ -11,8 +11,9 @@ ${JAVA_HOME}/bin/java \
     -Daeron.threading.mode=SHARED \
     -Dagrona.disable.bounds.checks=true \
     -Dreactor.aeron.sample.messages=100000000 \
-    -Dreactor.aeron.sample.messageLength=32 \
     -Dreactor.aeron.sample.idle.strategy=yielding \
-    -Dreactor.aeron.sample.frameCountLimit=4 \
-    -Dreactor.aeron.sample.request=8 \
-    ${JVM_OPTS} reactor.aeron.demo.AeronPingClient
+    -Dreactor.aeron.sample.messageLength=16 \
+    -Dreactor.aeron.sample.request=128 \
+    -Dreactor.aeron.sample.frameCountLimit=16384 \
+    -Daeron.mtu.length=16k \
+    ${JVM_OPTS} reactor.aeron.demo.rsocket.RsocketAeronPing

@@ -9,7 +9,5 @@ ${JAVA_HOME}/bin/java \
     -XX:+UnlockDiagnosticVMOptions \
     -XX:GuaranteedSafepointInterval=300000 \
     -Dreactor.aeron.sample.messages=100000000 \
-    -Dreactor.aeron.sample.messageLength=1024 \
-    -Dreactor.aeron.sample.report.delay=5 \
-    -Dreactor.aeron.sample.report.interval=3 \
+    -Dreactor.aeron.sample.messageLength=2048 \
     ${JVM_OPTS} reactor.aeron.demo.netty.ReactorNettyClientTps

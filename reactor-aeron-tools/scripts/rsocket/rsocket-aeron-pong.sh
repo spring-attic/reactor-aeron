@@ -10,10 +10,7 @@ ${JAVA_HOME}/bin/java \
     -XX:GuaranteedSafepointInterval=300000 \
     -Daeron.threading.mode=SHARED \
     -Dagrona.disable.bounds.checks=true \
-    -Dreactor.aeron.sample.messages=100000000 \
-    -Dreactor.aeron.sample.messageLength=64 \
     -Dreactor.aeron.sample.idle.strategy=yielding \
-    -Dreactor.aeron.sample.frameCountLimit=4 \
-    -Dreactor.aeron.sample.report.delay=5 \
-    -Dreactor.aeron.sample.report.interval=30 \
-    ${JVM_OPTS} reactor.aeron.demo.rsocket.RsocketAeronPing
+    -Dreactor.aeron.sample.frameCountLimit=16384 \
+    -Daeron.mtu.length=16k \
+    ${JVM_OPTS} reactor.aeron.demo.rsocket.RsocketAeronPong

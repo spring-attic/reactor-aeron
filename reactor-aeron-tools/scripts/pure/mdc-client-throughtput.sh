@@ -8,14 +8,15 @@ ${JAVA_HOME}/bin/java \
     -cp ${TARGET_DIR}/${JAR_FILE}:${TARGET_DIR}/lib/* \
     -XX:BiasedLockingStartupDelay=0 \
     -Djava.net.preferIPv4Stack=true \
-    -Daeron.mtu.length=16k \
-    -Daeron.socket.so_sndbuf=2m \
-    -Daeron.socket.so_rcvbuf=2m \
-    -Daeron.rcv.initial.window.length=2m \
     -Daeron.term.buffer.sparse.file=false \
     -Daeron.threading.mode=SHARED \
     -Dagrona.disable.bounds.checks=true \
     -Dreactor.aeron.sample.embeddedMediaDriver=true \
+    -Dreactor.aeron.sample.exclusive.publications=true \
     -Dreactor.aeron.sample.idle.strategy=yielding \
-    -Dreactor.aeron.sample.frameCountLimit=256 \
-    ${JVM_OPTS} reactor.aeron.demo.pure.ServerThroughput
+    -Dreactor.aeron.sample.messageLength=2048 \
+    -Daeron.mtu.length=16k \
+    -Daeron.socket.so_sndbuf=2m \
+    -Daeron.socket.so_rcvbuf=2m \
+    -Daeron.rcv.initial.window.length=2m \
+    ${JVM_OPTS} reactor.aeron.demo.pure.ClientThroughput

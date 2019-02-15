@@ -8,13 +8,13 @@ ${JAVA_HOME}/bin/java \
     -cp ${TARGET_DIR}/${JAR_FILE}:${TARGET_DIR}/lib/* \
     -XX:BiasedLockingStartupDelay=0 \
     -Djava.net.preferIPv4Stack=true \
+    -Daeron.term.buffer.sparse.file=false \
+    -Daeron.threading.mode=SHARED \
+    -Dagrona.disable.bounds.checks=true \
+    -Dreactor.aeron.sample.idle.strategy=yielding \
+    -Dreactor.aeron.sample.messageLength=2048 \
     -Daeron.mtu.length=16k \
     -Daeron.socket.so_sndbuf=2m \
     -Daeron.socket.so_rcvbuf=2m \
     -Daeron.rcv.initial.window.length=2m \
-    -Daeron.term.buffer.sparse.file=false \
-    -Daeron.threading.mode=SHARED \
-    -Dagrona.disable.bounds.checks=true \
-    -Dreactor.aeron.sample.messageLength=1024 \
-    -Dreactor.aeron.sample.idle.strategy=yielding \
     ${JVM_OPTS} reactor.aeron.demo.ClientThroughput

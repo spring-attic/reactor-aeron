@@ -6,14 +6,16 @@ JAR_FILE=$(ls ${TARGET_DIR} |grep jar)
 
 ${JAVA_HOME}/bin/java \
     -cp ${TARGET_DIR}/${JAR_FILE}:${TARGET_DIR}/lib/* \
-    -XX:+UnlockDiagnosticVMOptions \
-    -XX:GuaranteedSafepointInterval=300000 \
+    -XX:BiasedLockingStartupDelay=0 \
+    -Djava.net.preferIPv4Stack=true \
+    -Daeron.term.buffer.sparse.file=false \
     -Daeron.threading.mode=SHARED \
     -Dagrona.disable.bounds.checks=true \
     -Dreactor.aeron.sample.embeddedMediaDriver=true \
-    -Dreactor.aeron.sample.exclusive.publications=true \
-    -Dreactor.aeron.sample.messages=100000000 \
-    -Dreactor.aeron.sample.messageLength=32 \
     -Dreactor.aeron.sample.idle.strategy=yielding \
-    -Dreactor.aeron.sample.request=8 \
-    ${JVM_OPTS} reactor.aeron.demo.pure.MdcPingNoWaitingWithSimpleBackpressure
+    -Dreactor.aeron.sample.frameCountLimit=16384 \
+    -Daeron.mtu.length=16k \
+    -Daeron.socket.so_sndbuf=2m \
+    -Daeron.socket.so_rcvbuf=2m \
+    -Daeron.rcv.initial.window.length=2m \
+    ${JVM_OPTS} reactor.aeron.demo.pure.ServerThroughput

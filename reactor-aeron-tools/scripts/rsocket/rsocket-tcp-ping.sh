@@ -9,7 +9,6 @@ ${JAVA_HOME}/bin/java \
     -XX:+UnlockDiagnosticVMOptions \
     -XX:GuaranteedSafepointInterval=300000 \
     -Dreactor.aeron.sample.messages=100000000 \
-    -Dreactor.aeron.sample.messageLength=64 \
-    -Dreactor.aeron.sample.report.delay=2 \
-    -Dreactor.aeron.sample.report.interval=2 \
+    -Dreactor.aeron.sample.messageLength=16 \
+    -Dreactor.aeron.sample.request=128 \
     ${JVM_OPTS} reactor.aeron.demo.rsocket.RsocketTcpPing
