@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-declare -a addresses=("10.200.5.44")
+declare -a addresses=("ip1" "ip2")
 
-CERT_PATH=/home/artemvysochyn/Documents/ec2_private_key
-SRC_PATH=/home/artemvysochyn/Workspace/scalecube-reactor-aeron
-USER_NAME=ubuntu
+CERT_PATH=
+SRC_PATH=
+USER_NAME=
 
 cd $SRC_PATH
 
@@ -17,7 +17,7 @@ do
     ssh -oStrictHostKeyChecking=no -i $CERT_PATH $USER_NAME@$addr 'sudo rm -rf /tmp/*'
     ssh -oStrictHostKeyChecking=no -i $CERT_PATH $USER_NAME@$addr 'mkdir -p /tmp/reactor-aeron/scripts/'
     ssh -oStrictHostKeyChecking=no -i $CERT_PATH $USER_NAME@$addr 'mkdir -p /tmp/reactor-aeron/target/lib'
-    scp -i $CERT_PATH $SRC_PATH/reactor-aeron-tools/target/*.jar $USER_NAME@$addr:/tmp/reactor-aeron/target/
-    scp -i $CERT_PATH $SRC_PATH/reactor-aeron-tools/target/lib/* $USER_NAME@$addr:/tmp/reactor-aeron/target/lib/
-    scp -i $CERT_PATH $SRC_PATH/reactor-aeron-tools/scripts/* $USER_NAME@$addr:/tmp/reactor-aeron/scripts/
+    scp -ir $CERT_PATH $SRC_PATH/reactor-aeron-tools/target/*.jar $USER_NAME@$addr:/tmp/reactor-aeron/target/
+    scp -ir $CERT_PATH $SRC_PATH/reactor-aeron-tools/target/lib/* $USER_NAME@$addr:/tmp/reactor-aeron/target/lib/
+    scp -ir $CERT_PATH $SRC_PATH/reactor-aeron-tools/scripts/* $USER_NAME@$addr:/tmp/reactor-aeron/scripts/
 done
