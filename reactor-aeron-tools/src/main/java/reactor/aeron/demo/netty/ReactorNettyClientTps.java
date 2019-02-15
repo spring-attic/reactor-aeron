@@ -10,7 +10,6 @@ import java.net.InetSocketAddress;
 import java.util.Random;
 import reactor.aeron.demo.Configurations;
 import reactor.core.publisher.Flux;
-import reactor.netty.NettyPipeline.SendOptions;
 import reactor.netty.channel.BootstrapHandlers;
 import reactor.netty.resources.ConnectionProvider;
 import reactor.netty.resources.LoopResources;
@@ -57,7 +56,6 @@ public class ReactorNettyClientTps {
         .handle(
             (inbound, outbound) ->
                 outbound
-                    .options(SendOptions::flushOnEach)
                     .send(
                         Flux.range(0, Byte.MAX_VALUE)
                             .repeat(Integer.MAX_VALUE)
