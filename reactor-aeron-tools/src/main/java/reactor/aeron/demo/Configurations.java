@@ -12,9 +12,6 @@ import org.agrona.concurrent.YieldingIdleStrategy;
 
 /** Configuration used for samples with defaults which can be overridden by system properties. */
 public interface Configurations {
-
-  int nThreads = Runtime.getRuntime().availableProcessors();
-
   int FRAGMENT_COUNT_LIMIT = Integer.getInteger("reactor.aeron.sample.frameCountLimit", 10);
   int MESSAGE_LENGTH = Integer.getInteger("reactor.aeron.sample.messageLength", 32);
   int WARMUP_NUMBER_OF_ITERATIONS = Integer.getInteger("reactor.aeron.sample.warmup.iterations", 5);
@@ -41,9 +38,8 @@ public interface Configurations {
   long WARMUP_REPORT_DELAY = Long.getLong("reactor.aeron.sample.report.delay", REPORT_INTERVAL);
   int CONCURRENCY = Integer.getInteger("reactor.aeron.demo.outbound.concurrency", 1);
   int PREFETCH = Integer.getInteger("reactor.aeron.demo.outbound.prefetch", 256);
-  int FLUX_RANGE = Integer.getInteger("reactor.aeron.demo.outbound.fluxRange", 128);
   int FLUX_REPEAT = Integer.getInteger("reactor.aeron.demo.outbound.fluxRepeat", 100_000_000);
-  int FLUX_THREADS = Integer.getInteger("reactor.aeron.demo.outbound.fluxThreads", nThreads);
+  int FLUX_THREADS = Integer.getInteger("reactor.aeron.demo.outbound.fluxThreads", 1);
 
   /**
    * Returns idle strategy.

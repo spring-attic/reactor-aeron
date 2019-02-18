@@ -46,12 +46,7 @@ public class OutboundModelBenchmarkRunner {
 
     ContinueBarrier barrier = new ContinueBarrier("Execute again?");
     do {
-      System.out.println(
-          "Writing flux range "
-              + Configurations.FLUX_RANGE
-              + ", repeating "
-              + Configurations.FLUX_REPEAT
-              + " times");
+      System.out.println("Writing flux " + Configurations.FLUX_REPEAT + " times");
       writeFluxWithFlatMap(sharedState);
       System.out.println("Histogram of fluxWriter latencies in microseconds.");
     } while (barrier.await());
@@ -117,7 +112,6 @@ public class OutboundModelBenchmarkRunner {
     final Queue<PublishTask> publishTasks;
     final int concurrency = Configurations.CONCURRENCY;
     final int prefetch = Configurations.PREFETCH;
-    final int fluxRange = Configurations.FLUX_RANGE;
     final int fluxRepeat = Configurations.FLUX_REPEAT;
 
     private PerThreadState(SharedState sharedState) {
@@ -126,9 +120,9 @@ public class OutboundModelBenchmarkRunner {
 
     @Override
     public void run() {
-      Flux.range(0, fluxRange)
+      Mono.fromCallable(System::nanoTime)
           .repeat(fluxRepeat)
-          .flatMap(i -> publish(System.nanoTime(), publishTasks), concurrency, prefetch)
+          .flatMap(time -> publish(time, publishTasks), concurrency, prefetch)
           .takeUntilOther(onPublicationDispose(onDispose))
           .then()
           .block();
