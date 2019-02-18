@@ -1,26 +1,23 @@
 package reactor.aeron.demo;
 
-import io.aeron.Publication;
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.List;
-import java.util.Queue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.HdrHistogram.Recorder;
-import org.agrona.DirectBuffer;
 import org.agrona.concurrent.IdleStrategy;
-import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
-import org.agrona.concurrent.UnsafeBuffer;
 import org.agrona.console.ContinueBarrier;
-import org.agrona.hints.ThreadHints;
-import reactor.aeron.DirectBufferHandler;
+import org.reactivestreams.Subscription;
 import reactor.core.Disposable;
+import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.MonoProcessor;
+import reactor.core.publisher.Operators;
+import reactor.core.publisher.SignalType;
 
 public class OutboundModelBenchmarkRunner {
 
@@ -84,16 +81,16 @@ public class OutboundModelBenchmarkRunner {
   }
 
   private static class SharedState {
-    static final int QUEUE_CAPACITY = 8192;
 
     final AtomicBoolean running = new AtomicBoolean(true);
-    final Queue<PublishTask> publishTasks = new ManyToOneConcurrentArrayQueue<>(QUEUE_CAPACITY);
     final IdleStrategy idleStrategy = Configurations.idleStrategy();
+
+    final CopyOnWriteArrayList<DataStreamSubscriber> subscribers = new CopyOnWriteArrayList<>();
 
     Thread workerThread;
 
     private void start() {
-      workerThread = new Thread(new SharedWorker(running, idleStrategy, publishTasks));
+      workerThread = new Thread(new SharedWorker(this));
       workerThread.setName("worker");
       workerThread.start();
       System.out.println("Started worker thread");
@@ -107,95 +104,98 @@ public class OutboundModelBenchmarkRunner {
 
   private static class PerThreadState implements Runnable {
 
-    final MonoProcessor<Object> onDispose = MonoProcessor.create();
-    final Queue<PublishTask> publishTasks;
-    final int concurrency = Configurations.CONCURRENCY;
-    final int prefetch = Configurations.PREFETCH;
     final int fluxRepeat = Configurations.FLUX_REPEAT;
+    final SharedState sharedState;
 
     private PerThreadState(SharedState sharedState) {
-      this.publishTasks = sharedState.publishTasks;
+      this.sharedState = sharedState;
     }
 
     @Override
     public void run() {
-      Mono.fromCallable(System::nanoTime)
-          .repeat(fluxRepeat)
-          .flatMap(time -> publish(time, publishTasks), concurrency, prefetch)
-          .takeUntilOther(onPublicationDispose(onDispose))
-          .then()
-          .block();
+      Flux<Long> dataStream = Mono.fromCallable(System::nanoTime).repeat(fluxRepeat);
+
+      DataStreamSubscriber dataStreamSubscriber = new DataStreamSubscriber();
+      dataStream.subscribe(dataStreamSubscriber);
+      sharedState.subscribers.add(dataStreamSubscriber);
+
+      Mono.never().block();
+    }
+  }
+
+  private static class DataStreamSubscriber extends BaseSubscriber<Long> {
+
+    private static final AtomicLongFieldUpdater<DataStreamSubscriber> REQUESTED =
+        AtomicLongFieldUpdater.newUpdater(DataStreamSubscriber.class, "requested");
+
+    volatile Object currentNext;
+    volatile long requested;
+
+    Object currentNext() {
+      return currentNext;
+    }
+
+    void request() {
+      if (requested < 1) {
+        currentNext = null;
+        Operators.addCap(REQUESTED, DataStreamSubscriber.this, 1);
+        upstream().request(1);
+      }
+    }
+
+    @Override
+    protected void hookOnSubscribe(Subscription subscription) {
+      // subscription.request(1);
+    }
+
+    @Override
+    protected void hookOnNext(Long next) {
+      currentNext = next;
+      Operators.produced(REQUESTED, this, 1);
+    }
+
+    @Override
+    protected void hookFinally(SignalType type) {
+      super.hookFinally(type);
+      // remove yourself from sharedState.subscribers
     }
   }
 
   private static class SharedWorker implements Runnable {
 
+    final SharedState sharedState;
     final AtomicBoolean running;
     final IdleStrategy idleStrategy;
-    final Queue<PublishTask> publishTasks;
 
-    private SharedWorker(
-        AtomicBoolean running, IdleStrategy idleStrategy, Queue<PublishTask> publishTasks) {
-      this.running = running;
-      this.idleStrategy = idleStrategy;
-      this.publishTasks = publishTasks;
+    private SharedWorker(SharedState sharedState) {
+      this.sharedState = sharedState;
+      this.running = sharedState.running;
+      this.idleStrategy = sharedState.idleStrategy;
     }
 
     @Override
     public void run() {
       while (true) {
-        PublishTask task = publishTasks.poll();
+        if (sharedState.subscribers.isEmpty()) {
+          idleStrategy.idle();
+          continue;
+        }
 
-        if (task == null && !running.get()) {
+        DataStreamSubscriber subscriber = sharedState.subscribers.get(0);
+        subscriber.request();
+        Object currentNext = subscriber.currentNext();
+
+        if (currentNext == null && !running.get()) {
           break;
         }
 
-        if (task == null) {
+        if (currentNext == null) {
           idleStrategy.idle();
         } else {
-          task.complete();
+          HISTOGRAM.recordValue(System.nanoTime() - (long) currentNext);
         }
       }
     }
-  }
-
-  @SuppressWarnings("unused")
-  private static class PublishTask {
-    static final UnsafeBuffer BUFFER = new UnsafeBuffer(ByteBuffer.allocateDirect(8));
-
-    private final Publication publication = null;
-    private final DirectBufferHandler bufferHandler = null;
-    private MonoProcessor<Void> promise;
-    private DirectBuffer buffer = BUFFER;
-    private long time;
-
-    private static PublishTask newInstance(MonoProcessor<Void> promise, long time) {
-      PublishTask task = new PublishTask();
-      task.time = time;
-      task.promise = promise;
-      return task;
-    }
-
-    private void complete() {
-      promise.onComplete();
-      HISTOGRAM.recordValue(System.nanoTime() - time);
-    }
-  }
-
-  private static Mono<Void> publish(long time, Queue<PublishTask> publishTasks) {
-    return Mono.defer(
-        () -> {
-          MonoProcessor<Void> promise = MonoProcessor.create();
-          while (!publishTasks.offer(PublishTask.newInstance(promise, time))) {
-            ThreadHints.onSpinWait();
-          }
-          return promise;
-        });
-  }
-
-  private static Mono<Void> onPublicationDispose(MonoProcessor<Object> onDispose) {
-    return onDispose.then(
-        Mono.defer(() -> Mono.error(new RuntimeException("onPublicationDispose"))));
   }
 
   private static void report(Object ignored) {
