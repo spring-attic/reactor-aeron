@@ -27,6 +27,11 @@ public class OutboundModelBenchmarkRunner {
 
   static final Recorder HISTOGRAM = new Recorder(TimeUnit.SECONDS.toNanos(10), 3);
 
+  /**
+   * Main runner.
+   *
+   * @param args program arguments.
+   */
   public static void main(String[] args) throws Exception {
     System.out.println(
         "Using worker idle strategy "
