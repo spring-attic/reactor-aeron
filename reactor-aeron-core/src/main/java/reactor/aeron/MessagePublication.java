@@ -11,7 +11,6 @@ import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.core.publisher.MonoSink;
 
 class MessagePublication implements OnDisposable {
 
@@ -55,17 +54,17 @@ class MessagePublication implements OnDisposable {
    * @return mono handle
    */
   <B> Mono<Void> publish(B buffer, DirectBufferHandler<? super B> bufferHandler) {
-    return Mono.create(
-        sink -> {
-          boolean result = false;
-          if (!isDisposed()) {
-            result =
-                publishTasks.offer(
-                    PublishTask.newInstance(publication, buffer, bufferHandler, sink));
+    return Mono.defer(
+        () -> {
+          if (isDisposed()) {
+            return Mono.error(AeronExceptions.failWithPublicationUnavailable());
           }
-          if (!result) {
-            sink.error(AeronExceptions.failWithPublicationUnavailable());
+          MonoProcessor<Void> promise = MonoProcessor.create();
+          if (!publishTasks.offer(
+              PublishTask.newInstance(publication, buffer, bufferHandler, promise))) {
+            return Mono.error(AeronExceptions.failWithPublicationUnavailable());
           }
+          return promise;
         });
   }
 
@@ -280,8 +279,7 @@ class MessagePublication implements OnDisposable {
     private Publication publication;
     private B buffer;
     private DirectBufferHandler<B> bufferHandler;
-    private MonoSink<Void> sink;
-    private volatile boolean isDisposed;
+    private MonoProcessor<Void> promise;
 
     private long start;
 
@@ -289,23 +287,20 @@ class MessagePublication implements OnDisposable {
         Publication publication,
         B buffer,
         DirectBufferHandler<B> bufferHandler,
-        MonoSink<Void> sink) {
+        MonoProcessor<Void> promise) {
 
       PublishTask<B> task = new PublishTask<>();
 
       task.publication = publication;
       task.buffer = buffer;
       task.bufferHandler = bufferHandler;
-      task.isDisposed = false;
       task.start = 0;
-      task.sink = sink;
-      task.sink.onDispose(task::onDispose);
-
+      task.promise = promise;
       return task;
     }
 
     private long publish() {
-      if (isDisposed) {
+      if (promise.isDisposed()) {
         return 1;
       }
 
@@ -340,23 +335,13 @@ class MessagePublication implements OnDisposable {
     }
 
     private void success() {
-      if (!isDisposed) {
-        sink.success();
-      }
+      promise.onComplete();
       bufferHandler.dispose(buffer);
     }
 
     private void error(Throwable ex) {
-      if (!isDisposed) {
-        sink.error(ex);
-      }
+      promise.onError(ex);
       bufferHandler.dispose(buffer);
-    }
-
-    private void onDispose() {
-      if (!isDisposed) {
-        isDisposed = true;
-      }
     }
   }
 }
