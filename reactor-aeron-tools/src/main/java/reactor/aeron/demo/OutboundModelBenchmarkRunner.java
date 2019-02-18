@@ -21,7 +21,6 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.core.publisher.MonoSink;
 
 public class OutboundModelBenchmarkRunner {
 
@@ -166,39 +165,31 @@ public class OutboundModelBenchmarkRunner {
 
     private final Publication publication = null;
     private final DirectBufferHandler bufferHandler = null;
-    private MonoSink<Void> sink;
+    private MonoProcessor<Void> promise;
     private DirectBuffer buffer = BUFFER;
-    private volatile boolean isDisposed;
     private long time;
 
-    private static PublishTask newInstance(MonoSink<Void> sink, long time) {
+    private static PublishTask newInstance(MonoProcessor<Void> promise, long time) {
       PublishTask task = new PublishTask();
-      task.sink = sink;
       task.time = time;
-      task.sink.onDispose(task::onDispose);
+      task.promise = promise;
       return task;
     }
 
     private void complete() {
-      if (!isDisposed) {
-        sink.success();
-      }
+      promise.onComplete();
       HISTOGRAM.recordValue(System.nanoTime() - time);
-    }
-
-    private void onDispose() {
-      if (!isDisposed) {
-        isDisposed = true;
-      }
     }
   }
 
   private static Mono<Void> publish(long time, Queue<PublishTask> publishTasks) {
-    return Mono.create(
-        sink -> {
-          while (!publishTasks.offer(PublishTask.newInstance(sink, time))) {
+    return Mono.defer(
+        () -> {
+          MonoProcessor<Void> promise = MonoProcessor.create();
+          while (!publishTasks.offer(PublishTask.newInstance(promise, time))) {
             ThreadHints.onSpinWait();
           }
+          return promise;
         });
   }
 

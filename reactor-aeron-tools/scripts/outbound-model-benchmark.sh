@@ -14,4 +14,4 @@ java \
     -Dreactor.aeron.demo.outbound.prefetch=1 \
     -Dreactor.aeron.demo.outbound.fluxRepeat=100_000_000 \
     -Dreactor.aeron.demo.outbound.fluxThreads=1 \
-    ${JVM_OPTS} reactor.aeron.demo.OutboundModelBenchmarkRunner
+    ${JVM_OPTS} reactor.aeron.demo.OutboundModelWithMonoProcessorBenchmarkRunner
