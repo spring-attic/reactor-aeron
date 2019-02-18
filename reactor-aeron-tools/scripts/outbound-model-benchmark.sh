@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 cd $(dirname $0)
-cd ../../
+cd ../
 
 JAR_FILE=$(ls target |grep jar)
 
@@ -12,7 +12,6 @@ java \
     -Dreactor.aeron.sample.idle.strategy=yielding \
     -Dreactor.aeron.demo.outbound.concurrency=1 \
     -Dreactor.aeron.demo.outbound.prefetch=1 \
-    -Dreactor.aeron.demo.outbound.fluxRange=128 \
     -Dreactor.aeron.demo.outbound.fluxRepeat=100_000_000 \
-    -Dreactor.aeron.demo.outbound.fluxThreads=4 \
+    -Dreactor.aeron.demo.outbound.fluxThreads=1 \
     ${JVM_OPTS} reactor.aeron.demo.OutboundModelBenchmarkRunner
