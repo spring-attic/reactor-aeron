@@ -3,32 +3,37 @@ package reactor.aeron;
 import io.aeron.Publication;
 import io.aeron.logbuffer.BufferClaim;
 import java.time.Duration;
-import java.util.Queue;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import org.agrona.MutableDirectBuffer;
-import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
+import org.agrona.collections.ArrayUtil;
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
+import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
+import reactor.core.publisher.SignalType;
 
 class MessagePublication implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(MessagePublication.class);
 
-  private static final int QUEUE_CAPACITY = 8192;
+  private static final AtomicReferenceFieldUpdater<MessagePublication, PublisherProcessor[]>
+      PUBLISHER_PROCESSORS =
+          AtomicReferenceFieldUpdater.newUpdater(
+              MessagePublication.class, PublisherProcessor[].class, "publisherProcessors");
 
   private final Publication publication;
   private final AeronEventLoop eventLoop;
   private final Duration connectTimeout;
   private final Duration backpressureTimeout;
   private final Duration adminActionTimeout;
-  private final int writeLimit;
-
-  private final Queue<PublishTask> publishTasks =
-      new ManyToOneConcurrentArrayQueue<>(QUEUE_CAPACITY);
 
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
+
+  private volatile PublisherProcessor[] publisherProcessors = new PublisherProcessor[0];
 
   /**
    * Constructor.
@@ -43,29 +48,63 @@ class MessagePublication implements OnDisposable {
     this.connectTimeout = options.connectTimeout();
     this.backpressureTimeout = options.backpressureTimeout();
     this.adminActionTimeout = options.adminActionTimeout();
-    this.writeLimit = options.resources().writeLimit();
+  }
+
+  private static class PublisherProcessor extends BaseSubscriber {
+
+    private final DirectBufferHandler<?> bufferHandler;
+    private final MessagePublication messagePublication;
+
+    PublisherProcessor(
+        DirectBufferHandler<?> bufferHandler, MessagePublication messagePublication) {
+      this.bufferHandler = bufferHandler;
+      this.messagePublication = messagePublication;
+
+      PublisherProcessor[] oldArray;
+      PublisherProcessor[] newArray;
+      do {
+        oldArray = messagePublication.publisherProcessors;
+        newArray = ArrayUtil.add(oldArray, this);
+      } while (!PUBLISHER_PROCESSORS.compareAndSet(messagePublication, oldArray, newArray));
+    }
+
+    @Override
+    protected void hookOnSubscribe(Subscription subscription) {
+      // no-op
+    }
+
+    @Override
+    protected void hookOnNext(Object value) {
+      // todo
+    }
+
+    @Override
+    protected void hookFinally(SignalType type) {
+      PublisherProcessor[] oldArray;
+      PublisherProcessor[] newArray;
+      do {
+        oldArray = messagePublication.publisherProcessors;
+        newArray = ArrayUtil.remove(oldArray, this);
+      } while (!PUBLISHER_PROCESSORS.compareAndSet(messagePublication, oldArray, newArray));
+    }
   }
 
   /**
-   * Enqueues content for future sending.
+   * Enqueues publisher for future sending.
    *
-   * @param buffer abstract buffer to send
+   * @param publisher abstract publisher to process messages from
    * @param bufferHandler abstract buffer handler
    * @return mono handle
    */
-  <B> Mono<Void> publish(B buffer, DirectBufferHandler<? super B> bufferHandler) {
-    return Mono.defer(
-        () -> {
-          if (isDisposed()) {
-            return Mono.error(AeronExceptions.failWithPublicationUnavailable());
-          }
-          MonoProcessor<Void> promise = MonoProcessor.create();
-          if (!publishTasks.offer(
-              PublishTask.newInstance(publication, buffer, bufferHandler, promise))) {
-            return Mono.error(AeronExceptions.failWithPublicationUnavailable());
-          }
-          return promise;
-        });
+  <B> Mono<Void> publish(Publisher<B> publisher, DirectBufferHandler<? super B> bufferHandler) {
+    return Mono.<Void>fromRunnable(
+            () -> publisher.subscribe(new PublisherProcessor(bufferHandler, this)))
+        .takeUntilOther(onPublicationDispose());
+  }
+
+  private Mono<Void> onPublicationDispose() {
+    return onDispose()
+        .then(Mono.defer(() -> Mono.error(AeronExceptions.failWithPublicationUnavailable())));
   }
 
   /**
@@ -75,23 +114,6 @@ class MessagePublication implements OnDisposable {
    *     was done
    */
   int proceed() {
-    int result = 0;
-    for (int i = 0, current; i < writeLimit; i++) {
-      current = proceed0();
-      if (current < 1) {
-        break;
-      }
-      result += current;
-    }
-    return result;
-  }
-
-  /**
-   * Proceed with processing of tasks.
-   *
-   * @return {@code 1} - some progress was done; {@code 0} - denotes no progress was done
-   */
-  private int proceed0() {
     Exception ex = null;
 
     PublishTask task = publishTasks.peek();
@@ -266,11 +288,6 @@ class MessagePublication implements OnDisposable {
     return "MessagePublication{pub=" + publication.channel() + "}";
   }
 
-  /**
-   * Publish task.
-   *
-   * <p>Resident of {@link #publishTasks} queue.
-   */
   private static class PublishTask<B> {
 
     private static final ThreadLocal<BufferClaim> bufferClaims =
