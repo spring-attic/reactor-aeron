@@ -294,13 +294,13 @@ final class AeronEventLoop implements OnDisposable {
         // Commands
         processCommands();
 
-        int i = processOutbound();
-        flightRecorder.countOutbound(i);
+        int o = processOutbound();
+        flightRecorder.countOutbound(o);
 
-        int j = processInbound();
-        flightRecorder.countInbound(j);
+        int i = processInbound();
+        flightRecorder.countInbound(i);
 
-        int workCount = i + j;
+        int workCount = o + i;
         if (workCount < 1) {
           flightRecorder.countIdle();
         } else {
