@@ -342,9 +342,9 @@ final class AeronEventLoop implements OnDisposable {
       //noinspection ForLoopReplaceableByForEach
       for (int i = 0, n = publications.size(); i < n; i++) {
         try {
-          result += publications.get(i).proceed();
+          result += publications.get(i).publish();
         } catch (Exception ex) {
-          logger.error("Unexpected exception occurred on publication.proceed(): ", ex);
+          logger.error("Unexpected exception occurred on publication.publish(): ", ex);
         }
       }
       return result;
