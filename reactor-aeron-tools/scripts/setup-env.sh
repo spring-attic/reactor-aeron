@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-declare -a addresses=("ip1" "ip2")
+declare -a addresses=("ip1", "ip2")
 
 CERT_PATH=
 SRC_PATH=
@@ -17,7 +17,7 @@ do
     ssh -oStrictHostKeyChecking=no -i $CERT_PATH $USER_NAME@$addr 'sudo rm -rf /tmp/*'
     ssh -oStrictHostKeyChecking=no -i $CERT_PATH $USER_NAME@$addr 'mkdir -p /tmp/reactor-aeron/scripts/'
     ssh -oStrictHostKeyChecking=no -i $CERT_PATH $USER_NAME@$addr 'mkdir -p /tmp/reactor-aeron/target/lib'
-    scp -i $CERT_PATH $SRC_PATH/reactor-aeron-tools/target/*.jar $USER_NAME@$addr:/tmp/reactor-aeron/target/
-    scp -i $CERT_PATH $SRC_PATH/reactor-aeron-tools/target/lib/* $USER_NAME@$addr:/tmp/reactor-aeron/target/lib/
-    scp -i $CERT_PATH $SRC_PATH/reactor-aeron-tools/scripts/* $USER_NAME@$addr:/tmp/reactor-aeron/scripts/
+    scp -r -i $CERT_PATH $SRC_PATH/reactor-aeron-tools/target/*.jar $USER_NAME@$addr:/tmp/reactor-aeron/target/
+    scp -r -i $CERT_PATH $SRC_PATH/reactor-aeron-tools/target/lib/* $USER_NAME@$addr:/tmp/reactor-aeron/target/lib/
+    scp -r -i $CERT_PATH $SRC_PATH/reactor-aeron-tools/scripts/* $USER_NAME@$addr:/tmp/reactor-aeron/scripts/
 done

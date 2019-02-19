@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 
-SCRIPTS_DIR=$(dirname $0)
-TARGET_DIR="${SCRIPTS_DIR%/*}"/target
-JAR_FILE=$(ls ${TARGET_DIR} |grep jar)
+cd $(dirname $0)
+cd ../../
 
-${JAVA_HOME}/bin/java \
-    -cp ${TARGET_DIR}/${JAR_FILE}:${TARGET_DIR}/lib/* \
+JAR_FILE=$(ls target |grep jar)
+
+java \
+    -cp target/${JAR_FILE}:target/lib/* \
     -XX:+UnlockDiagnosticVMOptions \
     -XX:GuaranteedSafepointInterval=300000 \
     -Daeron.threading.mode=SHARED \
     -Dagrona.disable.bounds.checks=true \
     -Dreactor.aeron.sample.idle.strategy=yielding \
+    -Dreactor.aeron.sample.frameCountLimit=16384 \
+    -Daeron.mtu.length=16k \
     ${JVM_OPTS} reactor.aeron.demo.rsocket.RsocketAeronPong

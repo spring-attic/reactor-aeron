@@ -26,7 +26,6 @@
     <reactor-core.version>3.2.2.RELEASE</reactor-core.version>
     <reactivestreams.version>1.0.2</reactivestreams.version>
 
-    <hdrhistogram.version>2.1.10</hdrhistogram.version>
     <slf4j.version>1.7.7</slf4j.version>
     <log4j.version>2.11.0</log4j.version>
     <disruptor.version>3.4.2</disruptor.version>
@@ -65,12 +64,6 @@
         <groupId>org.reactivestreams</groupId>
         <artifactId>reactive-streams</artifactId>
         <version>${reactivestreams.version}</version>
-      </dependency>
-
-      <dependency>
-        <groupId>org.hdrhistogram</groupId>
-        <artifactId>HdrHistogram</artifactId>
-        <version>${hdrhistogram.version}</version>
       </dependency>
 
       <!-- Loggers -->
