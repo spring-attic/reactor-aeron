@@ -88,7 +88,7 @@ final class DefaultAeronOutbound implements AeronOutbound {
 
     @Override
     public DirectBuffer map(DirectBuffer buffer, int length) {
-      return new UnsafeBuffer(buffer, 0, length);
+      return buffer;
     }
 
     @Override

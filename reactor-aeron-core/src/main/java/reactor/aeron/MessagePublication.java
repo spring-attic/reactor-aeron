@@ -50,8 +50,12 @@ class MessagePublication implements OnDisposable {
 
   private <B> Mono<Void> publish0(
       Publisher<B> publisher, DirectBufferHandler<? super B> bufferHandler) {
-    return Mono.fromRunnable(
-        () -> publisher.subscribe(new PublisherProcessor(bufferHandler, this)));
+    return Mono.defer(
+        () -> {
+          PublisherProcessor processor = new PublisherProcessor(bufferHandler, this);
+          publisher.subscribe(processor);
+          return processor.onDispose();
+        });
   }
 
   private Mono<Void> onPublicationDispose() {
@@ -262,13 +266,15 @@ class MessagePublication implements OnDisposable {
     return "MessagePublication{pub=" + publication.channel() + "}";
   }
 
-  private static class PublisherProcessor extends BaseSubscriber {
+  private static class PublisherProcessor extends BaseSubscriber implements OnDisposable {
 
     private final DirectBufferHandler bufferHandler;
     private final MessagePublication parent;
 
     private long start;
     private boolean requested;
+
+    private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
     private volatile Object buffer;
 
@@ -279,13 +285,8 @@ class MessagePublication implements OnDisposable {
     }
 
     @Override
-    protected void hookOnSubscribe(Subscription subscription) {
-      // no-op
-    }
-
-    @Override
-    protected void hookOnError(Throwable throwable) {
-      // no-op
+    public Mono<Void> onDispose() {
+      return onDispose;
     }
 
     void requestIfNeeded() {
@@ -306,12 +307,25 @@ class MessagePublication implements OnDisposable {
     }
 
     @Override
+    protected void hookOnSubscribe(Subscription subscription) {
+      // no-op
+    }
+
+    @Override
     protected void hookOnNext(Object value) {
       buffer = value;
     }
 
     @Override
+    protected void hookOnError(Throwable throwable) {
+      onDispose.onError(throwable);
+    }
+
+    @Override
     protected void hookFinally(SignalType type) {
+      if (type != SignalType.ON_ERROR) {
+        onDispose.onComplete();
+      }
       reset();
       removeSelf();
     }
