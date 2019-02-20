@@ -12,7 +12,6 @@ import reactor.core.Exceptions;
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.core.publisher.SignalType;
 
 class MessagePublication implements OnDisposable {
 
@@ -72,18 +71,18 @@ class MessagePublication implements OnDisposable {
    *     was done
    */
   int publish() {
+
+    PublisherProcessor[] oldArray = this.publisherProcessors;
     int result = 0;
+
     //noinspection ForLoopReplaceableByForEach
-    for (int i = 0; i < publisherProcessors.length; i++) {
-      PublisherProcessor processor = publisherProcessors[i];
+    for (int i = 0; i < oldArray.length; i++) {
+      PublisherProcessor processor = oldArray[i];
 
-      if (processor.isDisposed()) {
-        continue;
-      }
+      processor.request();
 
-      processor.requestIfNeeded();
-
-      if (processor.buffer == null) {
+      Object buffer = processor.buffer;
+      if (buffer == null) {
         continue;
       }
 
@@ -91,14 +90,14 @@ class MessagePublication implements OnDisposable {
       long r = 0;
 
       try {
-        r = processor.publish();
+        r = processor.publish(buffer);
       } catch (Exception e) {
         ex = e;
       }
 
       if (r > 0) {
-        processor.reset();
         result++;
+        processor.reset();
         continue;
       }
 
@@ -279,21 +278,28 @@ class MessagePublication implements OnDisposable {
       return onDispose;
     }
 
-    void requestIfNeeded() {
-      if (!requested) {
-        Subscription upstream = upstream();
-        if (upstream != null) {
-          requested = true;
-          upstream.request(1);
-        }
+    void request() {
+      if (requested || isDisposed()) {
+        return;
+      }
+
+      Subscription upstream = upstream();
+      if (upstream != null) {
+        requested = true;
+        upstream.request(1);
       }
     }
 
     void reset() {
-      bufferHandler.dispose(buffer);
-      buffer = null;
-      requested = false;
+      resetBuffer();
+
       start = 0;
+      requested = false;
+
+      if (isDisposed()) {
+        removeSelf();
+        onDispose.onComplete();
+      }
     }
 
     @Override
@@ -307,20 +313,25 @@ class MessagePublication implements OnDisposable {
     }
 
     @Override
-    protected void hookOnError(Throwable throwable) {
-      //      onDispose.onError(throwable);
+    protected void hookOnComplete() {
+      // no-op
     }
 
     @Override
-    protected void hookFinally(SignalType type) {
-      //      if (type != SignalType.ON_ERROR) {
-      //        onDispose.onComplete();
-      //      }
-      //      reset();
-      //      removeSelf();
+    protected void hookOnError(Throwable throwable) {
+      resetBuffer();
+      removeSelf();
+      onDispose.onError(throwable);
     }
 
-    long publish() {
+    @Override
+    protected void hookOnCancel() {
+      resetBuffer();
+      removeSelf();
+      onDispose.onComplete();
+    }
+
+    long publish(Object buffer) {
       if (start == 0) {
         start = System.currentTimeMillis();
       }
@@ -330,6 +341,12 @@ class MessagePublication implements OnDisposable {
 
     boolean isTimeoutElapsed(Duration timeout) {
       return System.currentTimeMillis() - start > timeout.toMillis();
+    }
+
+    private void resetBuffer() {
+      Object oldBuffer = buffer;
+      buffer = null;
+      bufferHandler.dispose(oldBuffer);
     }
 
     private void addSelf() {
