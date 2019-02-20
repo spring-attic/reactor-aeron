@@ -48,21 +48,6 @@ class MessagePublication implements OnDisposable {
     this.adminActionTimeout = options.adminActionTimeout();
   }
 
-  private <B> Mono<Void> publish0(
-      Publisher<B> publisher, DirectBufferHandler<? super B> bufferHandler) {
-    return Mono.defer(
-        () -> {
-          PublisherProcessor processor = new PublisherProcessor(bufferHandler, this);
-          publisher.subscribe(processor);
-          return processor.onDispose();
-        });
-  }
-
-  private Mono<Void> onPublicationDispose() {
-    return onDispose()
-        .then(Mono.defer(() -> Mono.error(AeronExceptions.failWithPublicationUnavailable())));
-  }
-
   /**
    * Enqueues publisher for future sending.
    *
@@ -71,7 +56,12 @@ class MessagePublication implements OnDisposable {
    * @return mono handle
    */
   <B> Mono<Void> publish(Publisher<B> publisher, DirectBufferHandler<? super B> bufferHandler) {
-    return publish0(publisher, bufferHandler).takeUntilOther(onPublicationDispose());
+    return Mono.defer(
+        () -> {
+          PublisherProcessor processor = new PublisherProcessor(bufferHandler, this);
+          publisher.subscribe(processor);
+          return processor.onDispose();
+        });
   }
 
   /**
@@ -318,25 +308,23 @@ class MessagePublication implements OnDisposable {
 
     @Override
     protected void hookOnError(Throwable throwable) {
-      onDispose.onError(throwable);
+      //      onDispose.onError(throwable);
     }
 
     @Override
     protected void hookFinally(SignalType type) {
-      if (type != SignalType.ON_ERROR) {
-        onDispose.onComplete();
-      }
-      reset();
-      removeSelf();
+      //      if (type != SignalType.ON_ERROR) {
+      //        onDispose.onComplete();
+      //      }
+      //      reset();
+      //      removeSelf();
     }
 
     long publish() {
       if (start == 0) {
         start = System.currentTimeMillis();
       }
-
       int length = bufferHandler.estimateLength(buffer);
-
       return parent.publication.offer(bufferHandler.map(buffer, length));
     }
 
