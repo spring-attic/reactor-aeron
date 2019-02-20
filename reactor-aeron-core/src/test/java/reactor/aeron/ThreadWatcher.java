@@ -44,8 +44,7 @@ public class ThreadWatcher {
   private List<String> getLiveThreadNames(String[] excludedPrefixes) {
     List<String> afterThreadNames = takeThreadNamesSnapshot();
     afterThreadNames.removeAll(beforeThreadNames);
-    return afterThreadNames
-        .stream()
+    return afterThreadNames.stream()
         .filter(
             new Predicate<String>() {
               @Override
