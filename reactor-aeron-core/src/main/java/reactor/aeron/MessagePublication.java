@@ -2,6 +2,7 @@ package reactor.aeron;
 
 import io.aeron.Publication;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import org.agrona.collections.ArrayUtil;
 import org.reactivestreams.Publisher;
@@ -12,6 +13,7 @@ import reactor.core.Exceptions;
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
+import reactor.core.publisher.SignalType;
 
 class MessagePublication implements OnDisposable {
 
@@ -27,6 +29,8 @@ class MessagePublication implements OnDisposable {
   private final Duration connectTimeout;
   private final Duration backpressureTimeout;
   private final Duration adminActionTimeout;
+
+  private volatile Throwable lastError;
 
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
@@ -75,6 +79,8 @@ class MessagePublication implements OnDisposable {
     PublisherProcessor[] oldArray = this.publisherProcessors;
     int result = 0;
 
+    Exception ex = null;
+
     //noinspection ForLoopReplaceableByForEach
     for (int i = 0; i < oldArray.length; i++) {
       PublisherProcessor processor = oldArray[i];
@@ -86,7 +92,6 @@ class MessagePublication implements OnDisposable {
         continue;
       }
 
-      Exception ex = null;
       long r = 0;
 
       try {
@@ -104,15 +109,14 @@ class MessagePublication implements OnDisposable {
       // Handle closed publication
       if (r == Publication.CLOSED) {
         logger.warn("aeron.Publication is CLOSED: {}", this);
-        dispose();
-        return 0;
+        ex = AeronExceptions.failWithPublication("aeron.Publication is CLOSED");
       }
 
       // Handle max position exceeded
       if (r == Publication.MAX_POSITION_EXCEEDED) {
         logger.warn("aeron.Publication received MAX_POSITION_EXCEEDED: {}", this);
-        dispose();
-        return 0;
+        ex =
+            AeronExceptions.failWithPublication("aeron.Publication received MAX_POSITION_EXCEEDED");
       }
 
       // Handle failed connection
@@ -152,8 +156,13 @@ class MessagePublication implements OnDisposable {
       }
 
       if (ex != null) {
-        processor.onError(ex);
+        break;
       }
+    }
+
+    if (ex != null) {
+      lastError = ex;
+      dispose();
     }
 
     return result;
@@ -241,9 +250,14 @@ class MessagePublication implements OnDisposable {
   }
 
   private void disposeProcessors() {
-    for (PublisherProcessor processor : publisherProcessors) {
+    PublisherProcessor[] oldArray = this.publisherProcessors;
+    this.publisherProcessors = new PublisherProcessor[0];
+    for (PublisherProcessor processor : oldArray) {
       try {
-        processor.onError(AeronExceptions.failWithCancel("PublisherProcessor has been cancelled"));
+        processor.cancel();
+        processor.onParentError(
+            Optional.ofNullable(lastError)
+                .orElse(AeronExceptions.failWithCancel("PublisherProcessor has been cancelled")));
       } catch (Exception ex) {
         // no-op
       }
@@ -266,6 +280,7 @@ class MessagePublication implements OnDisposable {
     private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
     private volatile Object buffer;
+    private volatile Throwable error;
 
     PublisherProcessor(DirectBufferHandler bufferHandler, MessagePublication messagePublication) {
       this.bufferHandler = bufferHandler;
@@ -290,16 +305,26 @@ class MessagePublication implements OnDisposable {
       }
     }
 
+    void onParentError(Throwable throwable) {
+      resetBuffer();
+      onDispose.onError(throwable);
+    }
+
     void reset() {
       resetBuffer();
 
-      start = 0;
-      requested = false;
-
       if (isDisposed()) {
         removeSelf();
-        onDispose.onComplete();
+        if (error != null) {
+          onDispose.onError(error);
+        } else {
+          onDispose.onComplete();
+        }
+        return;
       }
+
+      start = 0;
+      requested = false;
     }
 
     @Override
@@ -313,22 +338,15 @@ class MessagePublication implements OnDisposable {
     }
 
     @Override
-    protected void hookOnComplete() {
-      // no-op
-    }
-
-    @Override
     protected void hookOnError(Throwable throwable) {
-      resetBuffer();
-      removeSelf();
-      onDispose.onError(throwable);
+      error = throwable;
     }
 
     @Override
-    protected void hookOnCancel() {
-      resetBuffer();
-      removeSelf();
-      onDispose.onComplete();
+    protected void hookFinally(SignalType type) {
+      if (buffer == null) {
+        reset();
+      }
     }
 
     long publish(Object buffer) {
