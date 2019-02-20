@@ -51,10 +51,7 @@ class MessagePublication implements OnDisposable {
   private <B> Mono<Void> publish0(
       Publisher<B> publisher, DirectBufferHandler<? super B> bufferHandler) {
     return Mono.fromRunnable(
-        () -> {
-          //noinspection unchecked
-          publisher.subscribe(new PublisherProcessor(bufferHandler, this));
-        });
+        () -> publisher.subscribe(new PublisherProcessor(bufferHandler, this)));
   }
 
   private Mono<Void> onPublicationDispose() {
@@ -81,53 +78,53 @@ class MessagePublication implements OnDisposable {
    *     was done
    */
   int publish() {
-    long result = 0;
+    int result = 0;
     //noinspection ForLoopReplaceableByForEach
     for (int i = 0; i < publisherProcessors.length; i++) {
-      PublisherProcessor pp = publisherProcessors[i];
+      PublisherProcessor processor = publisherProcessors[i];
 
-      if (pp.isDisposed()) {
-        result = 1;
+      if (processor.isDisposed()) {
         continue;
       }
 
-      pp.requestIfNeeded();
+      processor.requestIfNeeded();
 
-      if (pp.buffer == null) {
+      if (processor.buffer == null) {
         continue;
       }
 
       Exception ex = null;
+      long r = 0;
 
       try {
-        result = pp.publish();
+        r = processor.publish();
       } catch (Exception e) {
         ex = e;
       }
 
-      if (result > 0) {
-        pp.reset();
-        result = 1;
+      if (r > 0) {
+        processor.reset();
+        result++;
         continue;
       }
 
       // Handle closed publication
-      if (result == Publication.CLOSED) {
+      if (r == Publication.CLOSED) {
         logger.warn("aeron.Publication is CLOSED: {}", this);
         dispose();
         return 0;
       }
 
       // Handle max position exceeded
-      if (result == Publication.MAX_POSITION_EXCEEDED) {
+      if (r == Publication.MAX_POSITION_EXCEEDED) {
         logger.warn("aeron.Publication received MAX_POSITION_EXCEEDED: {}", this);
         dispose();
         return 0;
       }
 
       // Handle failed connection
-      if (result == Publication.NOT_CONNECTED) {
-        if (pp.isTimeoutElapsed(connectTimeout)) {
+      if (r == Publication.NOT_CONNECTED) {
+        if (processor.isTimeoutElapsed(connectTimeout)) {
           logger.warn(
               "aeron.Publication failed to resolve NOT_CONNECTED within {} ms, {}",
               connectTimeout.toMillis(),
@@ -138,8 +135,8 @@ class MessagePublication implements OnDisposable {
       }
 
       // Handle backpressure
-      if (result == Publication.BACK_PRESSURED) {
-        if (pp.isTimeoutElapsed(backpressureTimeout)) {
+      if (r == Publication.BACK_PRESSURED) {
+        if (processor.isTimeoutElapsed(backpressureTimeout)) {
           logger.warn(
               "aeron.Publication failed to resolve BACK_PRESSURED within {} ms, {}",
               backpressureTimeout.toMillis(),
@@ -151,8 +148,8 @@ class MessagePublication implements OnDisposable {
       }
 
       // Handle admin action
-      if (result == Publication.ADMIN_ACTION) {
-        if (pp.isTimeoutElapsed(adminActionTimeout)) {
+      if (r == Publication.ADMIN_ACTION) {
+        if (processor.isTimeoutElapsed(adminActionTimeout)) {
           logger.warn(
               "aeron.Publication failed to resolve ADMIN_ACTION within {} ms, {}",
               adminActionTimeout.toMillis(),
@@ -162,11 +159,11 @@ class MessagePublication implements OnDisposable {
       }
 
       if (ex != null) {
-        pp.onError(ex);
+        processor.onError(ex);
       }
     }
 
-    return 0;
+    return result;
   }
 
   void close() {
@@ -293,13 +290,15 @@ class MessagePublication implements OnDisposable {
 
     void requestIfNeeded() {
       if (!requested) {
-        requested = true;
-        upstream().request(1);
+        Subscription upstream = upstream();
+        if (upstream != null) {
+          requested = true;
+          upstream.request(1);
+        }
       }
     }
 
     void reset() {
-      //noinspection unchecked
       bufferHandler.dispose(buffer);
       buffer = null;
       requested = false;
@@ -322,10 +321,8 @@ class MessagePublication implements OnDisposable {
         start = System.currentTimeMillis();
       }
 
-      //noinspection unchecked
       int length = bufferHandler.estimateLength(buffer);
 
-      //noinspection unchecked
       return parent.publication.offer(bufferHandler.map(buffer, length));
     }
 
