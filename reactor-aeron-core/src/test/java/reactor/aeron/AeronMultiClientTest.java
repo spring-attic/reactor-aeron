@@ -32,8 +32,7 @@ class AeronMultiClientTest extends BaseAeronTest {
   @AfterEach
   void afterEach() {
     Mono.whenDelayError(
-            clientResources
-                .stream()
+            clientResources.stream()
                 .peek(AeronResources::dispose)
                 .map(AeronResources::onDispose)
                 .collect(Collectors.toList()))
