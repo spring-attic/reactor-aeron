@@ -334,6 +334,9 @@ class MessagePublication implements OnDisposable {
 
     @Override
     protected void hookOnNext(Object value) {
+      if (buffer != null) {
+        throw Exceptions.failWithOverflow();
+      }
       buffer = value;
     }
 
