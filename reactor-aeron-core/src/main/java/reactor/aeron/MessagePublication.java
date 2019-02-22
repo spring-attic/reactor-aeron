@@ -273,6 +273,7 @@ class MessagePublication implements OnDisposable {
 
     private final DirectBufferHandler bufferHandler;
     private final MessagePublication parent;
+    private final int selfIndex;
 
     private long start;
     private boolean requested;
@@ -285,7 +286,7 @@ class MessagePublication implements OnDisposable {
     PublisherProcessor(DirectBufferHandler bufferHandler, MessagePublication messagePublication) {
       this.bufferHandler = bufferHandler;
       this.parent = messagePublication;
-      addSelf();
+      this.selfIndex = addSelf();
     }
 
     @Override
@@ -374,13 +375,14 @@ class MessagePublication implements OnDisposable {
       }
     }
 
-    private void addSelf() {
+    private int addSelf() {
       PublisherProcessor[] oldArray;
       PublisherProcessor[] newArray;
       do {
         oldArray = parent.publisherProcessors;
         newArray = ArrayUtil.add(oldArray, this);
       } while (!PUBLISHER_PROCESSORS.compareAndSet(parent, oldArray, newArray));
+      return oldArray.length;
     }
 
     private void removeSelf() {
@@ -388,7 +390,7 @@ class MessagePublication implements OnDisposable {
       PublisherProcessor[] newArray;
       do {
         oldArray = parent.publisherProcessors;
-        newArray = ArrayUtil.remove(oldArray, this);
+        newArray = ArrayUtil.remove(oldArray, selfIndex);
       } while (!PUBLISHER_PROCESSORS.compareAndSet(parent, oldArray, newArray));
     }
   }
