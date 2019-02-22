@@ -335,7 +335,9 @@ class MessagePublication implements OnDisposable {
     @Override
     protected void hookOnNext(Object value) {
       if (buffer != null) {
-        throw Exceptions.failWithOverflow();
+        bufferHandler.dispose(value);
+        throw Exceptions.failWithOverflow(
+            "PublisherProcessor is overrun by more signals than expected");
       }
       buffer = value;
     }
