@@ -62,7 +62,6 @@ class MessagePublication implements OnDisposable {
     return Mono.defer(
         () -> {
           PublisherProcessor processor = new PublisherProcessor(bufferHandler, this);
-          //noinspection unchecked
           publisher.subscribe(processor);
           return processor.onDispose();
         });
@@ -354,9 +353,7 @@ class MessagePublication implements OnDisposable {
       if (start == 0) {
         start = System.currentTimeMillis();
       }
-      //noinspection unchecked
       int length = bufferHandler.estimateLength(buffer);
-      //noinspection unchecked
       return parent.publication.offer(bufferHandler.map(buffer, length));
     }
 
@@ -367,8 +364,7 @@ class MessagePublication implements OnDisposable {
     private void resetBuffer() {
       Object oldBuffer = buffer;
       buffer = null;
-      if (buffer != oldBuffer) {
-        //noinspection unchecked
+      if (oldBuffer != null) {
         bufferHandler.dispose(oldBuffer);
       }
     }
