@@ -3,6 +3,7 @@ package reactor.aeron;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import org.agrona.DirectBuffer;
+import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
@@ -10,7 +11,6 @@ import reactor.core.publisher.Mono;
 
 final class DefaultAeronOutbound implements AeronOutbound {
 
-  private final AeronWriteSequencer sequencer;
   private final MessagePublication publication;
 
   /**
@@ -20,18 +20,17 @@ final class DefaultAeronOutbound implements AeronOutbound {
    */
   DefaultAeronOutbound(MessagePublication publication) {
     this.publication = publication;
-    this.sequencer = new AeronWriteSequencer(publication);
   }
 
   @Override
   public <B> AeronOutbound send(
       Publisher<B> dataStream, DirectBufferHandler<? super B> bufferHandler) {
-    return then(sequencer.write(dataStream, bufferHandler));
+    return then(publication.publish(dataStream, bufferHandler));
   }
 
   @Override
   public AeronOutbound send(Publisher<DirectBuffer> dataStream) {
-    return then(sequencer.write(dataStream));
+    return send(dataStream, DirectBufferHandlerImpl.DEFAULT_INSTANCE);
   }
 
   @Override
@@ -66,5 +65,35 @@ final class DefaultAeronOutbound implements AeronOutbound {
 
   void dispose() {
     publication.dispose();
+  }
+
+  /**
+   * Default implementation of {@link DirectBufferHandler} with aeron buffer type {@link
+   * DirectBuffer}. Function {@link #dispose()} does nothing.
+   */
+  private static class DirectBufferHandlerImpl implements DirectBufferHandler<DirectBuffer> {
+
+    private static final DirectBufferHandlerImpl DEFAULT_INSTANCE = new DirectBufferHandlerImpl();
+
+    @Override
+    public int estimateLength(DirectBuffer buffer) {
+      return buffer.capacity();
+    }
+
+    @Override
+    public void write(
+        MutableDirectBuffer dstBuffer, int index, DirectBuffer srcBuffer, int length) {
+      dstBuffer.putBytes(index, srcBuffer, 0, length);
+    }
+
+    @Override
+    public DirectBuffer map(DirectBuffer buffer, int length) {
+      return buffer;
+    }
+
+    @Override
+    public void dispose(DirectBuffer buffer) {
+      // no-op
+    }
   }
 }

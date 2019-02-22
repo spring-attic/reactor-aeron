@@ -1,34 +1,40 @@
 package reactor.aeron;
 
 import io.aeron.Publication;
-import io.aeron.logbuffer.BufferClaim;
 import java.time.Duration;
-import java.util.Queue;
-import org.agrona.MutableDirectBuffer;
-import org.agrona.concurrent.ManyToOneConcurrentArrayQueue;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
+import org.agrona.collections.ArrayUtil;
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
+import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
+import reactor.core.publisher.SignalType;
 
 class MessagePublication implements OnDisposable {
 
   private static final Logger logger = LoggerFactory.getLogger(MessagePublication.class);
 
-  private static final int QUEUE_CAPACITY = 8192;
+  private static final AtomicReferenceFieldUpdater<MessagePublication, PublisherProcessor[]>
+      PUBLISHER_PROCESSORS =
+          AtomicReferenceFieldUpdater.newUpdater(
+              MessagePublication.class, PublisherProcessor[].class, "publisherProcessors");
 
   private final Publication publication;
   private final AeronEventLoop eventLoop;
   private final Duration connectTimeout;
   private final Duration backpressureTimeout;
   private final Duration adminActionTimeout;
-  private final int writeLimit;
 
-  private final Queue<PublishTask> publishTasks =
-      new ManyToOneConcurrentArrayQueue<>(QUEUE_CAPACITY);
+  private volatile Throwable lastError;
 
   private final MonoProcessor<Void> onDispose = MonoProcessor.create();
+
+  private volatile PublisherProcessor[] publisherProcessors = new PublisherProcessor[0];
 
   /**
    * Constructor.
@@ -43,130 +49,123 @@ class MessagePublication implements OnDisposable {
     this.connectTimeout = options.connectTimeout();
     this.backpressureTimeout = options.backpressureTimeout();
     this.adminActionTimeout = options.adminActionTimeout();
-    this.writeLimit = options.resources().writeLimit();
   }
 
   /**
-   * Enqueues content for future sending.
+   * Enqueues publisher for future sending.
    *
-   * @param buffer abstract buffer to send
+   * @param publisher abstract publisher to process messages from
    * @param bufferHandler abstract buffer handler
    * @return mono handle
    */
-  <B> Mono<Void> publish(B buffer, DirectBufferHandler<? super B> bufferHandler) {
+  <B> Mono<Void> publish(Publisher<B> publisher, DirectBufferHandler<? super B> bufferHandler) {
     return Mono.defer(
         () -> {
-          if (isDisposed()) {
-            return Mono.error(AeronExceptions.failWithPublicationUnavailable());
-          }
-          MonoProcessor<Void> promise = MonoProcessor.create();
-          if (!publishTasks.offer(
-              PublishTask.newInstance(publication, buffer, bufferHandler, promise))) {
-            return Mono.error(AeronExceptions.failWithPublicationUnavailable());
-          }
-          return promise;
+          PublisherProcessor<B> processor = new PublisherProcessor<>(bufferHandler, this);
+          publisher.subscribe(processor);
+          return processor.onDispose();
         });
   }
 
   /**
-   * Proceed with processing of tasks.
+   * Makes a progress at processing publisher processors collection. See for details {@link
+   * PublisherProcessor}.
    *
    * @return more than or equal {@code 1} - some progress was done; {@code 0} - denotes no progress
    *     was done
    */
-  int proceed() {
-    int result = 0;
-    for (int i = 0, current; i < writeLimit; i++) {
-      current = proceed0();
-      if (current < 1) {
-        break;
-      }
-      result += current;
-    }
-    return result;
-  }
+  int publish() {
 
-  /**
-   * Proceed with processing of tasks.
-   *
-   * @return {@code 1} - some progress was done; {@code 0} - denotes no progress was done
-   */
-  private int proceed0() {
+    PublisherProcessor[] oldArray = this.publisherProcessors;
+    int result = 0;
+
     Exception ex = null;
 
-    PublishTask task = publishTasks.peek();
-    if (task == null) {
-      return 0;
-    }
+    //noinspection ForLoopReplaceableByForEach
+    for (int i = 0; i < oldArray.length; i++) {
+      PublisherProcessor processor = oldArray[i];
 
-    long result = 0;
+      processor.request();
 
-    try {
-      result = task.publish();
-    } catch (Exception e) {
-      ex = e;
-    }
-
-    if (result > 0) {
-      publishTasks.poll();
-      task.success();
-      return 1;
-    }
-
-    // Handle closed publication
-    if (result == Publication.CLOSED) {
-      logger.warn("aeron.Publication is CLOSED: {}", this);
-      dispose();
-      return 0;
-    }
-
-    // Handle max position exceeded
-    if (result == Publication.MAX_POSITION_EXCEEDED) {
-      logger.warn("aeron.Publication received MAX_POSITION_EXCEEDED: {}", this);
-      dispose();
-      return 0;
-    }
-
-    // Handle failed connection
-    if (result == Publication.NOT_CONNECTED) {
-      if (task.isTimeoutElapsed(connectTimeout)) {
-        logger.warn(
-            "aeron.Publication failed to resolve NOT_CONNECTED within {} ms, {}",
-            connectTimeout.toMillis(),
-            this);
-        ex = AeronExceptions.failWithPublication("Failed to resolve NOT_CONNECTED within timeout");
+      Object buffer = processor.buffer;
+      if (buffer == null) {
+        continue;
       }
-    }
 
-    // Handle backpressure
-    if (result == Publication.BACK_PRESSURED) {
-      if (task.isTimeoutElapsed(backpressureTimeout)) {
-        logger.warn(
-            "aeron.Publication failed to resolve BACK_PRESSURED within {} ms, {}",
-            backpressureTimeout.toMillis(),
-            this);
-        ex = AeronExceptions.failWithPublication("Failed to resolve BACK_PRESSURED within timeout");
+      long r = 0;
+
+      try {
+        r = processor.publish(buffer);
+      } catch (Exception e) {
+        ex = e;
       }
-    }
 
-    // Handle admin action
-    if (result == Publication.ADMIN_ACTION) {
-      if (task.isTimeoutElapsed(adminActionTimeout)) {
-        logger.warn(
-            "aeron.Publication failed to resolve ADMIN_ACTION within {} ms, {}",
-            adminActionTimeout.toMillis(),
-            this);
-        ex = AeronExceptions.failWithPublication("Failed to resolve ADMIN_ACTION within timeout");
+      if (r > 0) {
+        result++;
+        processor.reset();
+        continue;
+      }
+
+      // Handle closed publication
+      if (r == Publication.CLOSED) {
+        logger.warn("aeron.Publication is CLOSED: {}", this);
+        ex = AeronExceptions.failWithPublication("aeron.Publication is CLOSED");
+      }
+
+      // Handle max position exceeded
+      if (r == Publication.MAX_POSITION_EXCEEDED) {
+        logger.warn("aeron.Publication received MAX_POSITION_EXCEEDED: {}", this);
+        ex =
+            AeronExceptions.failWithPublication("aeron.Publication received MAX_POSITION_EXCEEDED");
+      }
+
+      // Handle failed connection
+      if (r == Publication.NOT_CONNECTED) {
+        if (processor.isTimeoutElapsed(connectTimeout)) {
+          logger.warn(
+              "aeron.Publication failed to resolve NOT_CONNECTED within {} ms, {}",
+              connectTimeout.toMillis(),
+              this);
+          ex =
+              AeronExceptions.failWithPublication("Failed to resolve NOT_CONNECTED within timeout");
+        }
+      }
+
+      // Handle backpressure
+      if (r == Publication.BACK_PRESSURED) {
+        if (processor.isTimeoutElapsed(backpressureTimeout)) {
+          logger.warn(
+              "aeron.Publication failed to resolve BACK_PRESSURED within {} ms, {}",
+              backpressureTimeout.toMillis(),
+              this);
+          ex =
+              AeronExceptions.failWithPublication(
+                  "Failed to resolve BACK_PRESSURED within timeout");
+        }
+      }
+
+      // Handle admin action
+      if (r == Publication.ADMIN_ACTION) {
+        if (processor.isTimeoutElapsed(adminActionTimeout)) {
+          logger.warn(
+              "aeron.Publication failed to resolve ADMIN_ACTION within {} ms, {}",
+              adminActionTimeout.toMillis(),
+              this);
+          ex = AeronExceptions.failWithPublication("Failed to resolve ADMIN_ACTION within timeout");
+        }
+      }
+
+      if (ex != null) {
+        break;
       }
     }
 
     if (ex != null) {
-      // Consume task and notify subscriber(s)
-      publishTasks.poll();
-      task.error(ex);
+      lastError = ex;
+      dispose();
     }
 
-    return 0;
+    return result;
   }
 
   void close() {
@@ -180,7 +179,7 @@ class MessagePublication implements OnDisposable {
       logger.warn("{} failed on aeron.Publication close(): {}", this, ex.toString());
       throw Exceptions.propagate(ex);
     } finally {
-      disposePublishTasks();
+      disposeProcessors();
       onDispose.onComplete();
     }
   }
@@ -250,11 +249,15 @@ class MessagePublication implements OnDisposable {
                     AeronExceptions.failWithPublication("aeron.Publication is not connected")));
   }
 
-  private void disposePublishTasks() {
-    PublishTask task;
-    while ((task = publishTasks.poll()) != null) {
+  private void disposeProcessors() {
+    PublisherProcessor[] oldArray = this.publisherProcessors;
+    this.publisherProcessors = new PublisherProcessor[0];
+    for (PublisherProcessor processor : oldArray) {
       try {
-        task.error(AeronExceptions.failWithCancel("PublishTask has cancelled"));
+        processor.cancel();
+        processor.onParentError(
+            Optional.ofNullable(lastError)
+                .orElse(AeronExceptions.failWithCancel("PublisherProcessor has been cancelled")));
       } catch (Exception ex) {
         // no-op
       }
@@ -266,82 +269,128 @@ class MessagePublication implements OnDisposable {
     return "MessagePublication{pub=" + publication.channel() + "}";
   }
 
-  /**
-   * Publish task.
-   *
-   * <p>Resident of {@link #publishTasks} queue.
-   */
-  private static class PublishTask<B> {
+  private static class PublisherProcessor<B> extends BaseSubscriber<B> implements OnDisposable {
 
-    private static final ThreadLocal<BufferClaim> bufferClaims =
-        ThreadLocal.withInitial(BufferClaim::new);
-
-    private Publication publication;
-    private B buffer;
-    private DirectBufferHandler<B> bufferHandler;
-    private MonoProcessor<Void> promise;
+    private final DirectBufferHandler<? super B> bufferHandler;
+    private final MessagePublication parent;
 
     private long start;
+    private boolean requested;
 
-    private static <B> PublishTask<B> newInstance(
-        Publication publication,
-        B buffer,
-        DirectBufferHandler<B> bufferHandler,
-        MonoProcessor<Void> promise) {
+    private final MonoProcessor<Void> onDispose = MonoProcessor.create();
 
-      PublishTask<B> task = new PublishTask<>();
+    private volatile B buffer;
+    private volatile Throwable error;
 
-      task.publication = publication;
-      task.buffer = buffer;
-      task.bufferHandler = bufferHandler;
-      task.start = 0;
-      task.promise = promise;
-      return task;
+    PublisherProcessor(
+        DirectBufferHandler<? super B> bufferHandler, MessagePublication messagePublication) {
+      this.bufferHandler = bufferHandler;
+      this.parent = messagePublication;
+      addSelf();
     }
 
-    private long publish() {
-      if (promise.isDisposed()) {
-        return 1;
+    @Override
+    public Mono<Void> onDispose() {
+      return onDispose;
+    }
+
+    void request() {
+      if (requested || isDisposed()) {
+        return;
       }
 
+      Subscription upstream = upstream();
+      if (upstream != null) {
+        requested = true;
+        upstream.request(1);
+      }
+    }
+
+    void onParentError(Throwable throwable) {
+      resetBuffer();
+      onDispose.onError(throwable);
+    }
+
+    void reset() {
+      resetBuffer();
+
+      if (isDisposed()) {
+        removeSelf();
+        if (error != null) {
+          onDispose.onError(error);
+        } else {
+          onDispose.onComplete();
+        }
+        return;
+      }
+
+      start = 0;
+      requested = false;
+    }
+
+    @Override
+    protected void hookOnSubscribe(Subscription subscription) {
+      // no-op
+    }
+
+    @Override
+    protected void hookOnNext(B value) {
+      if (buffer != null) {
+        bufferHandler.dispose(value);
+        throw Exceptions.failWithOverflow(
+            "PublisherProcessor is overrun by more signals than expected");
+      }
+      buffer = value;
+    }
+
+    @Override
+    protected void hookOnError(Throwable throwable) {
+      error = throwable;
+    }
+
+    @Override
+    protected void hookFinally(SignalType type) {
+      if (buffer == null) {
+        reset();
+      }
+    }
+
+    long publish(B buffer) {
       if (start == 0) {
         start = System.currentTimeMillis();
       }
-
       int length = bufferHandler.estimateLength(buffer);
-
-      if (length < publication.maxPayloadLength()) {
-        BufferClaim bufferClaim = bufferClaims.get();
-        long result = publication.tryClaim(length, bufferClaim);
-        if (result > 0) {
-          try {
-            MutableDirectBuffer directBuffer = bufferClaim.buffer();
-            int offset = bufferClaim.offset();
-            bufferHandler.write(directBuffer, offset, buffer, length);
-            bufferClaim.commit();
-          } catch (Exception ex) {
-            bufferClaim.abort();
-            throw Exceptions.propagate(ex);
-          }
-        }
-        return result;
-      } else {
-        return publication.offer(bufferHandler.map(buffer, length));
-      }
+      return parent.publication.offer(bufferHandler.map(buffer, length));
     }
 
-    private boolean isTimeoutElapsed(Duration timeout) {
+    boolean isTimeoutElapsed(Duration timeout) {
       return System.currentTimeMillis() - start > timeout.toMillis();
     }
 
-    private void success() {
-      promise.onComplete();
-      bufferHandler.dispose(buffer);
+    private void resetBuffer() {
+      B oldBuffer = buffer;
+      buffer = null;
+      if (oldBuffer != null) {
+        bufferHandler.dispose(oldBuffer);
+      }
     }
 
-    private void error(Throwable ex) {
-      promise.onError(ex);
-      bufferHandler.dispose(buffer);
+    private void addSelf() {
+      PublisherProcessor[] oldArray;
+      PublisherProcessor[] newArray;
+      do {
+        oldArray = parent.publisherProcessors;
+        newArray = ArrayUtil.add(oldArray, this);
+      } while (!PUBLISHER_PROCESSORS.compareAndSet(parent, oldArray, newArray));
+    }
+
+    private void removeSelf() {
+      PublisherProcessor[] oldArray;
+      PublisherProcessor[] newArray;
+      do {
+        oldArray = parent.publisherProcessors;
+        newArray = ArrayUtil.remove(oldArray, this);
+      } while (!PUBLISHER_PROCESSORS.compareAndSet(parent, oldArray, newArray));
     }
   }
 }

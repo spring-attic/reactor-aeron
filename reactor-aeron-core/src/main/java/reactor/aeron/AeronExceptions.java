@@ -14,10 +14,6 @@ class AeronExceptions {
     return new AeronEventLoopException("AeronEventLoop is unavailable");
   }
 
-  static RuntimeException failWithPublicationUnavailable() {
-    return new AeronPublicationException("MessagePublication or aeron.Publication is unavailable");
-  }
-
   static RuntimeException failWithPublication(String message) {
     return new AeronPublicationException(message);
   }
