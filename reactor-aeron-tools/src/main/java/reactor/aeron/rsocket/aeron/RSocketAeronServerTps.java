@@ -62,8 +62,8 @@ public final class RSocketAeronServerTps {
                             () -> ByteBufPayload.create(BUFFER.retainedSlice());
 
                         return Mono.fromCallable(payloadCallable)
-                            .repeat(Configurations.NUMBER_OF_MESSAGES)
-                            .subscribeOn(Schedulers.single());
+                            .subscribeOn(Schedulers.parallel())
+                            .repeat(Configurations.NUMBER_OF_MESSAGES);
                       }
                     }))
         .transport(
