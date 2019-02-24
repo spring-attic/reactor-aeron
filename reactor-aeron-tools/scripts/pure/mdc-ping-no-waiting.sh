@@ -13,7 +13,7 @@ java \
     -Dagrona.disable.bounds.checks=true \
     -Dreactor.aeron.sample.embeddedMediaDriver=true \
     -Dreactor.aeron.sample.exclusive.publications=true \
-    -Dreactor.aeron.sample.messages=100000000 \
-    -Dreactor.aeron.sample.messageLength=32 \
     -Dreactor.aeron.sample.idle.strategy=yielding \
-    ${JVM_OPTS} reactor.aeron.demo.pure.MdcPingNoWaiting
+    -Dreactor.aeron.sample.frameCountLimit=16384 \
+    -Dreactor.aeron.sample.messageLength=32 \
+    ${JVM_OPTS} reactor.aeron.pure.MdcPingNoWaiting

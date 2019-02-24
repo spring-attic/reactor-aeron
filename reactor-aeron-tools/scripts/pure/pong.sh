@@ -14,4 +14,5 @@ java \
     -Dreactor.aeron.sample.embeddedMediaDriver=true \
     -Dreactor.aeron.sample.exclusive.publications=true \
     -Dreactor.aeron.sample.idle.strategy=yielding \
-    ${JVM_OPTS} reactor.aeron.demo.pure.Pong
+    -Dreactor.aeron.sample.frameCountLimit=16384 \
+    ${JVM_OPTS} reactor.aeron.pure.Pong

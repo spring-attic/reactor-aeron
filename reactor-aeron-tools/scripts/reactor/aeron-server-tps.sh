@@ -7,13 +7,15 @@ JAR_FILE=$(ls target |grep jar)
 
 java \
     -cp target/${JAR_FILE}:target/lib/* \
-    -XX:+UnlockDiagnosticVMOptions \
-    -XX:GuaranteedSafepointInterval=300000 \
+    -XX:BiasedLockingStartupDelay=0 \
+    -Djava.net.preferIPv4Stack=true \
+    -Daeron.term.buffer.sparse.file=false \
     -Daeron.threading.mode=SHARED \
     -Dagrona.disable.bounds.checks=true \
-    -Dreactor.aeron.sample.embeddedMediaDriver=true \
-    -Dreactor.aeron.sample.exclusive.publications=true \
     -Dreactor.aeron.sample.idle.strategy=yielding \
     -Dreactor.aeron.sample.frameCountLimit=16384 \
     -Daeron.mtu.length=16k \
-    ${JVM_OPTS} reactor.aeron.pure.MdcPong
+    -Daeron.socket.so_sndbuf=2m \
+    -Daeron.socket.so_rcvbuf=2m \
+    -Daeron.rcv.initial.window.length=2m \
+    ${JVM_OPTS} reactor.aeron.ServerThroughput
