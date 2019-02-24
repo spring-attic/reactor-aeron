@@ -15,5 +15,7 @@ java \
     -Dreactor.aeron.sample.exclusive.publications=true \
     -Dreactor.aeron.sample.idle.strategy=yielding \
     -Dreactor.aeron.sample.frameCountLimit=16384 \
+    -Dreactor.aeron.sample.messageLength=16 \
+    -Dreactor.aeron.sample.request=128 \
     -Daeron.mtu.length=16k \
-    ${JVM_OPTS} reactor.aeron.pure.MdcPong
+    ${JVM_OPTS} reactor.aeron.pure.MdcPingAsync

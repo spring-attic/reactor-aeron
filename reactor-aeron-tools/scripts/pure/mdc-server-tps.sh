@@ -19,4 +19,4 @@ java \
     -Daeron.socket.so_sndbuf=2m \
     -Daeron.socket.so_rcvbuf=2m \
     -Daeron.rcv.initial.window.length=2m \
-    ${JVM_OPTS} reactor.aeron.demo.pure.ServerThroughput
+    ${JVM_OPTS} reactor.aeron.pure.ServerThroughput
