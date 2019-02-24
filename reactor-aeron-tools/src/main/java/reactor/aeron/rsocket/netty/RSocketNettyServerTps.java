@@ -2,7 +2,6 @@ package reactor.aeron.rsocket.netty;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
-import io.netty.util.ReferenceCounted;
 import io.rsocket.AbstractRSocket;
 import io.rsocket.Frame;
 import io.rsocket.Payload;
@@ -58,7 +57,6 @@ public final class RSocketNettyServerTps {
 
                         return Mono.fromCallable(payloadCallable)
                             .repeat(Configurations.NUMBER_OF_MESSAGES)
-                            .onBackpressureDrop(ReferenceCounted::release)
                             .subscribeOn(Schedulers.single());
                       }
                     }))
