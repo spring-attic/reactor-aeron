@@ -18,4 +18,4 @@ java \
     -Dreactor.aeron.sample.messageLength=16 \
     -Dreactor.aeron.sample.request=128 \
     -Daeron.mtu.length=16k \
-    ${JVM_OPTS} reactor.aeron.pure.MdcPingNoWaitingWithSimpleBackpressure
+    ${JVM_OPTS} reactor.aeron.pure.MdcPingAsync

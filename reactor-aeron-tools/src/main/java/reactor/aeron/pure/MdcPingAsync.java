@@ -34,7 +34,7 @@ import reactor.core.publisher.Mono;
  *
  * @see MdcPong
  */
-public class MdcPingNoWaitingWithSimpleBackpressure {
+public class MdcPingAsync {
   private static final int STREAM_ID = Configurations.MDC_STREAM_ID;
   private static final int PORT = Configurations.MDC_PORT;
   private static final int CONTROL_PORT = Configurations.MDC_CONTROL_PORT;
@@ -78,11 +78,8 @@ public class MdcPingNoWaitingWithSimpleBackpressure {
   public static void main(final String[] args) throws Exception {
     final MediaDriver driver = EMBEDDED_MEDIA_DRIVER ? MediaDriver.launchEmbedded() : null;
     final Aeron.Context ctx =
-        new Aeron.Context()
-            .availableImageHandler(
-                MdcPingNoWaitingWithSimpleBackpressure::availablePongImageHandler);
-    final FragmentHandler fragmentHandler =
-        new FragmentAssembler(MdcPingNoWaitingWithSimpleBackpressure::pongHandler);
+        new Aeron.Context().availableImageHandler(MdcPingAsync::availablePongImageHandler);
+    final FragmentHandler fragmentHandler = new FragmentAssembler(MdcPingAsync::pongHandler);
 
     if (EMBEDDED_MEDIA_DRIVER) {
       ctx.aeronDirectoryName(driver.aeronDirectoryName());
@@ -215,8 +212,8 @@ public class MdcPingNoWaitingWithSimpleBackpressure {
     return Flux.interval(
             Duration.ofSeconds(Configurations.WARMUP_REPORT_DELAY),
             Duration.ofSeconds(Configurations.REPORT_INTERVAL))
-        .doOnNext(MdcPingNoWaitingWithSimpleBackpressure::report)
-        .doFinally(MdcPingNoWaitingWithSimpleBackpressure::report)
+        .doOnNext(MdcPingAsync::report)
+        .doFinally(MdcPingAsync::report)
         .subscribe();
   }
 
