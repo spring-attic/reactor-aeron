@@ -336,7 +336,11 @@ class MessagePublication implements OnDisposable {
     @Override
     protected void hookOnNext(B value) {
       if (buffer != null) {
-        bufferHandler.dispose(value);
+        try {
+          bufferHandler.dispose(value);
+        } catch (Exception ex) {
+          logger.warn("Failed to release buffer: {}", value, ex);
+        }
         throw Exceptions.failWithOverflow(
             "PublisherProcessor is overrun by more signals than expected");
       }
@@ -371,7 +375,11 @@ class MessagePublication implements OnDisposable {
       B oldBuffer = buffer;
       buffer = null;
       if (oldBuffer != null) {
-        bufferHandler.dispose(oldBuffer);
+        try {
+          bufferHandler.dispose(oldBuffer);
+        } catch (Exception ex) {
+          logger.warn("Failed to release buffer: {}", oldBuffer, ex);
+        }
       }
     }
 

@@ -18,7 +18,7 @@ import reactor.core.publisher.Operators;
 
 final class DefaultAeronInbound implements AeronInbound {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(DefaultAeronInbound.class);
+  private static final Logger logger = LoggerFactory.getLogger(DefaultAeronInbound.class);
 
   private static final AtomicLongFieldUpdater<DefaultAeronInbound> REQUESTED =
       AtomicLongFieldUpdater.newUpdater(DefaultAeronInbound.class, "requested");
@@ -139,7 +139,7 @@ final class DefaultAeronInbound implements AeronInbound {
       if (destination != null) {
         destination.onComplete();
       }
-      LOGGER.debug(
+      logger.debug(
           "Destination subscriber on aeron inbound has been cancelled, session id {}",
           Integer.toHexString(image.sessionId()));
     }
@@ -167,7 +167,7 @@ final class DefaultAeronInbound implements AeronInbound {
 
     @Override
     public void onNext(DirectBuffer directBuffer) {
-      LOGGER.warn(
+      logger.warn(
           "Received buffer(len={}) which will be dropped immediately due cancelled aeron inbound",
           directBuffer.capacity());
     }
