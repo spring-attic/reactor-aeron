@@ -22,7 +22,14 @@ public final class RSocketNettyClientTps {
    */
   public static void main(String... args) {
     System.out.println(
-        "address: " + Configurations.MDC_ADDRESS + ", port: " + Configurations.MDC_PORT);
+        "message size: "
+            + Configurations.MESSAGE_LENGTH
+            + ", number of messages: "
+            + Configurations.NUMBER_OF_MESSAGES
+            + ", address: "
+            + Configurations.MDC_ADDRESS
+            + ", port: "
+            + Configurations.MDC_PORT);
 
     LoopResources loopResources = LoopResources.create("rsocket-netty");
 
@@ -41,6 +48,8 @@ public final class RSocketNettyClientTps {
             .transport(() -> TcpClientTransport.create(tcpClient))
             .start()
             .block();
+
+    System.out.println("connected");
 
     RateReporter reporter = new RateReporter();
 

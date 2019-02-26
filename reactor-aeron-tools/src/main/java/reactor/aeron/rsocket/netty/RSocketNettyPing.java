@@ -12,11 +12,11 @@ import io.rsocket.util.ByteBufPayload;
 import java.time.Duration;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
 import org.HdrHistogram.Recorder;
 import reactor.aeron.Configurations;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.netty.resources.ConnectionProvider;
 import reactor.netty.resources.LoopResources;
 import reactor.netty.tcp.TcpClient;
@@ -42,7 +42,14 @@ public final class RSocketNettyPing {
    */
   public static void main(String... args) {
     System.out.println(
-        "address: " + Configurations.MDC_ADDRESS + ", port: " + Configurations.MDC_PORT);
+        "message size: "
+            + Configurations.MESSAGE_LENGTH
+            + ", number of messages: "
+            + Configurations.NUMBER_OF_MESSAGES
+            + ", address: "
+            + Configurations.MDC_ADDRESS
+            + ", port: "
+            + Configurations.MDC_PORT);
 
     LoopResources loopResources = LoopResources.create("rsocket-netty");
 
@@ -62,16 +69,17 @@ public final class RSocketNettyPing {
             .start()
             .block();
 
+    System.out.println("connected");
+
     Disposable report = startReport();
 
-    Supplier<Payload> payloadSupplier = () -> ByteBufPayload.create(BUFFER.retainedSlice());
-
-    Flux.range(1, (int) Configurations.NUMBER_OF_MESSAGES)
+    Mono.fromCallable(() -> ByteBufPayload.create(BUFFER.retainedSlice()))
+        .repeat(Configurations.NUMBER_OF_MESSAGES)
         .flatMap(
-            i -> {
+            payload -> {
               long start = System.nanoTime();
               return client
-                  .requestResponse(payloadSupplier.get())
+                  .requestResponse(payload)
                   .doOnNext(Payload::release)
                   .doFinally(
                       signalType -> {
@@ -82,7 +90,7 @@ public final class RSocketNettyPing {
             64)
         .doOnError(Throwable::printStackTrace)
         .doOnTerminate(
-            () -> System.out.println("Sent " + Configurations.NUMBER_OF_MESSAGES + " messages."))
+            () -> System.out.println("Sent " + Configurations.NUMBER_OF_MESSAGES + " messages"))
         .doFinally(s -> report.dispose())
         .then()
         .block();

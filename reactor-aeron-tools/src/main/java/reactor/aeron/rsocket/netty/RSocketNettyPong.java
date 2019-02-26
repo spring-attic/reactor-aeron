@@ -20,7 +20,14 @@ public final class RSocketNettyPong {
    */
   public static void main(String... args) {
     System.out.println(
-        "address: " + Configurations.MDC_ADDRESS + ", port: " + Configurations.MDC_PORT);
+        "message size: "
+            + Configurations.MESSAGE_LENGTH
+            + ", number of messages: "
+            + Configurations.NUMBER_OF_MESSAGES
+            + ", address: "
+            + Configurations.MDC_ADDRESS
+            + ", port: "
+            + Configurations.MDC_PORT);
 
     LoopResources loopResources = LoopResources.create("rsocket-netty");
 
@@ -36,14 +43,16 @@ public final class RSocketNettyPong {
     RSocketFactory.receive()
         .frameDecoder(Frame::retain)
         .acceptor(
-            (setupPayload, rsocket) ->
-                Mono.just(
-                    new AbstractRSocket() {
-                      @Override
-                      public Mono<Payload> requestResponse(Payload payload) {
-                        return Mono.just(payload);
-                      }
-                    }))
+            (setupPayload, rsocket) -> {
+              System.out.println("accepted client");
+              return Mono.just(
+                  new AbstractRSocket() {
+                    @Override
+                    public Mono<Payload> requestResponse(Payload payload) {
+                      return Mono.just(payload);
+                    }
+                  });
+            })
         .transport(() -> TcpServerTransport.create(tcpServer))
         .start()
         .block()
