@@ -1,5 +1,6 @@
 package reactor.aeron.rsocket.netty;
 
+import io.netty.channel.ChannelOption;
 import io.rsocket.AbstractRSocket;
 import io.rsocket.Frame;
 import io.rsocket.Payload;
@@ -18,12 +19,19 @@ public final class RSocketNettyPong {
    * @param args program arguments.
    */
   public static void main(String... args) {
+    System.out.println(
+        "address: " + Configurations.MDC_ADDRESS + ", port: " + Configurations.MDC_PORT);
+
+    LoopResources loopResources = LoopResources.create("rsocket-netty");
 
     TcpServer tcpServer =
         TcpServer.create()
-            .runOn(LoopResources.create("server", 1, true))
+            .runOn(loopResources)
             .host(Configurations.MDC_ADDRESS)
-            .port(Configurations.MDC_PORT);
+            .port(Configurations.MDC_PORT)
+            .option(ChannelOption.TCP_NODELAY, true)
+            .option(ChannelOption.SO_KEEPALIVE, true)
+            .option(ChannelOption.SO_REUSEADDR, true);
 
     RSocketFactory.receive()
         .frameDecoder(Frame::retain)

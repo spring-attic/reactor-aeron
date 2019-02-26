@@ -5,7 +5,6 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
-import java.net.InetSocketAddress;
 import reactor.aeron.Configurations;
 import reactor.netty.NettyPipeline.SendOptions;
 import reactor.netty.channel.BootstrapHandlers;
@@ -23,17 +22,15 @@ public class ReactorNettyServerPong {
     System.out.println(
         "address: " + Configurations.MDC_ADDRESS + ", port: " + Configurations.MDC_PORT);
 
-    LoopResources loopResources = LoopResources.create("reactor-netty-pong");
+    LoopResources loopResources = LoopResources.create("reactor-netty");
 
     TcpServer.create()
         .runOn(loopResources)
+        .host(Configurations.MDC_ADDRESS)
+        .port(Configurations.MDC_PORT)
         .option(ChannelOption.TCP_NODELAY, true)
         .option(ChannelOption.SO_KEEPALIVE, true)
         .option(ChannelOption.SO_REUSEADDR, true)
-        .addressSupplier(
-            () ->
-                InetSocketAddress.createUnresolved(
-                    Configurations.MDC_ADDRESS, Configurations.MDC_PORT))
         .bootstrap(
             b ->
                 BootstrapHandlers.updateConfiguration(

@@ -2,6 +2,7 @@ package reactor.aeron.rsocket.netty;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.channel.ChannelOption;
 import io.rsocket.Frame;
 import io.rsocket.Payload;
 import io.rsocket.RSocket;
@@ -40,12 +41,19 @@ public final class RSocketNettyPing {
    * @param args program arguments.
    */
   public static void main(String... args) {
+    System.out.println(
+        "address: " + Configurations.MDC_ADDRESS + ", port: " + Configurations.MDC_PORT);
+
+    LoopResources loopResources = LoopResources.create("rsocket-netty");
 
     TcpClient tcpClient =
         TcpClient.create(ConnectionProvider.newConnection())
-            .runOn(LoopResources.create("client", 1, true))
+            .runOn(loopResources)
             .host(Configurations.MDC_ADDRESS)
-            .port(Configurations.MDC_PORT);
+            .port(Configurations.MDC_PORT)
+            .option(ChannelOption.TCP_NODELAY, true)
+            .option(ChannelOption.SO_KEEPALIVE, true)
+            .option(ChannelOption.SO_REUSEADDR, true);
 
     RSocket client =
         RSocketFactory.connect()
