@@ -10,6 +10,7 @@ import io.rsocket.RSocketFactory;
 import io.rsocket.transport.netty.server.TcpServerTransport;
 import io.rsocket.util.ByteBufPayload;
 import java.util.Random;
+import java.util.concurrent.Callable;
 import reactor.aeron.Configurations;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -68,12 +69,15 @@ public final class RSocketNettyServerTps {
                     public Flux<Payload> requestStream(Payload payload) {
                       payload.release();
 
-                      int msgNum = (int) Configurations.NUMBER_OF_MESSAGES;
+                      long msgNum = Configurations.NUMBER_OF_MESSAGES;
                       System.out.println("streaming " + msgNum + " messages ...");
 
-                      return Flux.range(1, msgNum)
-                          .map(i -> ByteBufPayload.create(BUFFER.retainedSlice()))
-                          .subscribeOn(Schedulers.parallel());
+                      Callable<Payload> payloadCallable =
+                          () -> ByteBufPayload.create(BUFFER.retainedSlice());
+
+                      return Mono.fromCallable(payloadCallable)
+                          .subscribeOn(Schedulers.parallel())
+                          .repeat(msgNum);
                     }
                   });
             })
