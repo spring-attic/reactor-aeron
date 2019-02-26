@@ -12,11 +12,11 @@ import io.rsocket.util.ByteBufPayload;
 import java.time.Duration;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import org.HdrHistogram.Recorder;
 import reactor.aeron.Configurations;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 import reactor.netty.resources.ConnectionProvider;
 import reactor.netty.resources.LoopResources;
 import reactor.netty.tcp.TcpClient;
@@ -73,13 +73,14 @@ public final class RSocketNettyPing {
 
     Disposable report = startReport();
 
-    Mono.fromCallable(() -> ByteBufPayload.create(BUFFER.retainedSlice()))
-        .repeat(Configurations.NUMBER_OF_MESSAGES)
+    Supplier<Payload> payloadSupplier = () -> ByteBufPayload.create(BUFFER.retainedSlice());
+
+    Flux.range(1, (int) Configurations.NUMBER_OF_MESSAGES)
         .flatMap(
-            payload -> {
+            i -> {
               long start = System.nanoTime();
               return client
-                  .requestResponse(payload)
+                  .requestResponse(payloadSupplier.get())
                   .doOnNext(Payload::release)
                   .doFinally(
                       signalType -> {
