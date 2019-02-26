@@ -60,16 +60,16 @@ public final class RSocketNettyPing {
             .port(Configurations.MDC_PORT)
             .option(ChannelOption.TCP_NODELAY, true)
             .option(ChannelOption.SO_KEEPALIVE, true)
-            .option(ChannelOption.SO_REUSEADDR, true);
+            .option(ChannelOption.SO_REUSEADDR, true)
+            .doOnConnected(System.out::println);
 
     RSocket client =
         RSocketFactory.connect()
             .frameDecoder(Frame::retain)
             .transport(() -> TcpClientTransport.create(tcpClient))
             .start()
+            .doOnSuccess(System.out::println)
             .block();
-
-    System.out.println("connected");
 
     Disposable report = startReport();
 

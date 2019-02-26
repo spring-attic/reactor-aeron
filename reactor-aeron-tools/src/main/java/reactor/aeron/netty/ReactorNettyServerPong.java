@@ -20,7 +20,14 @@ public class ReactorNettyServerPong {
    */
   public static void main(String[] args) {
     System.out.println(
-        "address: " + Configurations.MDC_ADDRESS + ", port: " + Configurations.MDC_PORT);
+        "message size: "
+            + Configurations.MESSAGE_LENGTH
+            + ", number of messages: "
+            + Configurations.NUMBER_OF_MESSAGES
+            + ", address: "
+            + Configurations.MDC_ADDRESS
+            + ", port: "
+            + Configurations.MDC_PORT);
 
     LoopResources loopResources = LoopResources.create("reactor-netty");
 
@@ -31,6 +38,7 @@ public class ReactorNettyServerPong {
         .option(ChannelOption.TCP_NODELAY, true)
         .option(ChannelOption.SO_KEEPALIVE, true)
         .option(ChannelOption.SO_REUSEADDR, true)
+        .doOnConnection(System.out::println)
         .bootstrap(
             b ->
                 BootstrapHandlers.updateConfiguration(

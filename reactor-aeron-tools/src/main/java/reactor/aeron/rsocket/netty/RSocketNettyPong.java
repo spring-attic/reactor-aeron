@@ -38,13 +38,14 @@ public final class RSocketNettyPong {
             .port(Configurations.MDC_PORT)
             .option(ChannelOption.TCP_NODELAY, true)
             .option(ChannelOption.SO_KEEPALIVE, true)
-            .option(ChannelOption.SO_REUSEADDR, true);
+            .option(ChannelOption.SO_REUSEADDR, true)
+            .doOnConnection(System.out::println);
 
     RSocketFactory.receive()
         .frameDecoder(Frame::retain)
         .acceptor(
             (setupPayload, rsocket) -> {
-              System.out.println("accepted client");
+              System.out.println(rsocket);
               return Mono.just(
                   new AbstractRSocket() {
                     @Override
