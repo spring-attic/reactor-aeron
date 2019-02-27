@@ -15,7 +15,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 import reactor.core.publisher.SignalType;
 
-class MessagePublication implements OnDisposable {
+class MessagePublication implements OnDisposable, AeronResource {
 
   private static final Logger logger = LoggerFactory.getLogger(MessagePublication.class);
 
@@ -168,7 +168,8 @@ class MessagePublication implements OnDisposable {
     return result;
   }
 
-  void close() {
+  @Override
+  public void close() {
     if (!eventLoop.inEventLoop()) {
       throw AeronExceptions.failWithResourceDisposal("aeron publication");
     }
@@ -206,7 +207,7 @@ class MessagePublication implements OnDisposable {
   @Override
   public void dispose() {
     eventLoop
-        .disposePublication(this)
+        .dispose(this)
         .subscribe(
             null,
             th -> {

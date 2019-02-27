@@ -16,7 +16,7 @@ import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Operators;
 
-final class DefaultAeronInbound implements AeronInbound {
+final class DefaultAeronInbound implements AeronInbound, AeronResource {
 
   private static final Logger logger = LoggerFactory.getLogger(DefaultAeronInbound.class);
 
@@ -84,16 +84,18 @@ final class DefaultAeronInbound implements AeronInbound {
     return fragments;
   }
 
-  void close() {
+  @Override
+  public void close() {
     if (!eventLoop.inEventLoop()) {
       throw AeronExceptions.failWithResourceDisposal("aeron inbound");
     }
     inbound.cancel();
+    logger.debug("Cancelled inbound");
   }
 
   void dispose() {
     eventLoop
-        .disposeInbound(this)
+        .dispose(this)
         .subscribe(
             null,
             th -> {
