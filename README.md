@@ -9,7 +9,6 @@ clients & servers based on `Aeron` framework.
 With `Maven` from `Maven Central` repositories (stable releases only):
 
 ```xml
-
 <!-- https://mvnrepository.com/artifact/io.scalecube/scalecube-reactor-aeron -->
 <dependency>
     <groupId>io.scalecube</groupId>
@@ -73,10 +72,9 @@ AeronResources resources = new AeronResources().useTmpDir().start().block();
     System.out.println("main completed");
 ```
 
-
 ## Building from Source
 
-```
+```console
 $ git clone git@github.com:scalecube/reactor-aeron.git
 $ cd reactor-aeron
 $ mvn clean install
