@@ -5,7 +5,6 @@ import io.netty.buffer.Unpooled;
 import java.nio.charset.Charset;
 import java.time.Duration;
 import org.agrona.DirectBuffer;
-import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 import reactor.core.publisher.Flux;
 
@@ -47,11 +46,6 @@ public class ServerServerSends {
     @Override
     public int estimateLength(ByteBuf buffer) {
       return buffer.readableBytes();
-    }
-
-    @Override
-    public void write(MutableDirectBuffer dstBuffer, int index, ByteBuf srcBuffer, int length) {
-      dstBuffer.putBytes(index, srcBuffer.nioBuffer(), length);
     }
 
     @Override
