@@ -24,52 +24,44 @@ With `Maven` from `Maven Central` repositories (stable releases only):
 Here is a very simple server and the corresponding client example
 
 ```java
-AeronResources resources = new AeronResources().useTmpDir().start().block();
-    try {
-      AeronServer.create(resources)
-          .options("localhost", 13000, 13001)
-          .handle(
-              connection ->
-                  connection
-                      .inbound()
-                      .receive()
-                      .asString()
-                      .log("receive")
-                      .then(connection.onDispose()))
-          .bind()
-          .block();
+  AeronResources resources = new AeronResources().useTmpDir().start().block();
 
-      Thread.currentThread().join();
-    } finally {
-      resources.dispose();
-      resources.onDispose().block();
-    }
+  AeronServer.create(resources)
+    .options("localhost", 13000, 13001)
+    .handle(
+        connection ->
+            connection
+                .inbound()
+                .receive()
+                .asString()
+                .log("receive")
+                .then(connection.onDispose()))
+    .bind()
+    .block()
+    .onDispose(resources)
+    .onDispose()
+    .block();
     
 ```
 
 ```java
-    AeronConnection connection = null;
     AeronResources resources = new AeronResources().useTmpDir().start().block();
-    try {
-      connection =
-          AeronClient.create(resources)
-              .options("localhost", 13000, 13001)
-              .handle(
-                  connection1 -> {
-                    System.out.println("Handler invoked");
-                    return connection1
-                        .outbound()
-                        .sendString(Flux.fromStream(Stream.of("Hello", "world!")).log("send"))
-                        .then(connection1.onDispose());
-                  })
-              .connect()
-              .block();
-    } finally {
-      Objects.requireNonNull(connection).dispose();
-      resources.dispose();
-      resources.onDispose().block();
-    }
-    System.out.println("main completed");
+
+    AeronClient.create(resources)
+        .options("localhost", 13000, 13001)
+        .handle(
+            connection1 -> {
+              System.out.println("Handler invoked");
+              return connection1
+                  .outbound()
+                  .sendString(Flux.fromStream(Stream.of("Hello", "world!")).log("send"))
+                  .then(connection1.onDispose());
+            })
+        .connect()
+        .block()
+        .onDispose(resources)
+        .onDispose()
+        .block();
 ```
 
 ## Building from Source
