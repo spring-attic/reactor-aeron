@@ -71,3 +71,5 @@ $ git clone git@github.com:scalecube/reactor-aeron.git
 $ cd reactor-aeron
 $ mvn clean install
 ```
+
+## [Code style](https://github.com/scalecube/scalecube-parent/blob/develop/DEVELOPMENT.md#setting-up-development-environment) 
