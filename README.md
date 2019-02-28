@@ -1,7 +1,7 @@
 # Reactor Aeron
 
 `Reactor Aeron` offers non-blocking and backpressure-ready relable `UDP`
-clients & servers based on `Aeron` framework.
+clients & servers based on [Aeron](https://github.com/real-logic/aeron) Efficient reliable UDP unicast, UDP multicast, and IPC message transport. it is inspired by [reactor-netty](https://github.com/reactor/reactor-netty)
 
 ## Getting it
 `Reactor Aeron` requires Java 8 or + to run.
@@ -74,9 +74,12 @@ $ mvn clean install
 
 ## Performance results
 
-Throughput: https://plot.ly/~ronenhamias/15.embed
+Performance is the key focus. Aeron is designed to be the highest throughput with the lowest and most predictable latency possible of any messaging system.
 
-Latency: https://plot.ly/~ronenhamias/17.embed
+Benchmark: `reactor-aeron` vs `reactor-netty` vs `pure-aeron` running on `AWS` `C5.xlarge`
+
+- Throughput: https://plot.ly/~ronenhamias/15.embed
+- Latency: https://plot.ly/~ronenhamias/17.embed
 
 ## Code style
 
