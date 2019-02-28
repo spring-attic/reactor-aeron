@@ -13,7 +13,7 @@ With `Maven` from `Maven Central` repositories (stable releases only):
 <dependency>
     <groupId>io.scalecube</groupId>
     <artifactId>scalecube-reactor-aeron</artifactId>
-    <version>0.1.3</version>
+    <version>x.y.z</version>
     <type>pom</type>
 </dependency>
 
