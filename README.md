@@ -72,4 +72,10 @@ $ cd reactor-aeron
 $ mvn clean install
 ```
 
-## [Code style](https://github.com/scalecube/scalecube-parent/blob/develop/DEVELOPMENT.md#setting-up-development-environment) 
+## Code style
+
+[See the reference on scalecube site](https://github.com/scalecube/scalecube-parent/blob/develop/DEVELOPMENT.md#setting-up-development-environment) 
+
+## License
+
+`Reactor Aeron` is Open Source Software released under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
