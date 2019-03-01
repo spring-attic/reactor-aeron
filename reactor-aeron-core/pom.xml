@@ -8,7 +8,7 @@
     <version>0.1.4-SNAPSHOT</version>
   </parent>
 
-  <artifactId>reactor-aeron-core</artifactId>
+  <artifactId>reactor-aeron</artifactId>
 
   <dependencies>
     <dependency>
