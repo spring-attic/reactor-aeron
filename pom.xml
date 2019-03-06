@@ -37,8 +37,8 @@
   </properties>
 
   <modules>
-    <module>reactor-aeron-core</module>
-    <module>reactor-aeron-tools</module>
+    <module>core</module>
+    <module>benchmarks</module>
   </modules>
 
   <dependencyManagement>
