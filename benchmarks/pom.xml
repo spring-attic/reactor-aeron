@@ -16,7 +16,7 @@
     <version>0.1.4-SNAPSHOT</version>
   </parent>
 
-  <artifactId>reactor-aeron-tools</artifactId>
+  <artifactId>reactor-aeron-benchmarks</artifactId>
 
   <dependencies>
     <dependency>
