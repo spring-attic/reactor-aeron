@@ -1,9 +1,0 @@
-= Reactor Aeron Guide
-Stephane Maldini;
-:appversion: 0.6.0.BUILD-SNAPSHOT (wiki)
-ifndef::host-github[:ext-relative: {outfilesuffix}]
-{appversion}
-:doctype: book
-:icons: font
-
-include::aeron.adoc[]
